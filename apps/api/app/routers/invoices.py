@@ -20,7 +20,7 @@ settings = get_settings()
 @router.post("/upload", response_model=ProcessingStatus, status_code=status.HTTP_202_ACCEPTED)
 async def upload_invoice(
     file: Annotated[UploadFile, File(description="Invoice document (PDF, PNG, JPG)")],
-    priority: str = Query(default="normal", regex="^(normal|high)$"),
+    priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> ProcessingStatus:
     """
@@ -66,7 +66,7 @@ async def upload_invoice(
 @router.post("/upload/batch", response_model=list[ProcessingStatus])
 async def upload_batch(
     files: list[UploadFile],
-    priority: str = Query(default="normal", regex="^(normal|high)$"),
+    priority: str = Query(default="normal", pattern="^(normal|high)$"),
 ) -> list[ProcessingStatus]:
     """
     Upload multiple invoice documents for batch processing.
@@ -116,7 +116,7 @@ async def list_invoices(
     buyer_pib: str | None = None,
     search: str | None = None,
     sort: str = "created_at",
-    order: str = Query(default="desc", regex="^(asc|desc)$"),
+    order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> InvoiceListResponse:
     """
     List invoices with filtering, sorting, and pagination.
