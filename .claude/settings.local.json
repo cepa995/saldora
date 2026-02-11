@@ -25,7 +25,11 @@
       "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/ruff check:*)",
       "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/ruff format:*)",
       "Bash(git rm:*)",
-      "Bash(NODE_OPTIONS=\"--max-old-space-size=2048\" /home/cepa995/workspace/lab42/saas/faktura-ai/apps/web/node_modules/.bin/eslint:*)"
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=2048\" /home/cepa995/workspace/lab42/saas/faktura-ai/apps/web/node_modules/.bin/eslint:*)",
+      "Bash(gh auth:*)",
+      "Bash(git fetch:*)",
+      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show:*)",
+      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show asyncpg)"
     ]
   }
 }
