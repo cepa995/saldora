@@ -24,14 +24,46 @@ if settings.sentry_dsn:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler for startup/shutdown events."""
+    import logging
+
+    import redis.asyncio as redis
+    from sqlalchemy import text
+
+    from app.database import engine
+    from app.models import Base
+
+    logger = logging.getLogger("uvicorn")
+
     # Startup
-    # TODO: Initialize database connection pool
-    # TODO: Initialize Redis connection
-    # TODO: Warm up ML models (optional)
+    logger.info("Starting faktura.ai API...")
+
+    # 1. Create database tables (dev only)
+    if settings.environment == "development":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created/verified")
+
+    # 2. Verify database connectivity
+    async with engine.begin() as conn:
+        await conn.execute(text("SELECT 1"))
+    logger.info("Database connection verified")
+
+    # 3. Initialize Redis
+    redis_client = redis.from_url(settings.redis_url)
+    await redis_client.ping()
+    logger.info("Redis connection verified")
+    app.state.redis = redis_client
+
+    logger.info(f"faktura.ai API v{settings.app_version} ready ({settings.environment})")
     yield
+
     # Shutdown
-    # TODO: Close database connections
-    # TODO: Close Redis connections
+    logger.info("Shutting down faktura.ai API...")
+    await engine.dispose()
+
+    if hasattr(app.state, "redis"):
+        await app.state.redis.close()
+    logger.info("All connections have been closed!")
 
 
 app = FastAPI(
