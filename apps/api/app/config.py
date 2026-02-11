@@ -1,0 +1,72 @@
+"""Application configuration using Pydantic Settings."""
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # Application
+    app_name: str = "FakturaAI API"
+    app_version: str = "0.1.0"
+    environment: Literal["development", "staging", "production"] = "development"
+    debug: bool = False
+
+    # Server
+    host: str = "0.0.0.0"
+    port: int = 8000
+
+    # Database
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/fakturaai"
+    database_pool_size: int = 20
+    database_max_overflow: int = 10
+
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+
+    # JWT Authentication
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+    jwt_refresh_token_expire_days: int = 7
+
+    # Storage (S3/R2)
+    storage_endpoint: str | None = None
+    storage_bucket: str = "fakturaai-documents"
+    storage_access_key: str = ""
+    storage_secret_key: str = ""
+    storage_region: str = "auto"
+
+    # APR Integration
+    apr_api_url: str = "https://api.apr.gov.rs"
+    apr_api_timeout: int = 10
+    apr_cache_ttl: int = 86400  # 24 hours
+
+    # Stripe
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+
+    # Sentry
+    sentry_dsn: str | None = None
+
+    # ML Processing
+    ocr_confidence_threshold: float = 0.80
+    ocr_max_file_size_mb: int = 20
+    ocr_supported_formats: list[str] = ["pdf", "png", "jpg", "jpeg", "tiff", "webp"]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()

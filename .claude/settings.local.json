@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(npm run lint:*)",
+      "Bash(./node_modules/.bin/eslint:*)",
+      "Bash(docker:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker-compose:*)",
+      "Bash(sudo apt-get update:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(ss:*)",
+      "Bash(netstat:*)",
+      "Bash(npm install:*)",
+      "Bash(npx husky init)",
+      "Bash(ruff:*)",
+      "Bash(pip show:*)",
+      "Bash(npx lint-staged:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(chmod:*)",
+      "Bash(git checkout:*)",
+      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/ruff check:*)",
+      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/ruff format:*)",
+      "Bash(git rm:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=2048\" /home/cepa995/workspace/lab42/saas/faktura-ai/apps/web/node_modules/.bin/eslint:*)"
+    ]
+  }
+}

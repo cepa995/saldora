@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FakturaAI
 
-## Getting Started
+AI-powered invoice processing platform for the Serbian market.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+FakturaAI helps accountants, agencies, and businesses in Serbia automatically extract data from invoices using AI-powered OCR. Supports both Cyrillic and Latin scripts.
+
+## Project Structure
+
+```
+faktura-ai/
+├── apps/
+│   ├── web/          # Next.js frontend
+│   └── api/          # FastAPI backend
+├── packages/
+│   └── ml/           # ML package (OCR pipeline)
+├── workers/
+│   └── ocr_worker/   # Celery worker for GPU tasks
+├── infra/
+│   ├── docker/       # Docker Compose configs
+│   └── k8s/          # Kubernetes manifests
+├── docs/
+│   └── SRS.md        # Software Requirements Specification
+└── scripts/          # Development scripts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Quick Start
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Prerequisites
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Node.js 20+
+- Python 3.12+
+- Docker and Docker Compose
+- (Optional) NVIDIA GPU with CUDA for ML acceleration
 
-## Learn More
+### Development Setup
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Clone and setup
+git clone <repository>
+cd faktura-ai
+./scripts/setup-dev.sh
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Start development servers
+npm run dev:all
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Manual Setup
 
-## Deploy on Vercel
+```bash
+# Install dependencies
+npm install
+cd apps/web && npm install && cd ../..
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Create Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e "packages/ml[dev]"
+pip install -e "apps/api[dev]"
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Start infrastructure
+docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio
+
+# Start development servers
+npm run dev:web   # Web app at http://localhost:3000
+npm run dev:api   # API at http://localhost:8000
+```
+
+## Architecture
+
+### Frontend (Next.js)
+
+- Modern React with App Router
+- Tailwind CSS for styling
+- TypeScript for type safety
+
+### Backend (FastAPI)
+
+- Async Python web framework
+- PostgreSQL database
+- Redis for caching and task queue
+- JWT authentication
+
+### ML Pipeline
+
+- **Primary OCR**: dots.ocr (1.7B Vision-Language Model)
+- **Fallback OCR**: EasyOCR (for Serbian Cyrillic)
+- Field extraction with regex patterns
+- PIB validation with mod-11 checksum
+- Mathematical verification
+
+### Task Queue (Celery)
+
+- Redis as message broker
+- GPU-accelerated OCR workers
+- Batch processing support
+
+## Environment Variables
+
+Copy `infra/docker/.env.example` to `infra/docker/.env` and configure:
+
+```bash
+# Database
+DATABASE_URL=postgresql+asyncpg://...
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/1
+
+# Storage
+STORAGE_ENDPOINT=http://localhost:9000
+STORAGE_BUCKET=fakturaai-documents
+
+# JWT
+JWT_SECRET_KEY=your-secret-key
+
+# ML
+OCR_PRIMARY_ENGINE=dots
+OCR_USE_GPU=true
+```
+
+## API Documentation
+
+When running locally, access API docs at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## Docker
+
+```bash
+# Start all services
+npm run docker:up
+
+# View logs
+npm run docker:logs
+
+# Stop services
+npm run docker:down
+```
+
+## Testing
+
+```bash
+# Frontend tests
+cd apps/web && npm test
+
+# Backend tests
+cd apps/api && pytest
+
+# ML package tests
+cd packages/ml && pytest
+```
+
+## License
+
+Proprietary - All rights reserved
+
+## Support
+
+For issues and feature requests, contact the development team.

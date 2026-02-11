@@ -1,0 +1,135 @@
+# FakturaAI Development Docker Compose
+# Usage: docker compose -f infra/docker/docker-compose.yml up -d
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: fakturaai-postgres
+    environment:
+      POSTGRES_USER: fakturaai
+      POSTGRES_PASSWORD: fakturaai_dev
+      POSTGRES_DB: fakturaai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"   # host 5433 → container 5432 (avoids conflict with local postgres)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fakturaai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and Celery broker
+  redis:
+    image: redis:7-alpine
+    container_name: fakturaai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for S3-compatible local storage
+  minio:
+    image: minio/minio:latest
+    container_name: fakturaai-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9010:9000"   # API (host 9010 → container 9000, avoids conflict)
+      - "9011:9001"   # Console (host 9011 → container 9001)
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FastAPI Backend
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: fakturaai-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fakturaai:fakturaai_dev@postgres:5432/fakturaai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_BUCKET: fakturaai-documents
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../apps/api:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Next.js Web App
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    container_name: fakturaai-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+  # OCR Worker (CPU version for development)
+  ocr-worker:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    container_name: fakturaai-ocr-worker
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_BUCKET: fakturaai-documents
+      OCR_USE_GPU: "false"
+      OCR_PRIMARY_ENGINE: easyocr
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../packages/ml:/app/packages/ml
+      - ../../workers/ocr_worker:/app/ocr_worker
+
+  # Flower - Celery monitoring
+  flower:
+    image: mher/flower:2.0
+    container_name: fakturaai-flower
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+      FLOWER_PORT: 5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

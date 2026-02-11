@@ -1,26 +1,46 @@
 {
-  "name": "faktura-ai",
+  "name": "fakturaai",
   "version": "0.1.0",
   "private": true,
+  "description": "AI-powered invoice processing platform for the Serbian market",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "npm run dev:web",
+    "dev:web": "npm -w @fakturaai/web run dev",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload",
+    "dev:all": "docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio && concurrently \"npm run dev:web\" \"npm run dev:api\"",
+    "build": "npm -w @fakturaai/web run build",
+    "lint": "npm run lint:web && npm run lint:api",
+    "lint:web": "npm -w @fakturaai/web run lint",
+    "lint:api": "./scripts/lint-python.sh check apps/api/ workers/ packages/ml/",
+    "lint:fix": "./scripts/lint-python.sh check --fix apps/api/ workers/ packages/ml/ && npm -w @fakturaai/web run lint -- --fix",
+    "format": "./scripts/lint-python.sh format apps/api/ workers/ packages/ml/",
+    "test:api": "cd apps/api && python -m pytest tests/ -v",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
+    "setup": "./scripts/setup-dev.sh",
+    "prepare": "husky"
   },
-  "dependencies": {
-    "next": "16.1.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+  "lint-staged": {
+    "*.py": [
+      "scripts/lint-python.sh check",
+      "scripts/lint-python.sh format"
+    ],
+    "apps/web/src/**/*.{ts,tsx,js,jsx}": [
+      "scripts/lint-web.sh --fix"
+    ]
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "concurrently": "^9.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }
