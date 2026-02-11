@@ -25,7 +25,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     This is the core multi-tenancy boundary.
     """
 
-    __tablename__ = "organization"
+    __tablename__ = "organizations"
 
     name: Mapped[str] = mapped_column(String(255))
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
