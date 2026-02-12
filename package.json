@@ -27,8 +27,8 @@
   },
   "lint-staged": {
     "*.py": [
-      "scripts/lint-python.sh check",
-      "scripts/lint-python.sh format"
+      "scripts/lint-python.sh format",
+      "scripts/lint-python.sh check"
     ],
     "apps/web/src/**/*.{ts,tsx,js,jsx}": [
       "scripts/lint-web.sh --fix"
