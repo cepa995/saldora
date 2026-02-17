@@ -1,56 +1,108 @@
 """Authentication router - login, register, token refresh."""
 
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.auth import (
-    TokenResponse,
-    UserCreate,
-    UserResponse,
+from app.auth import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+    verify_password,
 )
+from app.config import get_settings
+from app.database import get_db
+from app.models.organization import Organization
+from app.models.user import User
+from app.schemas.auth import TokenResponse, UserCreate, UserResponse
 
 router = APIRouter()
+settings = get_settings()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate) -> UserResponse:
+async def register(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> User:
     """
-    Register a new user account.
+    API Endpoint for User Registration
 
-    Creates a new user with the provided email and password.
-    Sends a verification email to confirm the account.
+    Arguments:
+        user_data (UserCreate): registration data inserted by the user
+        db (AsyncSession): DB session which is being injected via get_db
+        dependency
+
+    Returns:
+        Newly created user (User) model
     """
-    # TODO: Implement user registration
-    # 1. Validate email uniqueness
-    # 2. Hash password with Argon2
-    # 3. Create user in database
-    # 4. Create default organization
-    # 5. Send verification email
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Registration not yet implemented",
+    # 1. Check email uniqueness
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    # 2. Create organization
+    org = Organization(
+        name=user_data.organization_name or f"{user_data.email.split('@')[0]}'s organization"
     )
+    db.add(org)
+    await db.flush()  # Assigns org.id without committing
+
+    # 3. Create user
+    user = User(
+        email=user_data.email,
+        password_hash=hash_password(user_data.password),
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        organization_id=org.id,
+        role="admin",  # First user in org is admin
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)  # Reload to get server-generated fields (id, created_at)
+
+    return user
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> TokenResponse:
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
     """
-    Authenticate user and return access tokens.
+    API Endpoint for User Authentication/Login
 
-    Accepts email and password, returns JWT access and refresh tokens.
+    Arguments:
+        form_data (OAuth2PasswordRequestForm): login data inserted by the user
+        db (AsyncSession): DB session which is being injected via get_db
+        dependency
+
+    Returns:
+        JWT token if the user exists, otherwise, exception is raised
     """
-    # TODO: Implement login
-    # 1. Find user by email
-    # 2. Verify password
-    # 3. Check if email verified
-    # 4. Generate access token
-    # 5. Generate refresh token
-    # 6. Log login event
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Login not yet implemented",
+    # 1. Find user
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalar_one_or_none()
+
+    # 2. Verify password (constant-time comparison to prevent timing attacks)
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+
+    # 3. Generate tokens
+    access_token = create_access_token(str(user.id), str(user.organization_id))
+    refresh_token = create_refresh_token(str(user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
     )
 
 

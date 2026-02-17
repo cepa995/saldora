@@ -30,20 +30,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sqlalchemy import text
 
     from app.database import engine
-    from app.models import Base
 
     logger = logging.getLogger("uvicorn")
 
     # Startup
     logger.info("Starting faktura.ai API...")
 
-    # 1. Create database tables (dev only)
-    if settings.environment == "development":
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables created/verified")
-
-    # 2. Verify database connectivity
+    # 1. Verify database connectivity (migrations are handled by Alembic)
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
