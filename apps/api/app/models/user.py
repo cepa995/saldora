@@ -28,7 +28,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     role: Mapped[str] = mapped_column(
         String(20), default="member"
     )  # Possible choices: admin, member
-    email_verification: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Foreign keys
     organization_id: Mapped[UUID] = mapped_column(
