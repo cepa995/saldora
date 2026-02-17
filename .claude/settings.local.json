@@ -29,7 +29,9 @@
       "Bash(gh auth:*)",
       "Bash(git fetch:*)",
       "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show:*)",
-      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show asyncpg)"
+      "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show asyncpg)",
+      "Bash(npm -w @fakturaai/web run build)",
+      "Bash(node:*)"
     ]
   }
 }
