@@ -31,7 +31,13 @@
       "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show:*)",
       "Bash(/home/cepa995/workspace/lab42/saas/faktura-ai/.venv/bin/pip show asyncpg)",
       "Bash(npm -w @fakturaai/web run build)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(.venv/bin/pip show:*)",
+      "WebFetch(domain:docs.pytest.org)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(.venv/bin/pip install:*)"
     ]
   }
 }
