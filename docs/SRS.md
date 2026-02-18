@@ -61,9 +61,11 @@ FakturaAI is a SaaS platform that enables accountants, accounting agencies, and 
 | Konto | Account code in Serbian chart of accounts (Kontni plan) |
 | MB | Matični Broj (Company Registration Number in Serbia) |
 | PPPDV | Poreska Prijava PDV (VAT Return Form) |
-| KPO | Knjiga Primljenih Obračuna (Received Invoice Book) |
-| KIO | Knjiga Izdatih Obračuna (Issued Invoice Book) |
-| GDPR | General Data Protection Regulation |
+| KPR | Knjiga Primljenih Računa (Received Invoice Book) |
+| KIR | Knjiga Izdatih Računa (Issued Invoice Book) |
+| ZZPL | Zakon o zaštiti podataka o ličnosti (Serbian Data Protection Law, Sl. glasnik RS br. 87/2018) |
+| GDPR | General Data Protection Regulation (reference standard) |
+| NBS | Narodna banka Srbije (National Bank of Serbia) |
 | SaaS | Software as a Service |
 | JWT | JSON Web Token |
 | REST | Representational State Transfer |
@@ -104,8 +106,8 @@ FakturaAI operates as a standalone web application with the following integratio
 ├──────────────────────────┼───────────────────────────────────────┤
 │                    External Services                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  APR API    │  │   Storage   │  │    Payment Gateway      │  │
-│  │  (Serbia)   │  │   (S3/R2)   │  │    (Stripe)             │  │
+│  │  APR API    │  │   Storage   │  │    Payment Processor    │  │
+│  │  (Serbia)   │  │   (S3/R2)   │  │    (Paddle)             │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -153,8 +155,8 @@ FakturaAI operates as a standalone web application with the following integratio
 
 ### 2.5 Design and Implementation Constraints
 
-1. Must comply with Serbian data protection laws and GDPR
-2. All data must be stored within EU jurisdiction
+1. Must comply with ZZPL (Zakon o zaštiti podataka o ličnosti) as primary data protection law, with GDPR as a reference standard
+2. All data must be stored in data centers that provide adequate protection (EU/EEA or Serbia)
 3. Must support both Cyrillic and Latin character sets
 4. Response time for OCR processing must not exceed 10 seconds per page
 5. System must handle concurrent processing of up to 100 documents
@@ -167,9 +169,9 @@ FakturaAI operates as a standalone web application with the following integratio
 - APR API remains available and maintains current data format
 
 **Dependencies:**
-- APR public API for PIB verification
+- APR for PIB verification (requires commercial contract or licensed intermediary)
 - Cloud storage provider (AWS S3 or Cloudflare R2)
-- Payment processor (Stripe) availability in Serbia
+- Payment processor (Paddle) as Merchant of Record
 
 ---
 
@@ -262,7 +264,7 @@ FakturaAI operates as a standalone web application with the following integratio
 │                                                                      │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
 │  │ Billing Service │    │  Queue Service  │    │ Webhook Service │  │
-│  │  - Stripe int.  │    │ - Celery tasks  │    │  - Notifications│  │
+│  │  - Paddle int.  │    │ - Celery tasks  │    │  - Notifications│  │
 │  │  - Usage track  │    │ - Job status    │    │  - Callbacks    │  │
 │  │  - Invoicing    │    │ - Retry logic   │    │  - Events       │  │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
@@ -513,7 +515,7 @@ FakturaAI operates as a standalone web application with the following integratio
 |----|----------|
 | **Description** | System MUST maintain searchable processing history |
 | **Search** | By date, invoice number, seller/buyer, amount |
-| **Retention** | Minimum 12 months |
+| **Retention** | Minimum 10 years (per Serbian Accounting Law) |
 
 ### 4.8 API Access
 
@@ -828,9 +830,9 @@ The system SHOULD suggest appropriate account codes based on:
 
 The system MUST map invoice data to correct PDV book entries:
 
-**KPO (Knjiga Primljenih Obračuna) - Received Invoices:**
+**KPR (Knjiga Primljenih Obračuna) - Received Invoices:**
 
-| KPO Field | Source | Calculation |
+| KPR Field | Source | Calculation |
 |-----------|--------|-------------|
 | Redni broj | Auto-increment | Sequential |
 | Datum prijema | invoice.created_at | Import date |
@@ -844,23 +846,23 @@ The system MUST map invoice data to correct PDV book entries:
 | PDV 10% | vat_breakdown.rate_10.tax | Calculated |
 | Ukupno | invoice.total_amount | Validated |
 
-**KIO (Knjiga Izdatih Obračuna) - Issued Invoices:**
+**KIR (Knjiga Izdatih Obračuna) - Issued Invoices:**
 
-| KIO Field | Source |
+| KIR Field | Source |
 |-----------|--------|
 | Redni broj | Auto-increment |
 | Datum fakture | invoice.invoice_date |
 | Broj fakture | invoice.invoice_number |
 | PIB kupca | buyer.pib |
 | Naziv kupca | buyer.name |
-| (Same VAT fields as KPO) | |
+| (Same VAT fields as KPR) | |
 
 **PDV-PP Mapping:**
 
 ```json
 {
   "pdv_book_entries": {
-    "book_type": "KPO",
+    "book_type": "KPR",
     "period": "2025-01",
     "pp_pdv_fields": {
       "polje_8_1": 50000.00,    // Nabavke sa PDV 20% - osnovica
@@ -1551,8 +1553,9 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 
 | Requirement | Specification |
 |-------------|---------------|
-| **GDPR** | Full compliance with EU data protection |
-| **Data Residency** | All data stored within EU |
+| **ZZPL** | Full compliance with Serbian data protection law (primary) |
+| **GDPR** | Alignment with GDPR principles as reference standard |
+| **Data Residency** | All data stored in data centers with adequate protection (EU/EEA or Serbia) |
 | **Data Retention** | Configurable retention policies |
 | **Right to Erasure** | Support for complete data deletion |
 | **Audit Logging** | Log all data access and modifications |
@@ -1773,7 +1776,7 @@ CREATE TABLE organizations (
     slug VARCHAR(100) UNIQUE NOT NULL,
     billing_email VARCHAR(255),
     plan_id UUID REFERENCES plans(id),
-    stripe_customer_id VARCHAR(255),
+    payment_provider_customer_id VARCHAR(255),
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -1826,7 +1829,9 @@ CREATE INDEX idx_invoices_buyer ON invoices(buyer_id);
 ```sql
 CREATE TABLE companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pib VARCHAR(9) UNIQUE NOT NULL,
+    pib VARCHAR(20) NOT NULL,  -- VARCHAR(20) to support foreign entities with longer tax IDs
+    country_code VARCHAR(2) NOT NULL DEFAULT 'RS',
+    is_foreign BOOLEAN NOT NULL DEFAULT FALSE,
     name VARCHAR(255) NOT NULL,
     address TEXT,
     city VARCHAR(100),
@@ -1835,7 +1840,9 @@ CREATE TABLE companies (
     apr_data JSONB,
     last_verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    CONSTRAINT unique_pib_per_country UNIQUE (pib, country_code)
 );
 
 CREATE INDEX idx_companies_pib ON companies(pib);
@@ -2358,22 +2365,7 @@ def calculate_confidence(extracted_data: dict) -> float:
     return sum(weights[k] * scores[k] for k in weights)
 ```
 
-### 9.7 Model Training & Updates
-
-**Training Data Requirements:**
-- Minimum 10,000 annotated invoice images
-- Mix of Cyrillic and Latin documents
-- Various invoice formats and layouts
-- Quality annotations with bounding boxes
-
-**Model Update Process:**
-1. Collect anonymized documents with user consent
-2. Annotate using Label Studio
-3. Train/fine-tune models weekly
-4. A/B test new models
-5. Gradual rollout with monitoring
-
-### 9.8 ML Infrastructure
+### 9.7 ML Infrastructure
 
 **GPU Requirements:**
 
@@ -2388,13 +2380,14 @@ def calculate_confidence(extracted_data: dict) -> float:
 **Model Serving:**
 - TorchServe for PyTorch models
 - Triton Inference Server (optional)
-- Model versioning with MLflow
 
-### 9.9 Human-in-the-Loop & Feedback System
+**Model Note:** The system uses pre-trained models (dots.ocr, EasyOCR, spaCy) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
 
-This section defines the feedback loop between human corrections and model improvement.
+### 9.8 Extraction Quality Monitoring
 
-#### 9.9.1 Correction Tracking
+The system MUST track extraction quality through correction logging, purely for quality monitoring and analytics purposes, NOT for model training.
+
+#### 9.8.1 Correction Logging
 
 **Every human correction MUST be logged:**
 
@@ -2402,6 +2395,7 @@ This section defines the feedback loop between human corrections and model impro
 class CorrectionLog:
     """
     Tracks every field correction made by users.
+    Used for quality monitoring and analytics, not for model training.
     """
     id: UUID
     invoice_id: UUID
@@ -2412,7 +2406,6 @@ class CorrectionLog:
     model_confidence: float   # Confidence at extraction time
     correction_type: str      # "ocr_error", "ner_error", "layout_error", "business_logic"
     created_at: datetime
-    document_region: dict     # Bounding box of the field in document
 ```
 
 **Database Schema:**
@@ -2426,7 +2419,6 @@ CREATE TABLE correction_logs (
     corrected_value TEXT NOT NULL,
     model_confidence DECIMAL(5, 2),
     correction_type VARCHAR(30),
-    document_region JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -2434,772 +2426,18 @@ CREATE INDEX idx_corrections_field ON correction_logs(field_name);
 CREATE INDEX idx_corrections_date ON correction_logs(created_at);
 ```
 
-#### 9.9.2 Disagreement Tracking & Analysis
+#### 9.8.2 Quality Dashboard
 
-**Model vs Human Disagreement Metrics:**
+The system SHOULD provide a dashboard for tracking extraction accuracy per field:
 
 | Metric | Description | Alert Threshold |
 |--------|-------------|-----------------|
 | Field Error Rate | % of invoices requiring correction per field | > 15% |
 | High Confidence Errors | Corrections where model confidence > 90% | > 5% |
 | Repeat Errors | Same error pattern across documents | > 10 occurrences |
-| User Override Rate | % flagged items users override vs confirm | < 50% flags correct |
 
-**Disagreement Analysis Dashboard:**
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Model Performance Dashboard                       │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Field Accuracy (Last 30 Days)                                      │
-│  ───────────────────────────────────────────────────────────────    │
-│  seller_pib     ████████████████████████████████████░░░░  92.3%    │
-│  buyer_pib      █████████████████████████████████░░░░░░░  88.1%    │
-│  total_amount   ████████████████████████████████████████  97.5%    │
-│  invoice_date   ██████████████████████████████████████░░  95.2%    │
-│  line_items     ████████████████████████████░░░░░░░░░░░░  78.4% ⚠️ │
-│                                                                      │
-│  High Confidence Errors (model said >90%, user corrected)          │
-│  ───────────────────────────────────────────────────────────────    │
-│  • buyer_pib: 23 errors (pattern: last digit OCR confusion 6↔8)    │
-│  • invoice_number: 18 errors (pattern: prefix "BR" vs "Br")        │
-│                                                                      │
-│  Recommended Actions:                                               │
-│  • [Retrain] buyer_pib NER with 23 new samples                     │
-│  • [Adjust] invoice_number pattern matching rules                   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
+These metrics serve to identify systemic issues and inform the team about potential problems with input document quality or system configuration.
 
-#### 9.9.3 Feedback Loop for Model Retraining
-
-**Training Data Pipeline:**
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   User      │    │  Anonymize  │    │   Queue     │    │  Training   │
-│ Corrections │───▶│   & Filter  │───▶│   Dataset   │───▶│   Pipeline  │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-                          │                                      │
-                          ▼                                      ▼
-                   ┌─────────────┐                       ┌─────────────┐
-                   │  Require    │                       │  A/B Test   │
-                   │  Consent    │                       │  New Model  │
-                   └─────────────┘                       └─────────────┘
-```
-
-**Retraining Triggers:**
-1. **Threshold-based**: When field error rate exceeds 10% over 7 days
-2. **Volume-based**: Accumulated 1,000+ new corrections
-3. **Scheduled**: Weekly incremental training
-4. **Manual**: Admin-triggered for specific issues
-
-**Training Data Requirements:**
-```python
-def prepare_training_sample(correction: CorrectionLog) -> TrainingSample | None:
-    """
-    Convert user correction to training data.
-    """
-    # Only use if user consented to training
-    if not correction.invoice.organization.training_consent:
-        return None
-
-    # Anonymize sensitive data
-    anonymized_doc = anonymize_document(correction.invoice.document)
-
-    # Create training sample
-    return TrainingSample(
-        document_image=anonymized_doc,
-        field_name=correction.field_name,
-        bounding_box=correction.document_region,
-        label=correction.corrected_value,
-        original_prediction=correction.original_value,
-        error_type=correction.correction_type
-    )
-```
-
-#### 9.9.4 Model Version Management
-
-**Version Tracking:**
-```sql
-CREATE TABLE model_versions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    model_type VARCHAR(50) NOT NULL,  -- "ocr", "ner", "layout"
-    version VARCHAR(20) NOT NULL,
-    trained_at TIMESTAMP WITH TIME ZONE,
-    training_samples_count INTEGER,
-    validation_accuracy DECIMAL(5, 2),
-    is_active BOOLEAN DEFAULT FALSE,
-    rollback_version_id UUID REFERENCES model_versions(id),
-    metadata JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-
-**A/B Testing New Models:**
-```python
-class ModelABTest:
-    """
-    Gradual rollout of new model versions.
-    """
-    control_model: str      # Current production model
-    treatment_model: str    # New candidate model
-    traffic_split: float    # 0.1 = 10% traffic to treatment
-    metrics_to_track: List[str]  # ["accuracy", "latency", "user_corrections"]
-    min_sample_size: int    # Minimum invoices before evaluation
-    success_threshold: float  # Treatment must be X% better to win
-
-# Rollout stages
-ROLLOUT_STAGES = [
-    {"traffic": 0.05, "duration": "2 days", "metric": "no_regressions"},
-    {"traffic": 0.20, "duration": "3 days", "metric": "5%_improvement"},
-    {"traffic": 0.50, "duration": "5 days", "metric": "stable"},
-    {"traffic": 1.00, "duration": "permanent", "metric": "confirmed_winner"}
-]
-```
-
-#### 9.9.5 Confidence Threshold Calibration
-
-**Dynamic Threshold Adjustment:**
-
-The system SHOULD automatically adjust confidence thresholds based on actual accuracy:
-
-```python
-def calibrate_thresholds(field_name: str, lookback_days: int = 30):
-    """
-    Adjust confidence thresholds based on real correction rates.
-
-    Goal: Minimize both false positives (unnecessary reviews) and
-    false negatives (errors that slip through).
-    """
-    corrections = get_corrections(field_name, days=lookback_days)
-
-    # Group by confidence bucket
-    buckets = {
-        "90-100": corrections.filter(confidence >= 0.90),
-        "80-90": corrections.filter(confidence >= 0.80),
-        "70-80": corrections.filter(confidence >= 0.70),
-        "60-70": corrections.filter(confidence >= 0.60),
-    }
-
-    # Calculate error rate per bucket
-    for bucket, items in buckets.items():
-        error_rate = items.corrected_count / items.total_count
-        if error_rate > 0.05:  # More than 5% errors in this bucket
-            RECOMMEND_LOWER_THRESHOLD(field_name, bucket)
-        if error_rate < 0.01:  # Less than 1% errors
-            RECOMMEND_HIGHER_THRESHOLD(field_name, bucket)
-
-    return ThresholdRecommendation(
-        field=field_name,
-        current_threshold=get_current_threshold(field_name),
-        recommended_threshold=calculate_optimal_threshold(corrections),
-        expected_review_reduction=estimate_reduction()
-    )
-```
-
-#### 9.9.6 User Feedback Integration
-
-**Explicit Feedback Mechanisms:**
-
-| Feedback Type | UI Element | Usage |
-|---------------|------------|-------|
-| Confirm correct | ✓ button on field | Positive training signal |
-| Mark as incorrect | ✗ button on field | Triggers correction flow |
-| Report pattern | "Prijavi problem" link | Escalates to ML team |
-| Rate extraction | 1-5 stars after export | Overall quality metric |
-
-**Implicit Feedback Signals:**
-- Time spent on review screen (longer = more issues)
-- Number of fields edited per invoice
-- User immediately re-uploads same document (OCR failure)
-- User abandons processing mid-way
-
-#### 9.9.7 Complete Feedback Loop Implementation
-
-This section provides a detailed, step-by-step explanation of how the feedback loop works from user correction to model improvement.
-
-**End-to-End Flow Diagram:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                         COMPLETE FEEDBACK LOOP ARCHITECTURE                          │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  PHASE 1: DATA COLLECTION (Real-time)                                               │
-│  ════════════════════════════════════                                               │
-│                                                                                      │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
-│  │ User views  │───▶│ User edits  │───▶│ System logs │───▶│  correction_logs    │  │
-│  │ extracted   │    │ field value │    │ correction  │    │  table              │  │
-│  │ invoice     │    │             │    │             │    │                     │  │
-│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────────────┘  │
-│                                                                    │                 │
-│                                                                    ▼                 │
-│  PHASE 2: DATA AGGREGATION (Hourly)                     ┌─────────────────────┐     │
-│  ══════════════════════════════════                     │  Aggregation Job    │     │
-│                                                          │  ─────────────────  │     │
-│  ┌─────────────────────────────────────────────────────▶│  • Group by field   │     │
-│  │                                                       │  • Calculate rates  │     │
-│  │  ┌─────────────────────────────────────────────────┐ │  • Detect patterns  │     │
-│  │  │  Metrics Calculated:                            │ │  • Update dashboard │     │
-│  │  │  • Error rate per field per day                 │ └──────────┬──────────┘     │
-│  │  │  • High-confidence errors (model said >90%)     │            │                 │
-│  │  │  • Error patterns (e.g., "6↔8 confusion")       │            ▼                 │
-│  │  │  • Correction velocity (corrections per hour)   │  ┌─────────────────────┐    │
-│  │  └─────────────────────────────────────────────────┘  │  field_accuracy     │    │
-│  │                                                        │  _metrics table     │    │
-│  │                                                        └─────────────────────┘    │
-│  │                                                                   │               │
-│  │  PHASE 3: TRIGGER EVALUATION (Daily)                              ▼               │
-│  │  ═══════════════════════════════════                   ┌─────────────────────┐   │
-│  │                                                         │  Retraining         │   │
-│  │  ┌─────────────────────────────────────────────────────▶│  Trigger Check      │   │
-│  │  │                                                      │  ─────────────────  │   │
-│  │  │  Trigger Conditions:                                 │  IF error_rate >10% │   │
-│  │  │  ☑ Field error rate > 10% for 7 days                │  OR samples > 1000  │   │
-│  │  │  ☑ Accumulated corrections > 1,000                  │  OR weekly schedule │   │
-│  │  │  ☑ Weekly scheduled retraining                      │  THEN → PHASE 4     │   │
-│  │  │  ☑ Manual admin trigger                             └──────────┬──────────┘   │
-│  │  └─────────────────────────────────────────────────────────────────┘              │
-│  │                                                                    │               │
-│  │                                                                    ▼               │
-│  │  PHASE 4: TRAINING DATA PREPARATION (On trigger)      ┌─────────────────────┐    │
-│  │  ═══════════════════════════════════════════════      │  Training Pipeline  │    │
-│  │                                                        │  ─────────────────  │    │
-│  │  ┌─────────────────────────────────────────────────────│  Step 1: Filter     │    │
-│  │  │                                                     │  Step 2: Consent    │    │
-│  │  │  Filter criteria:                                   │  Step 3: Anonymize  │    │
-│  │  │  • Only from consented organizations                │  Step 4: Format     │    │
-│  │  │  • Correction confidence > 95% (user was sure)     │  Step 5: Validate   │    │
-│  │  │  • Not already used in training                    └──────────┬──────────┘    │
-│  │  │  • Document quality score > 70%                                │               │
-│  │  └────────────────────────────────────────────────────────────────┘               │
-│  │                                                                    │               │
-│  │                                                                    ▼               │
-│  │  PHASE 5: MODEL TRAINING (Triggered)                  ┌─────────────────────┐    │
-│  │  ═══════════════════════════════════                  │  Training Job       │    │
-│  │                                                        │  (GPU Cluster)      │    │
-│  │  ┌─────────────────────────────────────────────────────│  ─────────────────  │    │
-│  │  │                                                     │  • Load base model  │    │
-│  │  │  Training approach:                                 │  • Fine-tune on new │    │
-│  │  │  • Incremental fine-tuning (not full retrain)      │    samples          │    │
-│  │  │  • Learning rate: 1e-5 (conservative)              │  • Validate on      │    │
-│  │  │  • Epochs: 3-5 max                                 │    holdout set      │    │
-│  │  │  • Early stopping if validation degrades           │  • Save checkpoint  │    │
-│  │  └─────────────────────────────────────────────────────└──────────┬──────────┘   │
-│  │                                                                    │               │
-│  │                                                                    ▼               │
-│  │  PHASE 6: A/B TESTING & ROLLOUT (Gradual)             ┌─────────────────────┐    │
-│  │  ════════════════════════════════════════             │  Model Registry     │    │
-│  │                                                        │  ─────────────────  │    │
-│  │  ┌─────────────────────────────────────────────────────│  v1.2.0 (prod)     │    │
-│  │  │                                                     │  v1.2.1 (candidate)│    │
-│  │  │  Rollout stages:                                   └──────────┬──────────┘    │
-│  │  │  Stage 1:  5% traffic, 2 days, check no regression            │               │
-│  │  │  Stage 2: 20% traffic, 3 days, check 5% improvement           ▼               │
-│  │  │  Stage 3: 50% traffic, 5 days, stability check     ┌─────────────────────┐    │
-│  │  │  Stage 4: 100% traffic, promote to production      │  Load Balancer      │    │
-│  │  │                                                     │  ─────────────────  │    │
-│  │  │  Rollback trigger:                                 │  5% → candidate     │    │
-│  │  │  • Error rate increases by > 2%                    │  95% → production   │    │
-│  │  │  • User corrections increase                       └─────────────────────┘    │
-│  │  │  • Latency increases significantly                                             │
-│  │  └────────────────────────────────────────────────────────────────────────────────│
-│  │                                                                                    │
-│  └────────────────────────── LOOP CONTINUES ─────────────────────────────────────────┘
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Phase 1: Correction Capture (Code Example)**
-
-```python
-# Backend: When user edits a field
-async def handle_field_correction(
-    invoice_id: UUID,
-    user_id: UUID,
-    field_name: str,
-    original_value: str,
-    corrected_value: str,
-    model_confidence: float,
-    document_region: dict  # Bounding box coordinates
-):
-    """
-    Called when user corrects an extracted field.
-    This is the entry point for the feedback loop.
-    """
-    # 1. Determine correction type based on field and error pattern
-    correction_type = classify_correction_type(
-        field_name=field_name,
-        original=original_value,
-        corrected=corrected_value
-    )
-    # correction_type examples:
-    # - "ocr_error": Character-level mistake (e.g., "6" → "8")
-    # - "ner_error": Wrong entity extraction (e.g., wrong PIB field)
-    # - "layout_error": Field from wrong region
-    # - "business_logic": Valid OCR but wrong interpretation
-
-    # 2. Create correction log entry
-    correction = CorrectionLog(
-        invoice_id=invoice_id,
-        user_id=user_id,
-        field_name=field_name,
-        original_value=original_value,
-        corrected_value=corrected_value,
-        model_confidence=model_confidence,
-        correction_type=correction_type,
-        document_region=document_region,
-    )
-    await db.save(correction)
-
-    # 3. Update real-time metrics (for dashboard)
-    await metrics_service.increment_correction_count(field_name)
-
-    # 4. Check if this triggers immediate alerts
-    if model_confidence > 0.90:
-        # High-confidence error - this is particularly valuable feedback
-        await alert_service.log_high_confidence_error(
-            field_name=field_name,
-            confidence=model_confidence,
-            error_pattern=analyze_error_pattern(original_value, corrected_value)
-        )
-
-    return correction
-```
-
-**Phase 2: Aggregation Job (Scheduled)**
-
-```python
-# Scheduled job: Runs every hour
-async def aggregate_correction_metrics():
-    """
-    Aggregate corrections into actionable metrics.
-    """
-    # 1. Get corrections from last period
-    corrections = await db.query(
-        CorrectionLog,
-        where=CorrectionLog.created_at > datetime.now() - timedelta(hours=1)
-    )
-
-    # 2. Calculate metrics per field
-    field_metrics = {}
-    for correction in corrections:
-        field = correction.field_name
-        if field not in field_metrics:
-            field_metrics[field] = {
-                "total_extractions": 0,
-                "corrections": 0,
-                "high_confidence_errors": 0,
-                "error_patterns": defaultdict(int)
-            }
-
-        field_metrics[field]["corrections"] += 1
-
-        if correction.model_confidence > 0.90:
-            field_metrics[field]["high_confidence_errors"] += 1
-
-        # Classify error pattern
-        pattern = classify_error_pattern(
-            correction.original_value,
-            correction.corrected_value
-        )
-        field_metrics[field]["error_patterns"][pattern] += 1
-
-    # 3. Get total extractions (not just corrections) from invoice count
-    total_invoices = await get_invoice_count_for_period(hours=1)
-    for field in field_metrics:
-        field_metrics[field]["total_extractions"] = total_invoices
-        field_metrics[field]["error_rate"] = (
-            field_metrics[field]["corrections"] /
-            max(1, field_metrics[field]["total_extractions"])
-        )
-
-    # 4. Store aggregated metrics
-    for field, metrics in field_metrics.items():
-        await db.upsert(FieldAccuracyMetric(
-            field_name=field,
-            period_start=datetime.now() - timedelta(hours=1),
-            period_end=datetime.now(),
-            **metrics
-        ))
-
-    # 5. Update dashboard cache
-    await cache.set("field_metrics_latest", field_metrics, ttl=3600)
-
-
-def classify_error_pattern(original: str, corrected: str) -> str:
-    """
-    Classify the type of error for pattern analysis.
-    """
-    if not original or not corrected:
-        return "missing_value"
-
-    # Character confusion patterns
-    char_confusion = {
-        ("6", "8"): "digit_confusion_6_8",
-        ("8", "6"): "digit_confusion_6_8",
-        ("0", "O"): "zero_o_confusion",
-        ("O", "0"): "zero_o_confusion",
-        ("1", "l"): "one_l_confusion",
-        ("5", "S"): "five_s_confusion",
-    }
-
-    # Check for single character differences
-    if len(original) == len(corrected):
-        diff_positions = [
-            i for i, (a, b) in enumerate(zip(original, corrected))
-            if a != b
-        ]
-        if len(diff_positions) == 1:
-            pos = diff_positions[0]
-            pair = (original[pos], corrected[pos])
-            if pair in char_confusion:
-                return char_confusion[pair]
-
-    # Check for transposition
-    if len(original) == len(corrected) and len(original) > 1:
-        for i in range(len(original) - 1):
-            if (original[i] == corrected[i+1] and
-                original[i+1] == corrected[i] and
-                original[:i] == corrected[:i] and
-                original[i+2:] == corrected[i+2:]):
-                return "transposition"
-
-    # Check for missing/extra characters
-    if abs(len(original) - len(corrected)) == 1:
-        return "extra_or_missing_char"
-
-    # Generic
-    return "other"
-```
-
-**Phase 3: Retraining Trigger Evaluation**
-
-```python
-# Scheduled job: Runs daily at 2 AM
-async def evaluate_retraining_triggers():
-    """
-    Check if any retraining triggers have been met.
-    """
-    triggers_met = []
-
-    # Trigger 1: Field error rate threshold
-    THRESHOLD_ERROR_RATE = 0.10  # 10%
-    THRESHOLD_DAYS = 7
-
-    for field in TRACKED_FIELDS:
-        recent_metrics = await get_field_metrics(
-            field_name=field,
-            days=THRESHOLD_DAYS
-        )
-        avg_error_rate = sum(m.error_rate for m in recent_metrics) / len(recent_metrics)
-
-        if avg_error_rate > THRESHOLD_ERROR_RATE:
-            triggers_met.append({
-                "trigger": "error_rate_threshold",
-                "field": field,
-                "error_rate": avg_error_rate,
-                "threshold": THRESHOLD_ERROR_RATE
-            })
-
-    # Trigger 2: Volume threshold
-    THRESHOLD_CORRECTIONS = 1000
-
-    pending_corrections = await get_pending_corrections_count()
-    if pending_corrections > THRESHOLD_CORRECTIONS:
-        triggers_met.append({
-            "trigger": "volume_threshold",
-            "count": pending_corrections,
-            "threshold": THRESHOLD_CORRECTIONS
-        })
-
-    # Trigger 3: Weekly scheduled (Sunday 2 AM)
-    if datetime.now().weekday() == 6:  # Sunday
-        triggers_met.append({
-            "trigger": "weekly_schedule",
-            "day": "Sunday"
-        })
-
-    # If any triggers met, initiate retraining pipeline
-    if triggers_met:
-        await initiate_training_pipeline(
-            triggers=triggers_met,
-            priority="normal" if len(triggers_met) == 1 else "high"
-        )
-        await notify_ml_team(triggers_met)
-
-    return triggers_met
-```
-
-**Phase 4: Training Data Preparation**
-
-```python
-async def prepare_training_dataset(
-    triggers: list,
-    max_samples: int = 10000
-) -> TrainingDataset:
-    """
-    Prepare anonymized training data from corrections.
-    """
-    # 1. Query eligible corrections
-    corrections = await db.query(
-        CorrectionLog,
-        where=and_(
-            CorrectionLog.used_for_training == False,
-            CorrectionLog.created_at > datetime.now() - timedelta(days=90)
-        ),
-        limit=max_samples * 2  # Query extra for filtering
-    )
-
-    training_samples = []
-
-    for correction in corrections:
-        # 2. Check consent
-        org = await get_organization(correction.invoice.organization_id)
-        if not org.training_consent:
-            continue  # Skip - no consent
-
-        # 3. Get document image
-        document = await get_document(correction.invoice.document_id)
-        if not document:
-            continue
-
-        # 4. Extract relevant region from document
-        region_image = await extract_document_region(
-            document_path=document.storage_path,
-            bbox=correction.document_region,
-            padding=50  # Add context around the field
-        )
-
-        # 5. Anonymize the image
-        # Replace sensitive data with synthetic data
-        anonymized_image = await anonymize_document_region(
-            image=region_image,
-            field_type=correction.field_name,
-            # Keep the structure but replace actual values
-            preserve_layout=True
-        )
-
-        # 6. Create training sample
-        sample = TrainingSample(
-            image=anonymized_image,
-            field_name=correction.field_name,
-            label=anonymize_value(correction.corrected_value, correction.field_name),
-            original_prediction=anonymize_value(correction.original_value, correction.field_name),
-            correction_type=correction.correction_type,
-            metadata={
-                "original_confidence": correction.model_confidence,
-                "error_pattern": classify_error_pattern(
-                    correction.original_value,
-                    correction.corrected_value
-                )
-            }
-        )
-        training_samples.append(sample)
-
-        # 7. Mark as used
-        correction.used_for_training = True
-        await db.save(correction)
-
-        if len(training_samples) >= max_samples:
-            break
-
-    # 8. Split into train/validation
-    random.shuffle(training_samples)
-    split_point = int(len(training_samples) * 0.9)
-
-    return TrainingDataset(
-        train_samples=training_samples[:split_point],
-        validation_samples=training_samples[split_point:],
-        metadata={
-            "triggers": triggers,
-            "total_samples": len(training_samples),
-            "created_at": datetime.now().isoformat()
-        }
-    )
-
-
-def anonymize_value(value: str, field_type: str) -> str:
-    """
-    Replace real values with synthetic equivalents.
-    Preserves format and pattern but removes PII.
-    """
-    if field_type == "seller_pib" or field_type == "buyer_pib":
-        # Generate valid-looking but fake PIB
-        return generate_synthetic_pib()
-
-    elif field_type == "seller_name" or field_type == "buyer_name":
-        # Replace with synthetic company name
-        return generate_synthetic_company_name()
-
-    elif field_type in ["total_amount", "subtotal", "tax_amount"]:
-        # Randomize the amount while keeping format
-        return randomize_amount(value)
-
-    elif field_type == "invoice_number":
-        # Keep format, randomize values
-        return randomize_invoice_number(value)
-
-    else:
-        return value  # Keep other fields as-is
-```
-
-**Phase 5 & 6: Training and Deployment**
-
-```python
-# Training job (runs on GPU cluster)
-async def run_training_job(dataset: TrainingDataset):
-    """
-    Fine-tune the model on new correction data.
-    """
-    # 1. Load current production model
-    base_model = load_model("dots_ocr_production_latest")
-
-    # 2. Configure fine-tuning
-    training_config = {
-        "learning_rate": 1e-5,
-        "epochs": 5,
-        "batch_size": 16,
-        "early_stopping_patience": 2,
-        "warmup_steps": 100
-    }
-
-    # 3. Run training
-    trainer = ModelTrainer(
-        model=base_model,
-        train_data=dataset.train_samples,
-        val_data=dataset.validation_samples,
-        config=training_config
-    )
-
-    training_result = await trainer.train()
-
-    # 4. Evaluate on validation set
-    val_metrics = await trainer.evaluate(dataset.validation_samples)
-
-    # 5. Compare to production model
-    prod_metrics = await evaluate_production_model(dataset.validation_samples)
-
-    improvement = {
-        "accuracy_delta": val_metrics.accuracy - prod_metrics.accuracy,
-        "error_rate_delta": prod_metrics.error_rate - val_metrics.error_rate,
-        "latency_delta": val_metrics.avg_latency - prod_metrics.avg_latency
-    }
-
-    # 6. Save if improved
-    if improvement["accuracy_delta"] > 0 and improvement["latency_delta"] < 100:
-        new_version = await model_registry.save(
-            model=trainer.model,
-            version=generate_version(),
-            metrics=val_metrics,
-            training_metadata=dataset.metadata
-        )
-
-        # 7. Start A/B test
-        await start_ab_test(
-            control_model="dots_ocr_production_latest",
-            treatment_model=new_version,
-            initial_traffic_split=0.05  # 5% to new model
-        )
-
-        return {
-            "status": "success",
-            "new_version": new_version,
-            "improvement": improvement
-        }
-    else:
-        return {
-            "status": "no_improvement",
-            "metrics": val_metrics,
-            "comparison": improvement
-        }
-
-
-# A/B test monitoring (runs continuously)
-async def monitor_ab_test(test_id: str):
-    """
-    Monitor A/B test and auto-promote or rollback.
-    """
-    test = await get_ab_test(test_id)
-
-    while test.status == "running":
-        # Get metrics for both models
-        control_metrics = await get_model_metrics(
-            test.control_model,
-            since=test.started_at
-        )
-        treatment_metrics = await get_model_metrics(
-            test.treatment_model,
-            since=test.started_at
-        )
-
-        # Check for regression
-        if treatment_metrics.error_rate > control_metrics.error_rate * 1.02:  # 2% worse
-            await rollback_ab_test(test_id, reason="Error rate regression detected")
-            await notify_ml_team(f"A/B test {test_id} rolled back: error regression")
-            return
-
-        # Check for promotion criteria
-        sample_size = treatment_metrics.total_samples
-        stage = get_current_stage(test)
-
-        if sample_size >= stage.min_samples:
-            if meets_promotion_criteria(treatment_metrics, control_metrics, stage):
-                next_stage = get_next_stage(stage)
-                if next_stage:
-                    await advance_traffic_split(test_id, next_stage.traffic_split)
-                    await notify_ml_team(f"A/B test {test_id} advanced to {next_stage.traffic_split*100}%")
-                else:
-                    # Final stage - promote to production
-                    await promote_model(test.treatment_model)
-                    await end_ab_test(test_id, status="promoted")
-                    await notify_ml_team(f"Model {test.treatment_model} promoted to production!")
-                    return
-
-        await asyncio.sleep(300)  # Check every 5 minutes
-```
-
-**Monitoring Dashboard Queries:**
-
-```sql
--- Query: Field accuracy over time (for dashboard chart)
-SELECT
-    field_name,
-    DATE_TRUNC('day', period_start) as day,
-    AVG(error_rate) as avg_error_rate,
-    SUM(corrections) as total_corrections,
-    SUM(high_confidence_errors) as high_confidence_errors
-FROM field_accuracy_metrics
-WHERE period_start > NOW() - INTERVAL '30 days'
-GROUP BY field_name, DATE_TRUNC('day', period_start)
-ORDER BY field_name, day;
-
--- Query: Top error patterns (for ML team)
-SELECT
-    field_name,
-    error_patterns->>'pattern' as pattern,
-    COUNT(*) as occurrence_count,
-    AVG(model_confidence) as avg_confidence_when_wrong
-FROM correction_logs
-WHERE created_at > NOW() - INTERVAL '7 days'
-GROUP BY field_name, error_patterns->>'pattern'
-ORDER BY occurrence_count DESC
-LIMIT 20;
-
--- Query: Retraining readiness
-SELECT
-    COUNT(*) FILTER (WHERE used_for_training = FALSE) as pending_samples,
-    COUNT(*) FILTER (WHERE used_for_training = TRUE) as used_samples,
-    COUNT(DISTINCT organization_id) FILTER (
-        WHERE organization_id IN (
-            SELECT id FROM organizations WHERE training_consent = TRUE
-        )
-    ) as consented_org_samples
-FROM correction_logs
-WHERE created_at > NOW() - INTERVAL '90 days';
-```
 
 ---
 
@@ -3252,9 +2490,9 @@ WHERE created_at > NOW() - INTERVAL '90 days';
 
 | Regulation | Requirements |
 |------------|--------------|
-| GDPR | Data processing agreements, DPO, privacy policy |
-| Serbian Data Protection | Local compliance requirements (Zakon o zaštiti podataka o ličnosti) |
-| PCI DSS | Not storing payment data (Stripe handles) |
+| ZZPL (primary) | Full compliance with Zakon o zaštiti podataka o ličnosti (Sl. glasnik RS, br. 87/2018). Data processing agreements, data protection officer, privacy policy. ZZPL is the primary regulatory framework for data protection in the Republic of Serbia. |
+| GDPR (reference) | Alignment with GDPR principles as a reference standard for best practices |
+| PCI DSS | Not storing payment data (Paddle handles as Merchant of Record) |
 
 ### 10.6 Legal & Compliance Flows
 
@@ -3306,7 +2544,7 @@ CREATE TABLE data_processing_agreements (
 - [ ] Audit rights included
 - [ ] Data transfer mechanisms (for EU data)
 
-#### 10.6.2 Consent Management for Model Training
+#### 10.6.2 Consent Management
 
 **Consent Types:**
 
@@ -3314,35 +2552,7 @@ CREATE TABLE data_processing_agreements (
 |--------------|-------|-------------|-----------|
 | Basic Processing | Invoice OCR, data extraction | Required | No (service essential) |
 | Analytics | Usage patterns, performance metrics | Organization-level | Yes |
-| Model Training | Document samples for AI improvement | Organization-level | Yes |
 | Marketing | Product updates, newsletters | User-level | Yes |
-
-**Consent Flow:**
-
-```
-Organization Settings → Data & Privacy → AI Training Consent
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  🤖 Učešće u poboljšanju AI modela                                  │
-│                                                                      │
-│  Dozvoli korišćenje anonimiziranih dokumenata za unapređenje       │
-│  tačnosti OCR sistema.                                              │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ ☐ Dozvoljavam korišćenje anonimiziranih faktura             │   │
-│  │   za trening AI modela                                       │   │
-│  │                                                               │   │
-│  │   • Svi podaci se anonimiziraju pre korišćenja              │   │
-│  │   • PIB, nazivi firmi i iznosi se maskiraju                 │   │
-│  │   • Možete opozvati saglasnost u bilo kom trenutku          │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  Status: ✅ Aktivno (od 15.01.2025)                                 │
-│                                                                      │
-│  [Opozovi saglasnost]                                               │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
 **Consent Database Schema:**
 ```sql
@@ -3350,7 +2560,7 @@ CREATE TABLE consent_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id),
     user_id UUID NOT NULL REFERENCES users(id),
-    consent_type VARCHAR(50) NOT NULL,
+    consent_type VARCHAR(50) NOT NULL,  -- 'processing', 'analytics', 'marketing'
     granted BOOLEAN NOT NULL,
     granted_at TIMESTAMP WITH TIME ZONE,
     revoked_at TIMESTAMP WITH TIME ZONE,
@@ -3365,12 +2575,11 @@ CREATE INDEX idx_consent_type ON consent_records(consent_type);
 ```
 
 **Consent Revocation Process:**
-1. User clicks "Opozovi saglasnost"
-2. Confirmation dialog explains implications
-3. On confirm: `revoked_at` timestamp set
-4. Background job queues anonymization of all their documents in training dataset
-5. Within 30 days: all training samples from their documents are removed from active training sets
-6. Confirmation email sent to user
+1. User navigates to Organization Settings → Data & Privacy
+2. Clicks "Opozovi saglasnost" for the relevant consent type
+3. Confirmation dialog explains implications
+4. On confirm: `revoked_at` timestamp set
+5. Confirmation email sent to user
 
 #### 10.6.3 Audit Export for Tax Inspections
 
@@ -3480,12 +2689,11 @@ CREATE TABLE audit_exports (
 | Original documents | 10 years | Serbian Accounting Law |
 | User accounts | Active + 2 years | Business necessity |
 | Audit logs | 7 years | Compliance |
-| Correction logs | 3 years | ML improvement |
-| Training data | Until consent revoked | User consent |
+| Correction logs | 3 years | Quality monitoring |
 | Session data | 30 days | Technical necessity |
 | Temporary files | 24 hours | Processing |
 
-**Right to Erasure (GDPR Article 17):**
+**Right to Erasure (ZZPL Article 30):**
 
 ```
 User Request → Validation → Partial Deletion → Confirmation
@@ -3567,7 +2775,7 @@ FakturaAI Tim
 - API access
 - Security events
 
-**Log Retention:** 12 months minimum
+**Log Retention:** 12 months minimum (invoice data follows 10-year retention per Serbian Accounting Law)
 
 ---
 
@@ -3760,20 +2968,24 @@ jobs:
 - Cache responses for 24 hours
 - Background refresh for frequently accessed PIBs
 
-### 12.2 Payment Integration (Stripe)
+### 12.2 Payment Integration (Paddle)
+
+**Why Paddle:** Paddle operates as a Merchant of Record (MoR), meaning Paddle manages all payment transactions, VAT obligations, and tax compliance globally on behalf of FakturaAI. This is critical for the Serbian market because:
+- Paddle assumes responsibility for calculating and collecting VAT in all jurisdictions
+- No need for FakturaAI to register for VAT in individual countries
+- Simplified financial reporting - one payout from Paddle instead of thousands of individual transactions
 
 **Features Used:**
-- Stripe Checkout for subscriptions
-- Customer Portal for billing management
+- Paddle Checkout for subscriptions
+- Paddle Billing for subscription and billing management
 - Webhooks for subscription events
-- Invoice generation
 
 **Webhook Events:**
-- `customer.subscription.created`
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
-- `invoice.paid`
-- `invoice.payment_failed`
+- `subscription.created`
+- `subscription.updated`
+- `subscription.canceled`
+- `transaction.completed`
+- `transaction.payment_failed`
 
 ### 12.3 Email Service (SendGrid/Resend)
 
@@ -3792,7 +3004,7 @@ jobs:
 - `fakturaai-backups` - Database backups
 
 **Lifecycle Rules:**
-- Documents: 12 months retention
+- Documents: 10 years retention (per Serbian Accounting Law, Sl. glasnik RS, br. 73/2019)
 - Exports: 30 days auto-delete
 - Backups: 90 days retention
 
@@ -3818,7 +3030,7 @@ The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory fo
 │             ┌───────────┐ ┌───────────┐ ┌───────────┐              │
 │             │  Inbound  │ │  Outbound │ │  Status   │              │
 │             │  Invoices │ │  Invoices │ │  Sync     │              │
-│             │  (Pull)   │ │  (Push)   │ │  (Webhook)│              │
+│             │  (Pull)   │ │  (Push)   │ │  (Polling)│              │
 │             └───────────┘ └───────────┘ └───────────┘              │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -3845,8 +3057,7 @@ The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory fo
     "api_key": "encrypted:xxx",
     "certificate_path": "/secrets/sef-cert.p12",
     "sync_enabled": true,
-    "sync_interval_minutes": 15,
-    "webhook_url": "https://api.fakturaai.rs/webhooks/sef/{org_id}"
+    "sync_interval_minutes": 15
   }
 }
 ```
@@ -3895,7 +3106,7 @@ The system MUST pull invoices from SEF and process them through the FakturaAI pi
 │                    Inbound Invoice Sync Flow                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  1. Poll SEF API (every 15 minutes or on webhook)                   │
+│  1. Poll SEF API (every 15 minutes)                                 │
 │     │                                                                │
 │     ▼                                                                │
 │  2. Fetch new/updated invoices since last sync                      │
@@ -4110,80 +3321,77 @@ The system SHOULD support sending invoices to SEF (for organizations that issue 
 | `LegalMonetaryTotal` | invoice.* | All totals |
 | `InvoiceLine` | line_items[] | Description, quantity, price, VAT |
 
-#### 12.5.5 SEF Status Webhooks
+#### 12.5.5 SEF Status Polling
 
-The system SHOULD receive real-time status updates from SEF via webhooks.
+SEF does not support native webhooks. The system MUST poll the SEF API to detect invoice status changes.
 
-**Webhook Endpoint:**
+**Polling Strategy:**
 
-`POST /api/v1/webhooks/sef/{organization_id}`
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| Default interval | 15 minutes | Balance between timeliness and API limits |
+| Business hours boost | 5 minutes (8:00-17:00) | Faster updates during work hours |
+| Off-hours interval | 30 minutes | Reduce unnecessary API calls |
+| Rate limit | Max 100 requests/hour per org | Respect SEF API limits |
 
-**Webhook Payload:**
-
-```json
-{
-  "event_type": "INVOICE_STATUS_CHANGED",
-  "sef_id": "12345678-1234-1234-1234-123456789012",
-  "old_status": "DELIVERED",
-  "new_status": "APPROVED",
-  "timestamp": "2025-01-15T14:30:00Z",
-  "metadata": {
-    "approved_by": "Ime Prezime",
-    "approval_note": "Odobreno za plaćanje"
-  }
-}
-```
-
-**Webhook Processing:**
+**Polling Implementation:**
 
 ```python
-async def handle_sef_webhook(payload: SEFWebhookPayload, org_id: UUID):
+async def poll_sef_status_changes(org_id: UUID):
     """
-    Process SEF status change webhook.
+    Poll SEF API for invoice status changes.
+    Runs on scheduled interval per organization.
     """
-    # 1. Verify webhook signature
-    if not verify_sef_signature(payload):
-        raise HTTPException(401, "Invalid signature")
+    connection = await get_sef_connection(org_id)
+    if not connection or not connection.sync_enabled:
+        return
 
-    # 2. Find corresponding invoice
-    sef_invoice = await get_sef_invoice(org_id, payload.sef_id)
-    if not sef_invoice:
-        logger.warning(f"Unknown SEF invoice: {payload.sef_id}")
-        return {"status": "ignored"}
+    # 1. Get last sync timestamp
+    last_sync = connection.last_sync_at or datetime.min
 
-    # 3. Update status
-    old_status = sef_invoice.sef_status
-    sef_invoice.sef_status = payload.new_status
-    sef_invoice.sef_status_updated_at = payload.timestamp
+    # 2. Query SEF for status changes since last sync
+    changed_invoices = await sef_client.get_status_changes(
+        pib=connection.organization_pib,
+        since=last_sync,
+        api_key=decrypt(connection.api_key_encrypted)
+    )
 
-    # 4. Handle specific status transitions
-    match payload.new_status:
-        case "APPROVED":
-            # Invoice accepted by buyer - safe to book
-            await mark_invoice_accepted(sef_invoice.invoice_id)
-            await notify_user(sef_invoice, "Faktura odobrena od strane kupca")
+    # 3. Process each status change
+    for change in changed_invoices:
+        sef_invoice = await get_sef_invoice(org_id, change.sef_id)
+        if not sef_invoice:
+            logger.warning(f"Unknown SEF invoice: {change.sef_id}")
+            continue
 
-        case "REJECTED":
-            # Invoice rejected - needs attention
-            await flag_invoice_for_review(
-                sef_invoice.invoice_id,
-                reason=f"Odbijena na SEF: {payload.metadata.get('rejection_reason')}"
-            )
-            await notify_user(sef_invoice, "Faktura odbijena!", priority="high")
+        old_status = sef_invoice.sef_status
+        if old_status == change.new_status:
+            continue  # No actual change
 
-        case "CANCELLED":
-            # Invoice cancelled - create reversal if already booked
-            if sef_invoice.invoice.status == "exported":
-                await create_cancellation_record(sef_invoice.invoice_id)
+        sef_invoice.sef_status = change.new_status
+        sef_invoice.sef_status_updated_at = change.timestamp
 
-        case "PAID":
-            # Payment recorded in SEF
-            await update_payment_status(sef_invoice.invoice_id, paid=True)
+        # 4. Handle specific status transitions
+        match change.new_status:
+            case "APPROVED":
+                await mark_invoice_accepted(sef_invoice.invoice_id)
+                await notify_user(sef_invoice, "Faktura odobrena od strane kupca")
+            case "REJECTED":
+                await flag_invoice_for_review(
+                    sef_invoice.invoice_id,
+                    reason=f"Odbijena na SEF: {change.rejection_reason}"
+                )
+                await notify_user(sef_invoice, "Faktura odbijena!", priority="high")
+            case "CANCELLED":
+                if sef_invoice.invoice.status == "exported":
+                    await create_cancellation_record(sef_invoice.invoice_id)
+            case "PAID":
+                await update_payment_status(sef_invoice.invoice_id, paid=True)
 
-    # 5. Log status change
-    await log_sef_status_change(sef_invoice, old_status, payload)
+        await log_sef_status_change(sef_invoice, old_status, change)
 
-    return {"status": "processed"}
+    # 5. Update last sync timestamp
+    connection.last_sync_at = datetime.now(timezone.utc)
+    await db.save(connection)
 ```
 
 #### 12.5.6 SEF-OCR Hybrid Processing
@@ -4287,6 +3495,173 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 | `SEF_DUPLICATE_INVOICE` | Already processed | Skip, update status only |
 | `UBL_PARSE_ERROR` | Malformed XML | Log, attempt PDF-only processing |
 
+### 12.6 NBS Integration (National Bank of Serbia)
+
+The system SHOULD integrate the NBS exchange rate list for foreign currency conversion to RSD.
+
+#### 12.6.1 Overview
+
+NBS publishes a daily middle exchange rate for all currencies traded on the foreign exchange market. The rate list is updated every business day and is available via a public API.
+
+**Usage:**
+- Display RSD equivalent for invoices in foreign currencies (EUR, USD, CHF, GBP)
+- Convert invoice amounts denominated in foreign currency to RSD
+- Use the NBS middle rate on the invoice date
+- Archive the rate used for conversion for audit purposes
+
+#### 12.6.2 API Access
+
+**API endpoint:** `https://nbs.rs/kursnaListaMod498/kursnaLista`
+
+**Note:** NBS provides a public, free-to-use API for the exchange rate list. The API returns the rate list in XML or JSON format.
+
+**Configuration:**
+
+```json
+{
+  "nbs_exchange_rates": {
+    "api_url": "https://nbs.rs/kursnaListaMod498/kursnaLista",
+    "cache_ttl_hours": 24,
+    "default_currency": "RSD",
+    "supported_currencies": ["EUR", "USD", "CHF", "GBP"],
+    "fallback_on_holiday": true
+  }
+}
+```
+
+#### 12.6.3 Caching Strategy
+
+- Exchange rate list is cached for 24 hours
+- For non-business days (weekends, holidays), the last available rate list is used
+- Cache is refreshed every business day at 08:30 (NBS publishes the rate list by 08:00)
+- In case of NBS API unavailability, the last cached rate list is used
+
+#### 12.6.4 Implementation
+
+**Foreign currency invoice conversion:**
+
+```python
+async def get_exchange_rate(currency: str, date: date) -> Decimal:
+    """
+    Fetch NBS middle rate for the given currency and date.
+    """
+    # 1. Check cache
+    cached_rate = await cache.get(f"nbs_rate:{currency}:{date}")
+    if cached_rate:
+        return Decimal(cached_rate)
+
+    # 2. Check database
+    db_rate = await db.query(
+        ExchangeRate,
+        where=and_(
+            ExchangeRate.currency == currency,
+            ExchangeRate.rate_date == date
+        )
+    )
+    if db_rate:
+        await cache.set(f"nbs_rate:{currency}:{date}", str(db_rate.middle_rate), ttl=86400)
+        return db_rate.middle_rate
+
+    # 3. Fetch from NBS API
+    rate = await nbs_api.fetch_rate(currency, date)
+    if rate:
+        await save_exchange_rate(currency, date, rate)
+        return rate.middle_rate
+
+    # 4. Fallback: use last known rate
+    latest_rate = await get_latest_known_rate(currency)
+    return latest_rate.middle_rate if latest_rate else None
+
+
+async def convert_to_rsd(amount: Decimal, currency: str, invoice_date: date) -> dict:
+    """
+    Convert amount from foreign currency to RSD using NBS rate.
+    """
+    if currency == "RSD":
+        return {"rsd_amount": amount, "exchange_rate": Decimal("1"), "rate_date": invoice_date}
+
+    rate = await get_exchange_rate(currency, invoice_date)
+    if not rate:
+        return {"rsd_amount": None, "exchange_rate": None, "error": "Rate unavailable"}
+
+    rsd_amount = (amount * rate).quantize(Decimal("0.01"))
+    return {
+        "rsd_amount": rsd_amount,
+        "exchange_rate": rate,
+        "rate_date": invoice_date,
+        "source": "NBS middle rate"
+    }
+```
+
+#### 12.6.5 Database Schema
+
+```sql
+CREATE TABLE exchange_rates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    currency VARCHAR(3) NOT NULL,
+    rate_date DATE NOT NULL,
+
+    -- Rates
+    buying_rate DECIMAL(15, 6),
+    middle_rate DECIMAL(15, 6) NOT NULL,
+    selling_rate DECIMAL(15, 6),
+
+    -- Unit (e.g., 1 EUR = X RSD, but 100 JPY = X RSD)
+    unit INTEGER NOT NULL DEFAULT 1,
+
+    -- Metadata
+    source VARCHAR(20) NOT NULL DEFAULT 'NBS',
+    fetched_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    CONSTRAINT unique_currency_date UNIQUE (currency, rate_date)
+);
+
+CREATE INDEX idx_exchange_rates_currency ON exchange_rates(currency);
+CREATE INDEX idx_exchange_rates_date ON exchange_rates(rate_date);
+CREATE INDEX idx_exchange_rates_lookup ON exchange_rates(currency, rate_date DESC);
+```
+
+**Celery periodic task for rate list updates:**
+
+```python
+# Celery beat configuration
+CELERY_BEAT_SCHEDULE = {
+    "fetch-nbs-exchange-rates": {
+        "task": "fetch_nbs_exchange_rates",
+        "schedule": crontab(hour=8, minute=30, day_of_week="1-5"),  # Business days at 08:30
+    },
+}
+
+@celery_app.task(name="fetch_nbs_exchange_rates")
+async def fetch_nbs_exchange_rates():
+    """
+    Fetch daily NBS exchange rate list and save to database.
+    """
+    today = date.today()
+
+    for currency in ["EUR", "USD", "CHF", "GBP"]:
+        try:
+            rate_data = await nbs_api.fetch_rate(currency, today)
+            if rate_data:
+                await db.upsert(ExchangeRate(
+                    currency=currency,
+                    rate_date=today,
+                    buying_rate=rate_data.buying_rate,
+                    middle_rate=rate_data.middle_rate,
+                    selling_rate=rate_data.selling_rate,
+                    unit=rate_data.unit,
+                    source="NBS"
+                ))
+                # Update cache
+                await cache.set(
+                    f"nbs_rate:{currency}:{today}",
+                    str(rate_data.middle_rate),
+                    ttl=86400
+                )
+        except Exception as e:
+            logger.error(f"Error fetching rate for {currency}: {e}")
+```
+
 ---
 
 ## 13. User Interface Requirements
@@ -4345,6 +3720,27 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 - Focus indicators
 - Alt text for images
 
+### 13.5 Cyrillic & Latin Script Support
+
+Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully support both scripts to serve all users.
+
+- The system MUST support displaying the interface in both scripts (Cyrillic and Latin)
+- Users can select their preferred script in profile settings
+- OCR must recognize both scripts on invoices
+- All reports and exports must support both scripts
+- Default script: Latin
+- A script switch button must be available in the application header
+
+| Requirement | Specification |
+|-------------|---------------|
+| Default script | Latin (wider user coverage) |
+| Switch option | Visible toggle in the application header |
+| Preference persistence | Save user's choice in profile settings |
+| Scope | All UI elements, error messages, helper texts |
+| OCR support | Recognition of both scripts on input invoices |
+| Reports & exports | Generated in the selected script |
+| Exception | Technical terms (API, URL, etc.) remain in Latin script |
+
 ---
 
 ## 14. Testing Requirements
@@ -4377,7 +3773,7 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 
 **Integration Tests:**
 - APR API integration
-- Stripe webhook handling
+- Paddle webhook handling
 - Email delivery
 - File storage operations
 
@@ -4456,12 +3852,15 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 
 1. Serbian Law on Accounting (Zakon o računovodstvu)
 2. Serbian VAT Law (Zakon o PDV-u)
-3. GDPR - General Data Protection Regulation
-4. APR API Documentation
-5. dots.ocr Documentation (Vision-Language Model)
-6. EasyOCR Documentation (fallback OCR)
-7. FastAPI Documentation
-8. Next.js Documentation
+3. ZZPL - Serbian Law on Personal Data Protection (Zakon o zaštiti podataka o ličnosti)
+4. GDPR - General Data Protection Regulation (reference framework)
+5. APR API Documentation
+6. NBS Exchange Rate API (Kursna lista Narodne banke Srbije)
+7. dots.ocr Documentation (Vision-Language Model)
+8. EasyOCR Documentation (fallback OCR)
+9. FastAPI Documentation
+10. Next.js Documentation
+11. Paddle Documentation (Payment Processing)
 
 ---
 
@@ -4473,6 +3872,7 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 | 1.1 | January 2025 | FakturaAI Team | Added: Business Logic & Validation Rules (4.9), Human-in-the-Loop & Feedback System (9.9), Legal & Compliance Flows (10.6) |
 | 1.2 | January 2025 | FakturaAI Team | Added: Accounting Intent Layer (4.10), Automation Rules Engine (4.11), SEF Integration (12.5), Expanded Feedback Loop Implementation (9.9.7) |
 | 1.3 | January 2025 | FakturaAI Team | Updated OCR stack: dots.ocr (VLM) as primary engine with unified layout+OCR, EasyOCR as fallback, removed separate LayoutParser (Tesseract removed) |
+| 2.0 | February 2026 | FakturaAI Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
 
 ---
 

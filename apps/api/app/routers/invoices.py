@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.config import get_settings
+from app.dependencies import get_current_user
 from app.schemas.invoice import (
     InvoiceListResponse,
     InvoiceResponse,
@@ -107,9 +108,10 @@ async def get_invoice(invoice_id: UUID) -> InvoiceResponse:
 
 @router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
+    _user=Depends(get_current_user),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-    status: str | None = None,
+    invoice_status: str | None = Query(default=None, alias="status"),
     date_from: str | None = None,
     date_to: str | None = None,
     seller_pib: str | None = None,
