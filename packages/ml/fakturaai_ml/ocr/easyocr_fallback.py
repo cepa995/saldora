@@ -108,10 +108,10 @@ class EasyOCREngine(OCREngine):
         Returns:
             OCRResult with extracted text and bounding boxes
         """
-        if not self._loaded:
-            await self.load()
-
         try:
+            if not self._loaded:
+                await self.load()
+
             # Convert PIL Image to numpy array
             image_np = np.array(image)
 

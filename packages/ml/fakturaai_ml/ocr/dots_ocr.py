@@ -122,10 +122,10 @@ class DotsOCREngine(OCREngine):
         Returns:
             OCRResult with extracted text, tables, and layout
         """
-        if not self._loaded:
-            await self.load()
-
         try:
+            if not self._loaded:
+                await self.load()
+
             from vllm import SamplingParams
 
             # Prepare the prompt for dots.ocr
