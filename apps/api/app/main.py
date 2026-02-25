@@ -47,6 +47,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Redis connection verified")
     app.state.redis = redis_client
 
+    # 4. Verify S3-compatible storage
+    from app.services.storage import ensure_bucket_exists
+
+    ensure_bucket_exists()
+    logger.info("Storage connection verified")
+
     logger.info(f"faktura.ai API v{settings.app_version} ready ({settings.environment})")
     yield
 

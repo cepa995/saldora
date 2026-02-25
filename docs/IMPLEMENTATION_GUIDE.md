@@ -74,7 +74,7 @@ This milestone is complete. It established the database module, core models (Use
 
 **Tasks:**
 - Create `apps/api/app/services/storage.py` with lazy-initialized boto3 client
-- Implement `upload_document(invoice_id, content, content_type, filename)` — organizes files as `invoices/{id}/original.{ext}`
+- Implement `upload_document(organization_id, invoice_id, content, content_type, filename)` — organizes files as `organizations/{org_id}/invoices/{id}/original.{ext}`
 - Implement `get_presigned_url(key, expires_in)` for secure temporary download links
 - Implement `delete_document(key)` for cleanup on invoice deletion
 - Add storage config to `apps/api/app/config.py`: `storage_endpoint`, `storage_bucket`, `storage_access_key`, `storage_secret_key`, `storage_region`
