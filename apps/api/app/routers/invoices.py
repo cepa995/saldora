@@ -1,19 +1,28 @@
 """Invoice processing router - upload, retrieve, update, delete."""
 
+import asyncio
+import logging
 from typing import Annotated
 from uuid import UUID
 
+import celery
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.invoice import Invoice
+from app.models.user import User
 from app.schemas.invoice import (
     InvoiceListResponse,
     InvoiceResponse,
     InvoiceUpdate,
     ProcessingStatus,
 )
+from app.services.storage import upload_document
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 settings = get_settings()
 
@@ -21,11 +30,12 @@ settings = get_settings()
 @router.post("/upload", response_model=ProcessingStatus, status_code=status.HTTP_202_ACCEPTED)
 async def upload_invoice(
     file: Annotated[UploadFile, File(description="Invoice document (PDF, PNG, JPG)")],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> ProcessingStatus:
-    """
-    Upload an invoice document for OCR processing.
+    """Upload an invoice document for OCR processing.
 
     Accepts PDF, PNG, JPG, TIFF, WEBP formats up to 20MB.
     Returns a processing status with job ID for tracking.
@@ -47,20 +57,67 @@ async def upload_invoice(
     content = await file.read()
     if len(content) > settings.ocr_max_file_size_mb * 1024 * 1024:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File too large. Maximum size is {settings.ocr_max_file_size_mb}MB",
         )
 
-    # TODO: Implement upload processing
-    # 1. Save file to S3/R2
-    # 2. Create document record in database
-    # 3. Create invoice record with status "processing"
-    # 4. Queue OCR task with Celery
-    # 5. Return job ID and estimated time
+    # 1. Create Invoice record (flush to get id before S3 upload)
+    invoice = Invoice(
+        organization_id=user.organization_id,
+        status="processing",
+        document_content_type=file.content_type,
+    )
+    db.add(invoice)
+    await db.flush()
 
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Upload processing not yet implemented",
+    # 2. Upload to S3/R2 (sync boto3 → thread pool)
+    try:
+        document_key = await asyncio.to_thread(
+            upload_document,
+            user.organization_id,
+            invoice.id,
+            content,
+            file.content_type,
+            file.filename or "document",
+        )
+    except Exception as e:
+        logger.error("S3 upload failed for invoice %s: %s", invoice.id, e)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to upload document to storage",
+        ) from e
+
+    # 3. Save document path and commit
+    invoice.document_path = document_key
+    await db.commit()
+    await db.refresh(invoice)
+
+    # 4. Queue Celery OCR task (graceful fallback if Redis/Celery is down)
+    celery_queued = False
+    try:
+        celery_app = celery.Celery(broker=settings.celery_broker_url)
+        celery_app.send_task(
+            "ocr_worker.tasks.process_invoice",
+            args=[str(invoice.id), document_key, callback_url, priority],
+            queue="ocr",
+        )
+        celery_queued = True
+    except Exception as e:
+        logger.warning(
+            "Failed to queue OCR task for invoice %s: %s. Invoice saved; manual retry required.",
+            invoice.id,
+            e,
+        )
+
+    # 5. Return processing status
+    return ProcessingStatus(
+        id=invoice.id,
+        status="queued" if celery_queued else "processing",
+        progress=0,
+        estimated_time=30 if priority == "normal" else 15,
+        document_id=invoice.id,
+        created_at=invoice.created_at,
     )
 
 
@@ -69,8 +126,7 @@ async def upload_batch(
     files: list[UploadFile],
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
 ) -> list[ProcessingStatus]:
-    """
-    Upload multiple invoice documents for batch processing.
+    """Upload multiple invoice documents for batch processing.
 
     Maximum 50 files per batch, 200MB total.
     """
@@ -90,8 +146,7 @@ async def upload_batch(
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(invoice_id: UUID) -> InvoiceResponse:
-    """
-    Get invoice details by ID.
+    """Get invoice details by ID.
 
     Returns full invoice data including extracted fields,
     confidence scores, and verification status.
@@ -120,9 +175,7 @@ async def list_invoices(
     sort: str = "created_at",
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> InvoiceListResponse:
-    """
-    List invoices with filtering, sorting, and pagination.
-    """
+    """List invoices with filtering, sorting, and pagination."""
     # TODO: Implement invoice listing
     # 1. Build query with filters
     # 2. Apply sorting
@@ -136,8 +189,7 @@ async def list_invoices(
 
 @router.patch("/{invoice_id}", response_model=InvoiceResponse)
 async def update_invoice(invoice_id: UUID, update_data: InvoiceUpdate) -> InvoiceResponse:
-    """
-    Update invoice fields.
+    """Update invoice fields.
 
     Used for manual corrections after OCR extraction.
     Tracks all changes in audit log.
@@ -157,9 +209,7 @@ async def update_invoice(invoice_id: UUID, update_data: InvoiceUpdate) -> Invoic
 
 @router.delete("/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_invoice(invoice_id: UUID) -> None:
-    """
-    Delete invoice and associated document.
-    """
+    """Delete invoice and associated document."""
     # TODO: Implement invoice deletion
     # 1. Find invoice by ID
     # 2. Check user has delete access
@@ -174,8 +224,7 @@ async def delete_invoice(invoice_id: UUID) -> None:
 
 @router.get("/{invoice_id}/status", response_model=ProcessingStatus)
 async def get_processing_status(invoice_id: UUID) -> ProcessingStatus:
-    """
-    Get current processing status of an invoice.
+    """Get current processing status of an invoice.
 
     Use this to poll for completion after upload.
     """
@@ -190,8 +239,7 @@ async def get_processing_status(invoice_id: UUID) -> ProcessingStatus:
 
 @router.post("/{invoice_id}/verify")
 async def verify_invoice(invoice_id: UUID) -> InvoiceResponse:
-    """
-    Mark invoice as verified after human review.
+    """Mark invoice as verified after human review.
 
     Sets status to 'verified' and enables export.
     """
