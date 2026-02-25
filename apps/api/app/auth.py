@@ -37,7 +37,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return argon2.verify(plain_password, hashed_password)
 
 
-def create_access_token(user_id: str, organization_id: str) -> str:
+def create_access_token(
+    user_id: str,
+    organization_id: str,
+    email: str = "",
+    first_name: str | None = None,
+    last_name: str | None = None,
+    role: str = "member",
+) -> str:
     """
     Create a JWT access token
 
@@ -45,17 +52,23 @@ def create_access_token(user_id: str, organization_id: str) -> str:
         user_id (str): user_id from the DB
         organization_id (str): organization_id from organization
         user belongs to
+        email (str): user email
+        first_name (str | None): user first name
+        last_name (str | None): user last name
+        role (str): user role in organization
 
     Returns:
         JWT token (str)
     """
-    expires = datetime.now(UTC) + timedelta(
-        minutes=settings.jwt_access_token_expire_minutes
-    )
+    expires = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
     payload = {
         "sub": user_id,  # Subject (who the token is for)
         "org": organization_id,  # Organization (multi-tenancy)
+        "email": email,
+        "first_name": first_name or "",
+        "last_name": last_name or "",
+        "role": role,
         "exp": expires,  # Expiration time
         "type": "access",
     }

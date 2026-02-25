@@ -1,11 +1,12 @@
 """
-API tests for the invoice upload endpoint.
+API tests for the invoice upload and status endpoints.
 
 Tests exercise the full request lifecycle: HTTP -> FastAPI -> S3 -> DB -> response.
 S3 and Celery are mocked since they require running infrastructure.
 """
 
 from unittest.mock import patch
+from uuid import uuid4
 
 from httpx import AsyncClient
 
@@ -114,6 +115,71 @@ async def test_upload_image_format(mock_s3, mock_celery, client: AsyncClient):
     assert response.json()["status"] == "queued"
 
 
+# ---- Duplicate detection ----
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+@patch("app.routers.invoices.document_exists", return_value=True)
+async def test_upload_duplicate_returns_existing(
+    mock_exists, mock_s3, mock_celery, client: AsyncClient
+):
+    """Uploading the same file twice returns the existing invoice, not a new one."""
+    headers = await _auth_headers(client)
+    file_content = b"%PDF-1.4 duplicate test content"
+
+    # First upload
+    resp1 = await client.post(
+        "/api/v1/invoices/upload",
+        files={"file": ("invoice.pdf", file_content, "application/pdf")},
+        headers=headers,
+    )
+    assert resp1.status_code == 202
+    id1 = resp1.json()["id"]
+
+    # Second upload of the same content
+    resp2 = await client.post(
+        "/api/v1/invoices/upload",
+        files={"file": ("invoice.pdf", file_content, "application/pdf")},
+        headers=headers,
+    )
+    assert resp2.status_code == 202
+    id2 = resp2.json()["id"]
+
+    # Same invoice returned
+    assert id1 == id2
+    # S3 upload should only have been called once
+    mock_s3.assert_called_once()
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+async def test_upload_different_files_creates_separate_invoices(
+    mock_s3, mock_celery, client: AsyncClient
+):
+    """Uploading different files creates separate invoices."""
+    headers = await _auth_headers(client)
+
+    resp1 = await client.post(
+        "/api/v1/invoices/upload",
+        files={"file": ("a.pdf", b"%PDF-1.4 content A", "application/pdf")},
+        headers=headers,
+    )
+    resp2 = await client.post(
+        "/api/v1/invoices/upload",
+        files={"file": ("b.pdf", b"%PDF-1.4 content B", "application/pdf")},
+        headers=headers,
+    )
+
+    assert resp1.json()["id"] != resp2.json()["id"]
+
+
 # ---- Graceful degradation ----
 
 
@@ -132,7 +198,7 @@ async def test_upload_succeeds_when_celery_down(mock_s3, mock_celery, client: As
     )
     assert response.status_code == 202
     data = response.json()
-    assert data["status"] == "processing"  # Not "queued" since Celery failed
+    assert data["status"] == "uploaded"  # Not "queued" since Celery failed
     assert data["id"] is not None
 
 
@@ -150,3 +216,120 @@ async def test_upload_returns_502_on_s3_failure(mock_s3, client: AsyncClient):
     )
     assert response.status_code == 502
     assert "storage" in response.json()["detail"].lower()
+
+
+# ==== Status endpoint tests ====
+
+
+async def _upload_and_get_id(client: AsyncClient, headers: dict[str, str]) -> str:
+    """Upload a file and return the invoice ID."""
+    with (
+        patch("celery.Celery.send_task"),
+        patch(
+            "app.routers.invoices.upload_document",
+            return_value="organizations/org-id/invoices/inv-id/original.pdf",
+        ),
+    ):
+        resp = await client.post(
+            "/api/v1/invoices/upload",
+            files={"file": ("invoice.pdf", b"%PDF-1.4 fake", "application/pdf")},
+            headers=headers,
+        )
+    return resp.json()["id"]
+
+
+async def test_status_requires_auth(client: AsyncClient):
+    """Status endpoint without token returns 401."""
+    fake_id = str(uuid4())
+    response = await client.get(f"/api/v1/invoices/{fake_id}/status")
+    assert response.status_code == 401
+
+
+async def test_status_returns_404_for_nonexistent(client: AsyncClient):
+    """Status for a non-existent invoice returns 404."""
+    headers = await _auth_headers(client)
+    fake_id = str(uuid4())
+    response = await client.get(f"/api/v1/invoices/{fake_id}/status", headers=headers)
+    assert response.status_code == 404
+
+
+async def test_status_after_upload(client: AsyncClient):
+    """After upload, status endpoint returns correct processing state."""
+    headers = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers)
+
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == invoice_id
+    assert data["status"] in ("queued", "uploaded")
+    assert data["document_id"] == invoice_id
+    assert data["created_at"] is not None
+
+
+async def test_status_returns_uploaded_when_ocr_not_started(client: AsyncClient):
+    """Status returns 'uploaded' when file saved but OCR hasn't run."""
+    headers = await _auth_headers(client)
+
+    # Upload with Celery down → upload response says "uploaded"
+    with (
+        patch("celery.Celery.send_task", side_effect=Exception("Redis down")),
+        patch(
+            "app.routers.invoices.upload_document",
+            return_value="organizations/org-id/invoices/inv-id/original.pdf",
+        ),
+    ):
+        upload_resp = await client.post(
+            "/api/v1/invoices/upload",
+            files={"file": ("inv.pdf", b"%PDF-1.4 fake", "application/pdf")},
+            headers=headers,
+        )
+    invoice_id = upload_resp.json()["id"]
+
+    # Status endpoint should also return "uploaded"
+    status_resp = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert status_resp.status_code == 200
+    assert status_resp.json()["status"] == "uploaded"
+
+
+async def test_status_hides_other_org_invoices(client: AsyncClient):
+    """User cannot see status of invoices from another organization."""
+    # Create invoice with first user
+    headers1 = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers1)
+
+    # Register second user (different org)
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "other-org@example.com",
+            "password": "securepass123",
+            "first_name": "Other",
+            "last_name": "User",
+            "organization_name": "Different Org",
+        },
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "other-org@example.com", "password": "securepass123"},
+    )
+    headers2 = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
+    # Second user should get 404 (not 403, to avoid leaking existence)
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers2)
+    assert response.status_code == 404
+
+
+# ==== Health services endpoint ====
+
+
+async def test_health_services_returns_status(client: AsyncClient):
+    """Health services endpoint returns Redis and OCR worker status."""
+    response = await client.get("/health/services")
+    assert response.status_code == 200
+    data = response.json()
+    assert "redis" in data
+    assert "ocr_worker" in data
+    assert data["redis"]["status"] in ("healthy", "unavailable")
+    assert data["ocr_worker"]["status"] in ("healthy", "unavailable")
+    assert isinstance(data["ocr_worker"]["workers"], int)

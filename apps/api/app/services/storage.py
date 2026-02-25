@@ -58,6 +58,23 @@ def ensure_bucket_exists() -> None:
         logger.info("Created bucket: %s", settings.storage_bucket)
 
 
+def document_exists(key: str) -> bool:
+    """Check whether an object exists in S3.
+
+    Args:
+        key: S3 object key to check.
+
+    Returns:
+        True if the object exists, False otherwise.
+    """
+    client = get_s3_client()
+    try:
+        client.head_object(Bucket=settings.storage_bucket, Key=key)
+        return True
+    except ClientError:
+        return False
+
+
 def upload_document(
     organization_id: UUID,
     invoice_id: UUID,

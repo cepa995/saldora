@@ -138,7 +138,7 @@ class ProcessingStatus(BaseModel):
     """Invoice processing status."""
 
     id: UUID
-    status: Literal["queued", "processing", "completed", "failed"]
+    status: Literal["uploaded", "queued", "processing", "completed", "failed"]
     progress: int = Field(ge=0, le=100, default=0)
     estimated_time: int | None = Field(
         default=None, description="Estimated remaining time in seconds"

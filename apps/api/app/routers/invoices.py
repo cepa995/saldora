@@ -1,12 +1,14 @@
 """Invoice processing router - upload, retrieve, update, delete."""
 
 import asyncio
+import hashlib
 import logging
 from typing import Annotated
 from uuid import UUID
 
 import celery
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -20,7 +22,7 @@ from app.schemas.invoice import (
     InvoiceUpdate,
     ProcessingStatus,
 )
-from app.services.storage import upload_document
+from app.services.storage import document_exists, upload_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,16 +63,45 @@ async def upload_invoice(
             detail=f"File too large. Maximum size is {settings.ocr_max_file_size_mb}MB",
         )
 
-    # 1. Create Invoice record (flush to get id before S3 upload)
+    # 1. Compute content hash and check for duplicates
+    document_hash = hashlib.sha256(content).hexdigest()
+    existing = await db.execute(
+        select(Invoice).where(
+            Invoice.organization_id == user.organization_id,
+            Invoice.document_hash == document_hash,
+        )
+    )
+    duplicate = existing.scalar_one_or_none()
+    if duplicate:
+        # Verify the document still exists in S3 (may have been deleted, e.g. MinIO reset)
+        file_exists = (
+            await asyncio.to_thread(document_exists, duplicate.document_path)
+            if duplicate.document_path
+            else False
+        )
+        if file_exists:
+            return ProcessingStatus(
+                id=duplicate.id,
+                status="uploaded",
+                progress=0,
+                document_id=duplicate.id,
+                created_at=duplicate.created_at,
+            )
+        # Stale record — remove it so we can re-upload
+        await db.delete(duplicate)
+        await db.flush()
+
+    # 2. Create Invoice record (flush to get id before S3 upload)
     invoice = Invoice(
         organization_id=user.organization_id,
         status="processing",
+        document_hash=document_hash,
         document_content_type=file.content_type,
     )
     db.add(invoice)
     await db.flush()
 
-    # 2. Upload to S3/R2 (sync boto3 → thread pool)
+    # 3. Upload to S3/R2 (sync boto3 → thread pool)
     try:
         document_key = await asyncio.to_thread(
             upload_document,
@@ -88,12 +119,12 @@ async def upload_invoice(
             detail="Failed to upload document to storage",
         ) from e
 
-    # 3. Save document path and commit
+    # 4. Save document path and commit
     invoice.document_path = document_key
     await db.commit()
     await db.refresh(invoice)
 
-    # 4. Queue Celery OCR task (graceful fallback if Redis/Celery is down)
+    # 5. Queue Celery OCR task (graceful fallback if Redis/Celery is down)
     celery_queued = False
     try:
         celery_app = celery.Celery(broker=settings.celery_broker_url)
@@ -110,10 +141,10 @@ async def upload_invoice(
             e,
         )
 
-    # 5. Return processing status
+    # 6. Return processing status
     return ProcessingStatus(
         id=invoice.id,
-        status="queued" if celery_queued else "processing",
+        status="queued" if celery_queued else "uploaded",
         progress=0,
         estimated_time=30 if priority == "normal" else 15,
         document_id=invoice.id,
@@ -223,17 +254,52 @@ async def delete_invoice(invoice_id: UUID) -> None:
 
 
 @router.get("/{invoice_id}/status", response_model=ProcessingStatus)
-async def get_processing_status(invoice_id: UUID) -> ProcessingStatus:
+async def get_processing_status(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ProcessingStatus:
     """Get current processing status of an invoice.
 
     Use this to poll for completion after upload.
     """
-    # TODO: Implement status check
-    # 1. Find invoice by ID
-    # 2. Return current status and progress
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Processing status not yet implemented",
+    result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+
+    if invoice.organization_id != user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+
+    # Map Invoice.status → ProcessingStatus.status + progress
+    if invoice.status == "processing":
+        if invoice.confidence_score is not None:
+            # OCR has started producing results
+            proc_status, progress = "processing", 50
+        elif invoice.document_path:
+            # File saved but OCR hasn't run yet
+            proc_status, progress = "uploaded", 0
+        else:
+            proc_status, progress = "queued", 0
+    else:
+        status_map: dict[str, tuple[str, int]] = {
+            "review": ("completed", 100),
+            "verified": ("completed", 100),
+            "exported": ("completed", 100),
+            "error": ("failed", 0),
+        }
+        proc_status, progress = status_map.get(invoice.status, ("uploaded", 0))
+
+    return ProcessingStatus(
+        id=invoice.id,
+        status=proc_status,
+        progress=progress,
+        error_message=(
+            invoice.warnings[0] if invoice.status == "error" and invoice.warnings else None
+        ),
+        document_id=invoice.id,
+        created_at=invoice.created_at,
     )
 
 

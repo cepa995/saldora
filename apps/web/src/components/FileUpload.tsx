@@ -2,6 +2,7 @@
 
 import { useCallback, useState, InputHTMLAttributes } from 'react';
 import { useDropzone, FileRejection } from 'react-dropzone';
+import { apiClient } from '@/lib/api-client';
 
 // FR-4.2.1: Supported formats and size limits
 const ACCEPTED_FILE_TYPES = {
@@ -21,7 +22,7 @@ const SUPPORTED_FORMATS = ['PDF', 'JPEG', 'PNG', 'TIFF', 'BMP', 'WEBP'];
 export interface UploadedFile {
   file: File;
   preview: string | null;
-  status: 'pending' | 'uploading' | 'processing' | 'success' | 'error';
+  status: 'pending' | 'uploading' | 'uploaded' | 'processing' | 'success' | 'error';
   progress: number;
   error?: string;
   jobId?: string;
@@ -118,7 +119,7 @@ export function FileUpload({
     maxSize: MAX_FILE_SIZE,
     maxFiles: 1,
     multiple: false,
-    disabled: disabled || uploadedFile?.status === 'uploading' || uploadedFile?.status === 'processing',
+    disabled: disabled || uploadedFile?.status === 'uploading' || uploadedFile?.status === 'uploaded',
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone(dropzoneConfig as any);
@@ -134,23 +135,16 @@ export function FileUpload({
       const formData = new FormData();
       formData.append('file', uploadedFile.file);
 
-      // TODO: Replace with actual API endpoint when backend is implemented
-      const response = await fetch('/api/v1/invoices/upload', {
+      const data = await apiClient<{ id: string }>('/api/v1/invoices/upload', {
         method: 'POST',
         body: formData,
       });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
 
       setUploadedFile((prev) =>
         prev
           ? {
               ...prev,
-              status: 'processing',
+              status: 'uploaded',
               progress: 100,
               jobId: data.id,
             }
@@ -159,7 +153,10 @@ export function FileUpload({
 
       onUploadComplete?.(uploadedFile.file, data.id);
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Greška pri slanju fajla.';
+      const errorMsg =
+        error && typeof error === 'object' && 'message' in error
+          ? String((error as { message: string }).message)
+          : 'Greška pri slanju fajla.';
       setUploadedFile((prev) =>
         prev
           ? {
@@ -292,24 +289,16 @@ export function FileUpload({
                   </div>
                 )}
 
-                {uploadedFile.status === 'processing' && (
+                {uploadedFile.status === 'uploaded' && (
                   <div className="flex items-center gap-2 mt-2">
-                    <svg className="animate-spin h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
+                    <svg className="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                       <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
                       />
                     </svg>
-                    <p className="text-xs text-blue-600">Obrada u toku...</p>
+                    <p className="text-xs text-green-600">Uspešno otpremljeno</p>
                   </div>
                 )}
 
@@ -332,7 +321,7 @@ export function FileUpload({
               </div>
 
               {/* Remove Button */}
-              {uploadedFile.status !== 'uploading' && uploadedFile.status !== 'processing' && (
+              {uploadedFile.status !== 'uploading' && uploadedFile.status !== 'uploaded' && (
                 <button
                   type="button"
                   onClick={(e) => {

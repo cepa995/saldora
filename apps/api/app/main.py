@@ -100,6 +100,45 @@ async def health_check() -> dict[str, str]:
     return {"status": "healthy", "version": settings.app_version}
 
 
+@app.get("/health/services")
+async def service_health() -> dict:
+    """Check health of dependent services (Redis, Celery OCR workers)."""
+    import asyncio
+    import logging
+
+    import celery as celery_lib
+    import redis.asyncio as aioredis
+
+    logger = logging.getLogger(__name__)
+
+    # Check Redis
+    redis_status = "unavailable"
+    try:
+        r = aioredis.from_url(settings.celery_broker_url)
+        await r.ping()
+        await r.aclose()
+        redis_status = "healthy"
+    except Exception as exc:
+        logger.debug("Redis health check failed: %s", exc)
+
+    # Check Celery OCR workers
+    ocr_status = "unavailable"
+    ocr_workers = 0
+    try:
+        celery_app = celery_lib.Celery(broker=settings.celery_broker_url)
+        response = await asyncio.to_thread(celery_app.control.ping, timeout=1.0)
+        ocr_workers = len(response) if response else 0
+        if ocr_workers > 0:
+            ocr_status = "healthy"
+    except Exception as exc:
+        logger.debug("Celery health check failed: %s", exc)
+
+    return {
+        "redis": {"status": redis_status},
+        "ocr_worker": {"status": ocr_status, "workers": ocr_workers},
+    }
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint with API information."""

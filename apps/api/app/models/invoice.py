@@ -56,6 +56,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     line_items: Mapped[list | None] = mapped_column(JSON)
 
     # Document reference
+    document_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     document_path: Mapped[str | None] = mapped_column(String(500))
     document_content_type: Mapped[str | None] = mapped_column(String(100))
 
