@@ -57,6 +57,98 @@ function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
+// Per-file pipeline steps
+const MINI_STEPS = [
+  { key: 'upload', label: 'Otpremanje' },
+  { key: 'ocr', label: 'OCR' },
+  { key: 'review', label: 'Pregled' },
+] as const;
+
+type StepState = 'completed' | 'active' | 'pending';
+
+function getStepState(fileStatus: UploadedFile['status'], stepIndex: number): StepState {
+  switch (fileStatus) {
+    case 'uploading':
+      return stepIndex === 0 ? 'active' : 'pending';
+    case 'uploaded':
+      return stepIndex === 0 ? 'completed' : 'pending';
+    case 'processing':
+      if (stepIndex === 0) return 'completed';
+      return stepIndex === 1 ? 'active' : 'pending';
+    case 'success':
+      return 'completed';
+    default:
+      return 'pending';
+  }
+}
+
+function getStatusMessage(fileStatus: UploadedFile['status']): { text: string; className: string } | null {
+  switch (fileStatus) {
+    case 'uploading':
+      return { text: 'Otpremanje u toku...', className: 'text-blue-600' };
+    case 'uploaded':
+      return { text: 'Čeka na OCR obradu', className: 'text-amber-600' };
+    case 'processing':
+      return { text: 'OCR obrada u toku...', className: 'text-blue-600' };
+    case 'success':
+      return { text: 'Spremno za pregled', className: 'text-green-600' };
+    default:
+      return null;
+  }
+}
+
+function MiniPipeline({ status }: { status: UploadedFile['status'] }) {
+  const message = getStatusMessage(status);
+
+  return (
+    <div>
+      {/* Steps */}
+      <div className="flex items-center">
+        {MINI_STEPS.map((step, i) => {
+          const state = getStepState(status, i);
+          const prevState = i > 0 ? getStepState(status, i - 1) : null;
+
+          return (
+            <div key={step.key} className="contents">
+              {/* Connecting line */}
+              {i > 0 && (
+                <div
+                  className={`flex-1 h-0.5 ${prevState === 'completed' ? 'bg-green-400' : 'bg-gray-200'}`}
+                />
+              )}
+
+              {/* Step circle + label */}
+              <div className="flex flex-col items-center gap-1" style={{ minWidth: '64px' }}>
+                {state === 'completed' && (
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+                {state === 'active' && (
+                  <div className="w-5 h-5 rounded-full bg-blue-500 animate-pulse" />
+                )}
+                {state === 'pending' && (
+                  <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
+                )}
+                <span className={`text-[10px] font-medium ${state === 'completed' ? 'text-green-600' : state === 'active' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  {step.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Status message */}
+      {message && (
+        <p className={`text-xs text-center mt-2 ${message.className}`}>{message.text}</p>
+      )}
+    </div>
+  );
+}
+
 export function FileUpload({
   onFilesAccepted,
   onUploadStart,
@@ -354,79 +446,68 @@ export function FileUpload({
           </div>
 
           {/* File items */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             {uploadedFiles.map((uf, index) => (
               <div
                 key={`${uf.file.name}-${index}`}
-                className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200"
+                className="p-4 bg-white rounded-xl border border-gray-200"
               >
-                {/* Thumbnail/Icon */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-                  {uf.preview ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- Using img for blob URL preview
-                    <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
-                    </svg>
+                {/* Top row: file info + remove button */}
+                <div className="flex items-center gap-3">
+                  {/* Thumbnail/Icon */}
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {uf.preview ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- Using img for blob URL preview
+                      <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                      </svg>
+                    )}
+                  </div>
+
+                  {/* File info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{uf.file.name}</p>
+                    <p className="text-xs text-gray-500">{formatFileSize(uf.file.size)}</p>
+                  </div>
+
+                  {/* Remove button (only for pending files) */}
+                  {uf.status === 'pending' && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFile(index)}
+                      className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                      aria-label="Ukloni fajl"
+                    >
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   )}
                 </div>
 
-                {/* File info */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{uf.file.name}</p>
-                  <p className="text-xs text-gray-500">{formatFileSize(uf.file.size)}</p>
-                </div>
-
-                {/* Status indicators */}
-                {uf.status === 'uploading' && (
-                  <svg className="animate-spin h-5 w-5 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                )}
-
-                {uf.status === 'uploaded' && (
-                  <svg className="h-5 w-5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                )}
-
-                {uf.status === 'error' && (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-red-600 max-w-[150px] truncate" title={uf.error}>
-                      {uf.error}
-                    </span>
-                    <svg className="h-5 w-5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                {/* Mini pipeline — shown for non-pending, non-error statuses */}
+                {uf.status !== 'pending' && uf.status !== 'error' && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <MiniPipeline status={uf.status} />
                   </div>
                 )}
 
-                {/* Remove button (only for pending files) */}
-                {uf.status === 'pending' && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveFile(index)}
-                    className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                    aria-label="Ukloni fajl"
-                  >
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                {/* Error state */}
+                {uf.status === 'error' && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-start gap-2">
+                      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <p className="text-xs text-red-600">{uf.error}</p>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
