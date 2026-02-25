@@ -59,6 +59,7 @@ def ensure_bucket_exists() -> None:
 
 
 def upload_document(
+    organization_id: UUID,
     invoice_id: UUID,
     content: bytes,
     content_type: str,
@@ -66,10 +67,12 @@ def upload_document(
 ) -> str:
     """Upload a document to S3 and return the object key.
 
-    Files are stored under ``invoices/{invoice_id}/original{ext}`` with the
-    original filename preserved in S3 object metadata.
+    Files are stored under
+    ``organizations/{organization_id}/invoices/{invoice_id}/original{ext}``
+    with the original filename preserved in S3 object metadata.
 
     Args:
+        organization_id: UUID of the owning organization (tenant prefix).
         invoice_id: UUID of the invoice this document belongs to.
         content: Raw file bytes.
         content_type: MIME type (e.g. ``application/pdf``, ``image/png``).
@@ -79,7 +82,7 @@ def upload_document(
         The S3 object key where the document was stored.
     """
     ext = _get_extension(content_type)
-    key = f"invoices/{invoice_id}/original{ext}"
+    key = f"organizations/{organization_id}/invoices/{invoice_id}/original{ext}"
 
     client = get_s3_client()
     client.put_object(
@@ -116,7 +119,8 @@ def delete_document(key: str) -> None:
     """Delete a document from S3.
 
     Args:
-        key: S3 object key to delete (e.g. ``invoices/{id}/original.pdf``).
+        key: S3 object key to delete
+            (e.g. ``organizations/{org_id}/invoices/{id}/original.pdf``).
     """
     client = get_s3_client()
     client.delete_object(Bucket=settings.storage_bucket, Key=key)
