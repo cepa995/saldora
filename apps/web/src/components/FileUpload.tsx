@@ -200,9 +200,9 @@ export function FileUpload({
       });
 
       // Map results back to files by index (batch endpoint returns results in same order)
-      let resultIdx = 0;
-      setUploadedFiles((prev) =>
-        prev.map((f) => {
+      setUploadedFiles((prev) => {
+        let resultIdx = 0;
+        return prev.map((f) => {
           if (f.status !== 'uploading') return f;
           const result = results[resultIdx++];
           if (!result) return f;
@@ -220,8 +220,8 @@ export function FileUpload({
             progress: 100,
             jobId: result.id,
           };
-        })
-      );
+        });
+      });
 
       onUploadComplete?.(results);
     } catch (error) {
