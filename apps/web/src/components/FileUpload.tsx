@@ -3,6 +3,8 @@
 import { useCallback, useState, InputHTMLAttributes } from 'react';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { apiClient } from '@/lib/api-client';
+import { PipelineStepper } from './PipelineStepper';
+import type { PipelineStatus } from './PipelineStepper';
 
 // FR-4.2.1: Supported formats and size limits
 const ACCEPTED_FILE_TYPES = {
@@ -57,96 +59,22 @@ function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-// Per-file pipeline steps
-const MINI_STEPS = [
-  { key: 'upload', label: 'Otpremanje' },
-  { key: 'ocr', label: 'OCR' },
-  { key: 'review', label: 'Pregled' },
-] as const;
-
-type StepState = 'completed' | 'active' | 'pending';
-
-function getStepState(fileStatus: UploadedFile['status'], stepIndex: number): StepState {
+// Map UploadedFile status → PipelineStepper status
+function toPipelineStatus(fileStatus: UploadedFile['status']): PipelineStatus {
   switch (fileStatus) {
     case 'uploading':
-      return stepIndex === 0 ? 'active' : 'pending';
+      return 'uploading';
     case 'uploaded':
-      return stepIndex === 0 ? 'completed' : 'pending';
+      return 'uploaded';
     case 'processing':
-      if (stepIndex === 0) return 'completed';
-      return stepIndex === 1 ? 'active' : 'pending';
+      return 'processing';
     case 'success':
-      return 'completed';
+      return 'review';
+    case 'error':
+      return 'error';
     default:
-      return 'pending';
+      return 'uploading';
   }
-}
-
-function getStatusMessage(fileStatus: UploadedFile['status']): { text: string; className: string } | null {
-  switch (fileStatus) {
-    case 'uploading':
-      return { text: 'Otpremanje u toku...', className: 'text-blue-600' };
-    case 'uploaded':
-      return { text: 'Čeka na OCR obradu', className: 'text-amber-600' };
-    case 'processing':
-      return { text: 'OCR obrada u toku...', className: 'text-blue-600' };
-    case 'success':
-      return { text: 'Spremno za pregled', className: 'text-green-600' };
-    default:
-      return null;
-  }
-}
-
-function MiniPipeline({ status }: { status: UploadedFile['status'] }) {
-  const message = getStatusMessage(status);
-
-  return (
-    <div>
-      {/* Steps */}
-      <div className="flex items-center">
-        {MINI_STEPS.map((step, i) => {
-          const state = getStepState(status, i);
-          const prevState = i > 0 ? getStepState(status, i - 1) : null;
-
-          return (
-            <div key={step.key} className="contents">
-              {/* Connecting line */}
-              {i > 0 && (
-                <div
-                  className={`flex-1 h-0.5 ${prevState === 'completed' ? 'bg-green-400' : 'bg-gray-200'}`}
-                />
-              )}
-
-              {/* Step circle + label */}
-              <div className="flex flex-col items-center gap-1" style={{ minWidth: '64px' }}>
-                {state === 'completed' && (
-                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                )}
-                {state === 'active' && (
-                  <div className="w-5 h-5 rounded-full bg-blue-500 animate-pulse" />
-                )}
-                {state === 'pending' && (
-                  <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
-                )}
-                <span className={`text-[10px] font-medium ${state === 'completed' ? 'text-green-600' : state === 'active' ? 'text-blue-600' : 'text-gray-400'}`}>
-                  {step.label}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Status message */}
-      {message && (
-        <p className={`text-xs text-center mt-2 ${message.className}`}>{message.text}</p>
-      )}
-    </div>
-  );
 }
 
 export function FileUpload({
@@ -346,7 +274,7 @@ export function FileUpload({
   const totalSize = uploadedFiles.filter((f) => f.status === 'pending').reduce((sum, f) => sum + f.file.size, 0);
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-5xl mx-auto">
       {/* Dropzone Area */}
       <div {...getRootProps({ className: getDropzoneClassName() })}>
         <input {...(getInputProps() as InputHTMLAttributes<HTMLInputElement>)} />
@@ -446,18 +374,17 @@ export function FileUpload({
           </div>
 
           {/* File items */}
-          <div className="space-y-3">
-            {uploadedFiles.map((uf, index) => (
-              <div
-                key={`${uf.file.name}-${index}`}
-                className="p-4 bg-white rounded-xl border border-gray-200"
-              >
-                {/* Top row: file info + remove button */}
-                <div className="flex items-center gap-3">
-                  {/* Thumbnail/Icon */}
+          <div className="space-y-4">
+            {uploadedFiles.map((uf, index) =>
+              uf.status === 'pending' ? (
+                /* Compact card for pending files */
+                <div
+                  key={`${uf.file.name}-${index}`}
+                  className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200"
+                >
                   <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
                     {uf.preview ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- Using img for blob URL preview
+                      // eslint-disable-next-line @next/next/no-img-element -- blob URL preview
                       <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
                     ) : (
                       <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
@@ -465,52 +392,60 @@ export function FileUpload({
                       </svg>
                     )}
                   </div>
-
-                  {/* File info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{uf.file.name}</p>
                     <p className="text-xs text-gray-500">{formatFileSize(uf.file.size)}</p>
                   </div>
-
-                  {/* Remove button (only for pending files) */}
-                  {uf.status === 'pending' && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFile(index)}
-                      className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                      aria-label="Ukloni fajl"
-                    >
-                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                    aria-label="Ukloni fajl"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
+              ) : (
+                /* Wide card: preview left | pipeline right */
+                <div
+                  key={`${uf.file.name}-${index}`}
+                  className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div className="flex">
+                    {/* Left: preview + file info */}
+                    <div className="flex-shrink-0 w-48 bg-gray-50 border-r border-gray-100 flex flex-col items-center justify-center p-5 gap-3">
+                      <div className="w-28 h-36 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center shadow-inner">
+                        {uf.preview ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- blob URL preview
+                          <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <svg className="w-12 h-12 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                            <path d="M8 12h8v2H8zm0 4h8v2H8z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="text-center min-w-0 w-full">
+                        <p className="text-sm font-semibold text-gray-900 truncate px-1">{uf.file.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{formatFileSize(uf.file.size)}</p>
+                      </div>
+                    </div>
 
-                {/* Mini pipeline — shown for non-pending, non-error statuses */}
-                {uf.status !== 'pending' && uf.status !== 'error' && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <MiniPipeline status={uf.status} />
-                  </div>
-                )}
-
-                {/* Error state */}
-                {uf.status === 'error' && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-start gap-2">
-                      <svg className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                          clipRule="evenodd"
+                    {/* Right: full pipeline stepper */}
+                    <div className="flex-1 p-6 flex items-center">
+                      <div className="w-full">
+                        <PipelineStepper
+                          currentStatus={toPipelineStatus(uf.status)}
+                          errorMessage={uf.error}
                         />
-                      </svg>
-                      <p className="text-xs text-red-600">{uf.error}</p>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
