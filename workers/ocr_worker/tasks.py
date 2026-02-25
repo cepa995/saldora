@@ -266,18 +266,132 @@ def _serialize_result(result) -> dict[str, Any]:
 
 
 def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
-    """Save extraction result to database."""
-    # TODO: Implement database save
-    # This would use SQLAlchemy to update the invoice record
+    """Save extraction result to the invoices table."""
+    import json
+
+    from ocr_worker.database import get_session, text
+
     logger.info(f"Saving result for invoice {invoice_id}")
+    logger.debug(
+        f"Extraction result:\n{json.dumps(result, indent=2, default=str, ensure_ascii=False)}"
+    )
+
+    invoice = result.get("invoice", {})
+    seller = invoice.get("seller")
+    buyer = invoice.get("buyer")
+    line_items = invoice.get("line_items")
+
+    session = get_session()
+    try:
+        session.execute(
+            text("""
+                UPDATE invoices SET
+                    invoice_number = :invoice_number,
+                    invoice_date = :invoice_date,
+                    due_date = :due_date,
+                    seller = :seller,
+                    buyer = :buyer,
+                    subtotal = :subtotal,
+                    tax_rate = :tax_rate,
+                    tax_amount = :tax_amount,
+                    total_amount = :total_amount,
+                    currency = :currency,
+                    line_items = :line_items,
+                    confidence_score = :confidence_score,
+                    field_confidence = :field_confidence,
+                    warnings = :warnings,
+                    ocr_engine = :ocr_engine,
+                    processing_time_ms = :processing_time_ms,
+                    raw_ocr_text = :raw_ocr_text,
+                    status = 'review',
+                    updated_at = NOW()
+                WHERE id = :invoice_id
+            """),
+            {
+                "invoice_id": invoice_id,
+                "invoice_number": invoice.get("invoice_number"),
+                "invoice_date": invoice.get("invoice_date"),
+                "due_date": invoice.get("due_date"),
+                "seller": json.dumps(seller, default=str, ensure_ascii=False)
+                if seller
+                else None,
+                "buyer": json.dumps(buyer, default=str, ensure_ascii=False)
+                if buyer
+                else None,
+                "subtotal": invoice.get("subtotal"),
+                "tax_rate": invoice.get("tax_rate"),
+                "tax_amount": invoice.get("tax_amount"),
+                "total_amount": invoice.get("total_amount"),
+                "currency": invoice.get("currency", "RSD"),
+                "line_items": json.dumps(line_items, default=str, ensure_ascii=False)
+                if line_items
+                else None,
+                "confidence_score": result.get("overall_confidence"),
+                "field_confidence": json.dumps(
+                    result.get("field_confidences", []),
+                    default=str,
+                    ensure_ascii=False,
+                ),
+                "warnings": json.dumps(
+                    result.get("warnings", []),
+                    default=str,
+                    ensure_ascii=False,
+                ),
+                "ocr_engine": result.get("ocr_engine"),
+                "processing_time_ms": result.get("processing_time_ms"),
+                "raw_ocr_text": invoice.get("raw_text"),
+            },
+        )
+        session.commit()
+        logger.info(f"Saved extraction result for invoice {invoice_id}")
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def _update_invoice_status(
     invoice_id: str, status: str, error: str | None = None
 ) -> None:
     """Update invoice status in database."""
-    # TODO: Implement status update
+    import json
+
+    from ocr_worker.database import get_session, text
+
     logger.info(f"Updating invoice {invoice_id} status to {status}")
+
+    session = get_session()
+    try:
+        params: dict[str, Any] = {"invoice_id": invoice_id, "status": status}
+
+        if error:
+            params["warnings"] = json.dumps(
+                [{"type": "processing_error", "message": error, "severity": "error"}],
+                ensure_ascii=False,
+            )
+            query = text("""
+                UPDATE invoices SET
+                    status = :status,
+                    warnings = :warnings,
+                    updated_at = NOW()
+                WHERE id = :invoice_id
+            """)
+        else:
+            query = text("""
+                UPDATE invoices SET
+                    status = :status,
+                    updated_at = NOW()
+                WHERE id = :invoice_id
+            """)
+
+        session.execute(query, params)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def _send_webhook(url: str, resource_id: str, data: dict[str, Any]) -> None:

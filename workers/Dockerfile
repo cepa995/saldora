@@ -28,6 +28,9 @@ WORKDIR /app
 COPY packages/ml /app/packages/ml
 RUN pip3 install /app/packages/ml[gpu]
 
+# Install sync PostgreSQL driver (Celery worker is synchronous)
+RUN pip3 install psycopg2-binary sqlalchemy
+
 # Copy worker code
 COPY workers/ocr_worker /app/ocr_worker
 
