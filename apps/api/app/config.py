@@ -6,9 +6,12 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Resolve the project root (3 levels up from this file: app/config.py -> app -> api -> apps -> root)
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_ENV_FILE = _PROJECT_ROOT / ".env"
+# Resolve the project root for .env file (local dev only)
+try:
+    _PROJECT_ROOT = Path(__file__).resolve().parents[3]
+    _ENV_FILE = _PROJECT_ROOT / ".env"
+except IndexError:
+    _ENV_FILE = Path("/nonexistent")
 
 
 class Settings(BaseSettings):

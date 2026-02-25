@@ -8,7 +8,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 import celery
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -436,13 +436,26 @@ async def delete_invoice(invoice_id: UUID) -> None:
 @router.get("/{invoice_id}/status", response_model=ProcessingStatus)
 async def get_processing_status(
     invoice_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ProcessingStatus:
     """Get current processing status of an invoice.
 
-    Use this to poll for completion after upload.
+    Checks Redis for real-time progress from the OCR worker, then
+    falls back to database status if no Redis data is available.
+
+    Args:
+        invoice_id: The invoice UUID to check.
+        request: FastAPI request (provides access to app.state.redis).
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        ProcessingStatus with current stage, progress, and status.
     """
+    import json
+
     result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     invoice = result.scalar_one_or_none()
 
@@ -452,13 +465,48 @@ async def get_processing_status(
     if invoice.organization_id != user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
 
-    # Map Invoice.status → ProcessingStatus.status + progress
+    # Try Redis for real-time progress (best-effort)
+    redis_progress = None
+    try:
+        redis_client = request.app.state.redis
+        raw = await redis_client.get(f"invoice:{invoice_id}:progress")
+        if raw:
+            redis_progress = json.loads(raw)
+    except Exception:
+        pass
+
+    # If Redis has data and DB status is still "processing", use Redis for live updates
+    if redis_progress and invoice.status == "processing":
+        stage = redis_progress.get("stage", "")
+        progress = redis_progress.get("progress", 0)
+        error = redis_progress.get("error")
+
+        if stage == "complete":
+            proc_status = "completed"
+            progress = 100
+            stage = None
+        elif stage == "failed":
+            proc_status = "failed"
+            progress = 0
+            stage = None
+        else:
+            proc_status = "processing"
+
+        return ProcessingStatus(
+            id=invoice.id,
+            status=proc_status,
+            progress=progress,
+            stage=stage,
+            error_message=error,
+            document_id=invoice.id,
+            created_at=invoice.created_at,
+        )
+
+    # Fall back to DB-based status mapping
     if invoice.status == "processing":
         if invoice.confidence_score is not None:
-            # OCR has started producing results
             proc_status, progress = "processing", 50
         elif invoice.document_path:
-            # File saved but OCR hasn't run yet
             proc_status, progress = "uploaded", 0
         else:
             proc_status, progress = "queued", 0

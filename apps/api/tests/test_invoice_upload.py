@@ -5,10 +5,13 @@ Tests exercise the full request lifecycle: HTTP -> FastAPI -> S3 -> DB -> respon
 S3 and Celery are mocked since they require running infrastructure.
 """
 
-from unittest.mock import patch
+import json
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from httpx import AsyncClient
+
+from app.main import app as fastapi_app
 
 
 async def _auth_headers(client: AsyncClient) -> dict[str, str]:
@@ -465,3 +468,87 @@ async def test_health_services_returns_status(client: AsyncClient):
     assert data["redis"]["status"] in ("healthy", "unavailable")
     assert data["ocr_worker"]["status"] in ("healthy", "unavailable")
     assert isinstance(data["ocr_worker"]["workers"], int)
+
+
+# ==== Status endpoint with Redis progress ====
+
+
+async def test_status_returns_redis_progress_when_processing(client: AsyncClient):
+    """Status endpoint returns real-time Redis progress during processing."""
+    headers = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = json.dumps(
+        {
+            "stage": "ocr_running",
+            "progress": 40,
+            "error": None,
+        }
+    )
+    fastapi_app.state.redis = mock_redis
+
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "processing"
+    assert data["progress"] == 40
+    assert data["stage"] == "ocr_running"
+
+
+async def test_status_falls_back_to_db_when_redis_unavailable(client: AsyncClient):
+    """Status endpoint falls back to DB when Redis is down."""
+    headers = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.side_effect = Exception("Redis connection refused")
+    fastapi_app.state.redis = mock_redis
+
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] in ("uploaded", "queued", "processing")
+
+
+async def test_status_returns_completed_when_redis_says_complete(client: AsyncClient):
+    """When Redis stage is 'complete', status is 'completed' with progress 100."""
+    headers = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = json.dumps(
+        {
+            "stage": "complete",
+            "progress": 100,
+            "error": None,
+        }
+    )
+    fastapi_app.state.redis = mock_redis
+
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    assert data["progress"] == 100
+
+
+async def test_status_returns_failed_when_redis_says_failed(client: AsyncClient):
+    """When Redis stage is 'failed', status is 'failed' with error message."""
+    headers = await _auth_headers(client)
+    invoice_id = await _upload_and_get_id(client, headers)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = json.dumps(
+        {
+            "stage": "failed",
+            "progress": 0,
+            "error": "Model inference timed out",
+        }
+    )
+    fastapi_app.state.redis = mock_redis
+
+    response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "failed"
+    assert data["error_message"] == "Model inference timed out"
