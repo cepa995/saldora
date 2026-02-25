@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FileUpload, PipelineStepper } from '@/components';
-import type { PipelineStatus } from '@/components';
+import type { BatchUploadResult, PipelineStatus } from '@/components';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -27,6 +27,7 @@ export default function UploadPage() {
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [batchResults, setBatchResults] = useState<BatchUploadResult[] | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Redirect to login if not authenticated
@@ -103,8 +104,9 @@ export default function UploadPage() {
     [stopPolling]
   );
 
-  const handleFileAccepted = () => {
+  const handleFilesAccepted = () => {
     setInvoiceId(null);
+    setBatchResults(null);
     setPipelineStatus(null);
     setErrorMessage(undefined);
     stopPolling();
@@ -114,10 +116,24 @@ export default function UploadPage() {
     setPipelineStatus('uploading');
   };
 
-  const handleUploadComplete = (_file: File, jobId: string) => {
-    setInvoiceId(jobId);
-    setPipelineStatus('uploaded');
-    pollStatus(jobId);
+  const handleUploadComplete = (results: BatchUploadResult[]) => {
+    setBatchResults(results);
+
+    const successful = results.filter((r) => r.status !== 'failed');
+
+    if (results.length === 1 && successful.length === 1) {
+      // Single file — show pipeline stepper + poll
+      setInvoiceId(successful[0].id);
+      setPipelineStatus('uploaded');
+      pollStatus(successful[0].id);
+    } else if (successful.length > 0) {
+      // Batch — show batch summary
+      setPipelineStatus('uploaded');
+    } else {
+      // All failed
+      setPipelineStatus('error');
+      setErrorMessage('Nijedna faktura nije uspešno otpremljena.');
+    }
   };
 
   const handleError = (error: string) => {
@@ -125,6 +141,10 @@ export default function UploadPage() {
     setErrorMessage(error);
     stopPolling();
   };
+
+  const isBatch = batchResults !== null && batchResults.length > 1;
+  const batchSuccessCount = batchResults?.filter((r) => r.status !== 'failed').length ?? 0;
+  const batchFailCount = batchResults?.filter((r) => r.status === 'failed').length ?? 0;
 
   // Show nothing while checking auth (prevents content flash)
   if (isLoading || !isAuthenticated) {
@@ -174,22 +194,22 @@ export default function UploadPage() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Page Title */}
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">Učitaj fakturu</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">Učitaj fakture</h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Učitajte fakturu u PDF ili slikovnom formatu i naš AI će automatski izvući sve relevantne podatke.
+            Učitajte jednu ili više faktura u PDF ili slikovnom formatu i naš AI će automatski izvući sve relevantne podatke.
           </p>
         </div>
 
         {/* Upload Component */}
         <FileUpload
-          onFileAccepted={handleFileAccepted}
+          onFilesAccepted={handleFilesAccepted}
           onUploadStart={handleUploadStart}
           onUploadComplete={handleUploadComplete}
           onError={handleError}
         />
 
-        {/* Pipeline Stepper — shown after upload starts */}
-        {pipelineStatus && (
+        {/* Pipeline Stepper — single file only */}
+        {pipelineStatus && !isBatch && (
           <div className="mt-8 max-w-3xl mx-auto">
             <div className="border-gradient rounded-2xl">
               <div className="glass rounded-2xl p-8">
@@ -276,6 +296,69 @@ export default function UploadPage() {
                   <p className="mt-5 text-center text-xs text-gray-400">
                     ID: {invoiceId}
                   </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Batch Results Summary — multi-file only */}
+        {isBatch && (
+          <div className="mt-8 max-w-3xl mx-auto">
+            <div className="border-gradient rounded-2xl">
+              <div className="glass rounded-2xl p-8">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Rezultati učitavanja</h3>
+
+                <div className="flex items-center gap-6">
+                  {batchSuccessCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <svg className="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span className="text-sm text-gray-700">
+                        {batchSuccessCount} {batchSuccessCount === 1 ? 'faktura uspešno otpremljena' : 'faktura uspešno otpremljeno'}
+                      </span>
+                    </div>
+                  )}
+                  {batchFailCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <svg className="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <span className="text-sm text-gray-700">
+                        {batchFailCount} {batchFailCount === 1 ? 'greška' : 'grešaka'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* OCR not available message */}
+                {batchSuccessCount > 0 && (
+                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd" />
+                      </svg>
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-amber-800">
+                          Fajlovi su uspešno sačuvani.
+                        </p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          OCR servis trenutno nije dostupan — obrada će početi automatski kada servis bude spreman.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
