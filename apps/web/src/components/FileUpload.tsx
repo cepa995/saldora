@@ -433,14 +433,57 @@ export function FileUpload({
                       </div>
                     </div>
 
-                    {/* Right: full pipeline stepper */}
-                    <div className="flex-1 p-6 flex items-center">
-                      <div className="w-full">
-                        <PipelineStepper
-                          currentStatus={toPipelineStatus(uf.status)}
-                          errorMessage={uf.error}
-                        />
-                      </div>
+                    {/* Right: pipeline stepper + status message */}
+                    <div className="flex-1 p-6 flex flex-col justify-center">
+                      <PipelineStepper
+                        currentStatus={toPipelineStatus(uf.status)}
+                        errorMessage={uf.error}
+                      />
+
+                      {/* Per-card status messages */}
+                      {uf.status === 'uploading' && (
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <p className="text-sm text-gray-600">Fajl se otprema...</p>
+                        </div>
+                      )}
+
+                      {uf.status === 'uploaded' && (
+                        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                          <div className="flex items-start gap-2.5">
+                            <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd"
+                                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                clipRule="evenodd" />
+                            </svg>
+                            <div>
+                              <p className="text-xs font-medium text-amber-800">Fajl je uspešno sačuvan.</p>
+                              <p className="text-xs text-amber-700 mt-0.5">
+                                OCR servis trenutno nije dostupan — obrada će početi automatski kada servis bude spreman.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {uf.status === 'processing' && (
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <p className="text-sm text-violet-600">OCR obrada u toku — ekstrahujemo podatke...</p>
+                        </div>
+                      )}
+
+                      {uf.status === 'success' && (
+                        <div className="mt-4 text-center">
+                          <p className="text-sm text-green-600">Obrada završena! Faktura je spremna za pregled.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
