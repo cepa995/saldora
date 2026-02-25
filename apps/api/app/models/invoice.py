@@ -50,13 +50,14 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     tax_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
-    currecny: Mapped[str] = mapped_column(String(3), default="RSD")
+    currency: Mapped[str] = mapped_column(String(3), default="RSD")
 
     # Line items
     line_items: Mapped[list | None] = mapped_column(JSON)
 
     # Document reference
-    document_paht: Mapped[str | None] = mapped_column(String(500))
+    document_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    document_path: Mapped[str | None] = mapped_column(String(500))
     document_content_type: Mapped[str | None] = mapped_column(String(100))
 
     # OCR Metadata

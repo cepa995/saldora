@@ -141,6 +141,109 @@ async def test_login_nonexistent_user(client: AsyncClient):
     assert response.status_code == 401
 
 
+# ---- Token Refresh ----
+
+
+async def test_refresh_success(client: AsyncClient):
+    """Valid refresh token returns new access + refresh token pair."""
+    # Setup: register and login
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "refresh@example.com",
+            "password": "securepass123",
+            "first_name": "Refresh",
+            "last_name": "User",
+        },
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "refresh@example.com", "password": "securepass123"},
+    )
+    refresh_token = login_resp.json()["refresh_token"]
+
+    # Use refresh token to get new tokens
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["expires_in"] > 0
+
+
+async def test_refresh_with_access_token_fails(client: AsyncClient):
+    """Using an access token instead of refresh token returns 401."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "wrong-type@example.com",
+            "password": "securepass123",
+            "first_name": "Wrong",
+            "last_name": "Type",
+        },
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "wrong-type@example.com", "password": "securepass123"},
+    )
+    access_token = login_resp.json()["access_token"]
+
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": access_token},
+    )
+
+    assert response.status_code == 401
+    assert "invalid token type" in response.json()["detail"].lower()
+
+
+async def test_refresh_with_invalid_token(client: AsyncClient):
+    """Garbage token returns 401."""
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": "not.a.valid.jwt"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_refresh_new_token_works_on_protected_endpoint(client: AsyncClient):
+    """Access token obtained via refresh can access protected endpoints."""
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "refresh-use@example.com",
+            "password": "securepass123",
+            "first_name": "Refresh",
+            "last_name": "Use",
+        },
+    )
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "refresh-use@example.com", "password": "securepass123"},
+    )
+    refresh_token = login_resp.json()["refresh_token"]
+
+    # Get new tokens via refresh
+    refresh_resp = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    new_access_token = refresh_resp.json()["access_token"]
+
+    # Use new access token on a protected endpoint
+    response = await client.get(
+        "/api/v1/invoices",
+        headers={"Authorization": f"Bearer {new_access_token}"},
+    )
+    assert response.status_code != 401
+
+
 # ---- Protected endpoints ----
 
 

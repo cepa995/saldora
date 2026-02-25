@@ -2,12 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
     create_access_token,
     create_refresh_token,
+    decode_token,
     hash_password,
     verify_password,
 )
@@ -15,7 +17,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.auth import TokenResponse, UserCreate, UserResponse
+from app.schemas.auth import RefreshRequest, TokenResponse, UserCreate, UserResponse
 
 router = APIRouter()
 settings = get_settings()
@@ -96,7 +98,14 @@ async def login(
         )
 
     # 3. Generate tokens
-    access_token = create_access_token(str(user.id), str(user.organization_id))
+    access_token = create_access_token(
+        str(user.id),
+        str(user.organization_id),
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+    )
     refresh_token = create_refresh_token(str(user.id))
 
     return TokenResponse(
@@ -107,20 +116,58 @@ async def login(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str) -> TokenResponse:
+async def refresh(
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
     """
     Refresh access token using refresh token.
 
-    Returns new access and refresh tokens.
+    Validates the refresh JWT, looks up the user, and issues
+    a new access + refresh token pair (token rotation).
     """
-    # TODO: Implement token refresh
-    # 1. Validate refresh token
-    # 2. Check if token is not revoked
-    # 3. Generate new access token
-    # 4. Optionally rotate refresh token
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh not yet implemented",
+    # 1. Decode and validate the refresh token
+    try:
+        payload = decode_token(body.refresh_token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # 2. Verify it is actually a refresh token
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+
+    # 3. Look up the user to get current claims
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # 4. Issue new token pair (rotation)
+    access_token = create_access_token(
+        str(user.id),
+        str(user.organization_id),
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+    )
+    new_refresh_token = create_refresh_token(str(user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token,
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
     )
 
 

@@ -43,6 +43,12 @@ class TokenResponse(BaseModel):
     expires_in: int = Field(description="Access token expiry in seconds")
 
 
+class RefreshRequest(BaseModel):
+    """Schema for token refresh request."""
+
+    refresh_token: str
+
+
 class PasswordResetRequest(BaseModel):
     """Schema for password reset request."""
 
