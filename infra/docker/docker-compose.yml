@@ -95,7 +95,8 @@ services:
       - /app/.next
     command: npm run dev
 
-  # OCR Worker (CPU version for development)
+  # OCR Worker (GPU version — requires NVIDIA Container Toolkit)
+  # To run without GPU, set OCR_USE_GPU=false and OCR_PRIMARY_ENGINE=easyocr
   ocr-worker:
     build:
       context: ../..
@@ -108,14 +109,22 @@ services:
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
       STORAGE_BUCKET: fakturaai-documents
-      OCR_USE_GPU: "false"
-      OCR_PRIMARY_ENGINE: easyocr
+      DATABASE_URL: postgresql://fakturaai:fakturaai_dev@postgres:5432/fakturaai
+      OCR_USE_GPU: "true"
+      OCR_PRIMARY_ENGINE: dots
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ../../packages/ml:/app/packages/ml
       - ../../workers/ocr_worker:/app/ocr_worker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # Flower - Celery monitoring
   flower:
