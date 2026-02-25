@@ -320,6 +320,138 @@ async def test_status_hides_other_org_invoices(client: AsyncClient):
     assert response.status_code == 404
 
 
+# ==== Batch upload tests ====
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+async def test_batch_upload_success(mock_s3, mock_celery, client: AsyncClient):
+    """Batch upload of 3 valid PDFs returns 202 with 3 status objects."""
+    headers = await _auth_headers(client)
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=[
+            ("files", ("a.pdf", b"%PDF-1.4 content A", "application/pdf")),
+            ("files", ("b.pdf", b"%PDF-1.4 content B", "application/pdf")),
+            ("files", ("c.pdf", b"%PDF-1.4 content C", "application/pdf")),
+        ],
+        headers=headers,
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert len(data) == 3
+    for item in data:
+        assert item["status"] in ("queued", "uploaded")
+        assert item["id"] is not None
+    # All 3 files should be unique → 3 S3 uploads
+    assert mock_s3.call_count == 3
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+async def test_batch_upload_partial_failure(mock_s3, mock_celery, client: AsyncClient):
+    """Mix of valid and invalid files: valid ones succeed, invalid ones report errors."""
+    headers = await _auth_headers(client)
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=[
+            ("files", ("good.pdf", b"%PDF-1.4 valid", "application/pdf")),
+            ("files", ("bad.txt", b"not a valid invoice", "text/plain")),
+            ("files", ("good.png", b"\x89PNG valid image", "image/png")),
+        ],
+        headers=headers,
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert len(data) == 3
+
+    # First and third should succeed
+    assert data[0]["status"] in ("queued", "uploaded")
+    assert data[2]["status"] in ("queued", "uploaded")
+
+    # Second should fail with error message
+    assert data[1]["status"] == "failed"
+    assert "Unsupported file type" in data[1]["error_message"]
+
+    # Only 2 S3 uploads (the valid files)
+    assert mock_s3.call_count == 2
+
+
+async def test_batch_upload_exceeds_file_limit(client: AsyncClient):
+    """Batch with more than 50 files returns 400."""
+    headers = await _auth_headers(client)
+    files = [("files", (f"file{i}.pdf", b"%PDF-1.4 x", "application/pdf")) for i in range(51)]
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=files,
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert "50" in response.json()["detail"]
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+async def test_batch_upload_exceeds_total_size(mock_s3, mock_celery, client: AsyncClient):
+    """Batch exceeding 200MB total returns 400."""
+    headers = await _auth_headers(client)
+    # 11 files × 19MB each = 209MB > 200MB
+    big_content = b"x" * (19 * 1024 * 1024)
+    files = [("files", (f"big{i}.pdf", big_content, "application/pdf")) for i in range(11)]
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=files,
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert "200MB" in response.json()["detail"]
+
+
+async def test_batch_upload_requires_auth(client: AsyncClient):
+    """Batch upload without token returns 401."""
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=[("files", ("a.pdf", b"%PDF-1.4", "application/pdf"))],
+    )
+    assert response.status_code == 401
+
+
+@patch("celery.Celery.send_task")
+@patch(
+    "app.routers.invoices.upload_document",
+    return_value="organizations/org-id/invoices/inv-id/original.pdf",
+)
+@patch("app.routers.invoices.document_exists", return_value=True)
+async def test_batch_upload_dedup(mock_exists, mock_s3, mock_celery, client: AsyncClient):
+    """Same file twice in batch: first uploads, second returns existing."""
+    headers = await _auth_headers(client)
+    same_content = b"%PDF-1.4 identical content"
+    response = await client.post(
+        "/api/v1/invoices/upload/batch",
+        files=[
+            ("files", ("first.pdf", same_content, "application/pdf")),
+            ("files", ("second.pdf", same_content, "application/pdf")),
+        ],
+        headers=headers,
+    )
+    assert response.status_code == 202
+    data = response.json()
+    assert len(data) == 2
+    # Both should return the same invoice ID (dedup)
+    assert data[0]["id"] == data[1]["id"]
+    # S3 upload should only be called once
+    mock_s3.assert_called_once()
+
+
 # ==== Health services endpoint ====
 
 

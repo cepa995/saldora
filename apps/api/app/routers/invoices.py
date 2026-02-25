@@ -3,8 +3,9 @@
 import asyncio
 import hashlib
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import celery
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -152,27 +153,206 @@ async def upload_invoice(
     )
 
 
-@router.post("/upload/batch", response_model=list[ProcessingStatus])
+ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/tiff",
+    "image/webp",
+}
+MAX_BATCH_FILES = 50
+MAX_BATCH_TOTAL_BYTES = 200 * 1024 * 1024  # 200 MB
+
+
+async def _process_single_file(
+    file_content: bytes,
+    content_type: str,
+    filename: str,
+    db: AsyncSession,
+    user: User,
+    priority: str,
+    callback_url: str | None,
+) -> ProcessingStatus:
+    """Process a single file within a batch upload.
+
+    Creates an invoice record, uploads to S3, and queues a Celery OCR task.
+    Uses a savepoint so failures only roll back this file, not the whole batch.
+    """
+    # 1. Dedup check
+    document_hash = hashlib.sha256(file_content).hexdigest()
+    existing = await db.execute(
+        select(Invoice).where(
+            Invoice.organization_id == user.organization_id,
+            Invoice.document_hash == document_hash,
+        )
+    )
+    duplicate = existing.scalar_one_or_none()
+    if duplicate:
+        file_exists = (
+            await asyncio.to_thread(document_exists, duplicate.document_path)
+            if duplicate.document_path
+            else False
+        )
+        if file_exists:
+            return ProcessingStatus(
+                id=duplicate.id,
+                status="uploaded",
+                progress=0,
+                document_id=duplicate.id,
+                created_at=duplicate.created_at,
+            )
+        await db.delete(duplicate)
+        await db.flush()
+
+    # 2. Create invoice record inside a savepoint
+    async with db.begin_nested():
+        invoice = Invoice(
+            organization_id=user.organization_id,
+            status="processing",
+            document_hash=document_hash,
+            document_content_type=content_type,
+        )
+        db.add(invoice)
+        await db.flush()
+
+        # 3. Upload to S3
+        document_key = await asyncio.to_thread(
+            upload_document,
+            user.organization_id,
+            invoice.id,
+            file_content,
+            content_type,
+            filename,
+        )
+        invoice.document_path = document_key
+
+    # 4. Queue Celery OCR task (graceful fallback)
+    celery_queued = False
+    try:
+        celery_app = celery.Celery(broker=settings.celery_broker_url)
+        celery_app.send_task(
+            "ocr_worker.tasks.process_invoice",
+            args=[str(invoice.id), document_key, callback_url, priority],
+            queue="ocr",
+        )
+        celery_queued = True
+    except Exception as e:
+        logger.warning(
+            "Failed to queue OCR task for invoice %s: %s",
+            invoice.id,
+            e,
+        )
+
+    return ProcessingStatus(
+        id=invoice.id,
+        status="queued" if celery_queued else "uploaded",
+        progress=0,
+        estimated_time=30 if priority == "normal" else 15,
+        document_id=invoice.id,
+        created_at=invoice.created_at,
+    )
+
+
+@router.post(
+    "/upload/batch",
+    response_model=list[ProcessingStatus],
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def upload_batch(
     files: list[UploadFile],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
+    callback_url: str | None = None,
 ) -> list[ProcessingStatus]:
     """Upload multiple invoice documents for batch processing.
 
-    Maximum 50 files per batch, 200MB total.
+    Accepts up to 50 files per batch, 200MB total.
+    Each file is processed independently — invalid files are
+    reported as failed without blocking valid ones.
     """
-    if len(files) > 50:
+    if len(files) > MAX_BATCH_FILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum 50 files per batch",
+            detail=f"Maximum {MAX_BATCH_FILES} files per batch",
         )
 
-    # TODO: Implement batch upload
-    # Similar to single upload but processes all files
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Batch upload not yet implemented",
-    )
+    # Read all file contents and validate total size
+    file_data: list[tuple[bytes, str, str]] = []  # (content, content_type, filename)
+    total_size = 0
+    for f in files:
+        content = await f.read()
+        total_size += len(content)
+        file_data.append((content, f.content_type or "", f.filename or "document"))
+
+    if total_size > MAX_BATCH_TOTAL_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Total batch size exceeds 200MB",
+        )
+
+    # Process each file independently
+    results: list[ProcessingStatus] = []
+    max_file_bytes = settings.ocr_max_file_size_mb * 1024 * 1024
+
+    for content, content_type, filename in file_data:
+        # Validate file type
+        if content_type not in ALLOWED_CONTENT_TYPES:
+            results.append(
+                ProcessingStatus(
+                    id=uuid4(),
+                    status="failed",
+                    progress=0,
+                    error_message=f"Unsupported file type: {content_type}",
+                    created_at=datetime.now(UTC),
+                )
+            )
+            continue
+
+        # Validate file size
+        if len(content) > max_file_bytes:
+            results.append(
+                ProcessingStatus(
+                    id=uuid4(),
+                    status="failed",
+                    progress=0,
+                    error_message=(
+                        f"File '{filename}' too large. "
+                        f"Maximum size is {settings.ocr_max_file_size_mb}MB"
+                    ),
+                    created_at=datetime.now(UTC),
+                )
+            )
+            continue
+
+        # Process the file (dedup, S3 upload, Celery queue)
+        try:
+            result = await _process_single_file(
+                content,
+                content_type,
+                filename,
+                db,
+                user,
+                priority,
+                callback_url,
+            )
+            results.append(result)
+        except Exception as e:
+            logger.error("Batch file '%s' failed: %s", filename, e)
+            results.append(
+                ProcessingStatus(
+                    id=uuid4(),
+                    status="failed",
+                    progress=0,
+                    error_message=f"Failed to process '{filename}'",
+                    created_at=datetime.now(UTC),
+                )
+            )
+
+    # Commit all successful invoices in one transaction
+    await db.commit()
+
+    return results
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
