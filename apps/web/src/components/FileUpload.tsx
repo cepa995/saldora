@@ -260,10 +260,11 @@ export function FileUpload({
         <input {...(getInputProps() as InputHTMLAttributes<HTMLInputElement>)} />
 
         <div className="flex flex-col items-center text-center">
-          {/* Upload Icon */}
-          <div className="mb-4">
+          {/* Upload Icon — stacked documents to hint at multi-file */}
+          <div className="mb-4 relative">
+            {/* Back document (offset) */}
             <svg
-              className={`w-12 h-12 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`}
+              className={`w-10 h-10 absolute -top-1 -left-1 ${isDragActive ? 'text-blue-300' : 'text-gray-300'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -272,8 +273,23 @@ export function FileUpload({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={1.5}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
               />
+            </svg>
+            {/* Front document */}
+            <svg
+              className={`w-10 h-10 relative z-10 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13l-3-3m0 0l-3 3m3-3v8" />
             </svg>
           </div>
 
@@ -282,15 +298,19 @@ export function FileUpload({
             <p className="text-lg font-medium text-blue-600">Pustite fajlove ovde...</p>
           ) : (
             <>
-              <p className="text-lg font-medium text-gray-700 mb-2">
+              <p className="text-lg font-medium text-gray-700 mb-1">
                 Prevucite fakture ovde ili kliknite za odabir
               </p>
-              <p className="text-sm text-gray-500">
-                Podržani formati: {SUPPORTED_FORMATS.join(', ')}
+              <p className="text-sm font-medium text-blue-600 mb-3">
+                Možete odabrati jednu ili više faktura odjednom
               </p>
-              <p className="text-sm text-gray-500">
-                Max {MAX_BATCH_FILES} fajlova, {formatFileSize(MAX_FILE_SIZE)} po fajlu
-              </p>
+              <div className="flex items-center gap-4 text-xs text-gray-400">
+                <span>{SUPPORTED_FORMATS.join(', ')}</span>
+                <span className="w-1 h-1 rounded-full bg-gray-300" />
+                <span>do {MAX_BATCH_FILES} fajlova</span>
+                <span className="w-1 h-1 rounded-full bg-gray-300" />
+                <span>{formatFileSize(MAX_FILE_SIZE)} po fajlu</span>
+              </div>
             </>
           )}
         </div>
