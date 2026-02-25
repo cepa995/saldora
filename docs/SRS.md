@@ -3003,6 +3003,12 @@ jobs:
 - `fakturaai-exports` - Generated exports
 - `fakturaai-backups` - Database backups
 
+**Object Key Convention:**
+Documents are namespaced by organization for multi-tenant isolation:
+```
+organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
+```
+
 **Lifecycle Rules:**
 - Documents: 10 years retention (per Serbian Accounting Law, Sl. glasnik RS, br. 73/2019)
 - Exports: 30 days auto-delete

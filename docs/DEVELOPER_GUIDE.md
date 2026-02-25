@@ -1831,7 +1831,7 @@
 
       # 1. Save file to S3/MinIO
       invoice_id = uuid.uuid4()
-      document_path = f"invoices/{invoice_id}/original{_get_extension(file.content_type)}"
+      document_path = f"organizations/{user.organization_id}/invoices/{invoice_id}/original{_get_extension(file.content_type)}"
 
       s3 = boto3.client("s3",
           endpoint_url=settings.storage_endpoint,

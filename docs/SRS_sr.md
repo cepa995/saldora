@@ -2858,6 +2858,12 @@ async def handle_paddle_webhook(payload: dict, signature: str):
 - `fakturaai-exports` - Generisani izvozi
 - `fakturaai-backups` - Rezervne kopije baze
 
+**Konvencija ključeva objekata:**
+Dokumenta su organizovana po organizaciji radi multi-tenant izolacije:
+```
+organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
+```
+
 **Pravila životnog ciklusa:**
 - Dokumenta: čuvanje 10 godina (prema Zakonu o računovodstvu, Sl. glasnik RS, br. 73/2019)
 - Izvozi: automatsko brisanje posle 30 dana
