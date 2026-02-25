@@ -29,6 +29,7 @@ class ImagePreprocessor:
         deskew: bool = True,
         enhance_contrast: bool = True,
         binarize: bool = False,
+        remove_borders: bool = True,
     ):
         """
         Initialize preprocessor.
@@ -39,12 +40,14 @@ class ImagePreprocessor:
             deskew: Correct document rotation
             enhance_contrast: Apply contrast enhancement
             binarize: Convert to black/white (can help with some documents)
+            remove_borders: Remove dark scanner borders/artifacts
         """
         self.target_dpi = target_dpi
         self.denoise = denoise
         self.deskew = deskew
         self.enhance_contrast = enhance_contrast
         self.binarize = binarize
+        self.remove_borders = remove_borders
 
     def process(self, image: Image.Image) -> Image.Image:
         """
@@ -56,6 +59,9 @@ class ImagePreprocessor:
         Returns:
             Preprocessed PIL Image
         """
+        # Normalize resolution (operates on PIL Image for DPI metadata)
+        image = self._normalize_resolution(image)
+
         # Convert to numpy array
         img_array = np.array(image)
 
@@ -69,6 +75,10 @@ class ImagePreprocessor:
         # Deskew
         if self.deskew:
             img_array = self._deskew(img_array)
+
+        # Remove borders
+        if self.remove_borders:
+            img_array = self._remove_borders(img_array)
 
         # Denoise
         if self.denoise:
@@ -186,6 +196,70 @@ class ImagePreprocessor:
             return binary
         except Exception as e:
             logger.warning(f"Binarization failed: {e}")
+            return image
+
+    def _normalize_resolution(self, image: Image.Image) -> Image.Image:
+        """Scale image to target DPI if current DPI is known and differs."""
+        try:
+            dpi_info = image.info.get("dpi")
+            if not dpi_info:
+                return image
+
+            current_dpi = dpi_info[0]  # Use horizontal DPI
+            if current_dpi <= 0 or abs(current_dpi - self.target_dpi) < 10:
+                return image
+
+            scale = self.target_dpi / current_dpi
+            new_width = int(image.width * scale)
+            new_height = int(image.height * scale)
+
+            resized = image.resize((new_width, new_height), Image.LANCZOS)
+            resized.info["dpi"] = (self.target_dpi, self.target_dpi)
+
+            logger.debug(f"Normalized resolution from {current_dpi} to {self.target_dpi} DPI")
+            return resized
+
+        except Exception as e:
+            logger.warning(f"Resolution normalization failed: {e}")
+            return image
+
+    def _remove_borders(self, image: np.ndarray) -> np.ndarray:
+        """Remove dark borders and scanner artifacts."""
+        try:
+            # Threshold to find dark regions
+            _, thresh = cv2.threshold(image, 50, 255, cv2.THRESH_BINARY)
+
+            # Find contours of bright regions
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return image
+
+            # Get bounding box of the largest bright region
+            largest = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(largest)
+
+            # Only crop if the detected content area is significantly smaller
+            img_h, img_w = image.shape[:2]
+            area_ratio = (w * h) / (img_w * img_h)
+            if area_ratio < 0.5:
+                return image  # Content too small, likely a detection error
+
+            # Add small padding to avoid cutting content
+            pad = 5
+            x = max(0, x - pad)
+            y = max(0, y - pad)
+            w = min(img_w - x, w + 2 * pad)
+            h = min(img_h - y, h + 2 * pad)
+
+            cropped = image[y : y + h, x : x + w]
+            if cropped.size == 0:
+                return image
+
+            logger.debug(f"Removed borders: cropped from {img_w}x{img_h} to {w}x{h}")
+            return cropped
+
+        except Exception as e:
+            logger.warning(f"Border removal failed: {e}")
             return image
 
     def estimate_quality(self, image: Image.Image) -> float:
