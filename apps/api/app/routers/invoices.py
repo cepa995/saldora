@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import celery
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -18,12 +18,19 @@ from app.dependencies import get_current_user
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.schemas.invoice import (
+    CompanyInfo,
+    FieldConfidence,
     InvoiceListResponse,
     InvoiceResponse,
     InvoiceUpdate,
     ProcessingStatus,
 )
-from app.services.storage import document_exists, upload_document
+from app.services.storage import (
+    delete_document,
+    document_exists,
+    get_presigned_url,
+    upload_document,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -355,26 +362,142 @@ async def upload_batch(
     return results
 
 
+def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -> InvoiceResponse:
+    """Convert an Invoice model to an InvoiceResponse schema.
+
+    Handles JSON → Pydantic conversion for nested fields, confidence
+    scaling (0–1 in DB → 0–100 in API), and warning message extraction.
+
+    Args:
+        invoice: SQLAlchemy Invoice model instance.
+        document_url: Optional presigned S3 URL for the document.
+
+    Returns:
+        InvoiceResponse ready for serialization.
+    """
+    # Convert seller/buyer JSON dicts to CompanyInfo
+    seller = CompanyInfo(**invoice.seller) if invoice.seller else None
+    buyer = CompanyInfo(**invoice.buyer) if invoice.buyer else None
+
+    # Convert field_confidence dict → list[FieldConfidence]
+    field_confidences: list[FieldConfidence] = []
+    if invoice.field_confidence:
+        for item in invoice.field_confidence:
+            if isinstance(item, dict):
+                field_confidences.append(FieldConfidence(**item))
+
+    # Extract warning messages from structured warnings
+    warnings: list[str] = []
+    blocked = False
+    if invoice.warnings:
+        for w in invoice.warnings:
+            if isinstance(w, dict):
+                warnings.append(w.get("message", str(w)))
+                if w.get("severity") == "error":
+                    blocked = True
+            elif isinstance(w, str):
+                warnings.append(w)
+
+    # Scale confidence from 0–1 (DB) to 0–100 (API)
+    confidence_score = None
+    if invoice.confidence_score is not None:
+        confidence_score = round(float(invoice.confidence_score) * 100, 2)
+
+    # Convert line_items JSON → list[dict] (Pydantic handles the rest)
+    line_items = invoice.line_items or []
+
+    return InvoiceResponse(
+        id=invoice.id,
+        status=invoice.status,
+        confidence_score=confidence_score,
+        invoice_number=invoice.invoice_number,
+        invoice_date=invoice.invoice_date,
+        due_date=invoice.due_date,
+        seller=seller,
+        buyer=buyer,
+        subtotal=invoice.subtotal,
+        tax_rate=invoice.tax_rate,
+        tax_amount=invoice.tax_amount,
+        total_amount=invoice.total_amount,
+        currency=invoice.currency,
+        line_items=line_items,
+        field_confidences=field_confidences,
+        warnings=warnings,
+        blocked=blocked,
+        document_url=document_url,
+        created_at=invoice.created_at,
+        updated_at=invoice.updated_at,
+    )
+
+
+async def _get_invoice_or_404(invoice_id: UUID, db: AsyncSession, user: User) -> Invoice:
+    """Fetch an invoice by ID, enforcing multi-tenant isolation.
+
+    Args:
+        invoice_id: UUID of the invoice to fetch.
+        db: Async database session.
+        user: Authenticated user (for organization check).
+
+    Returns:
+        Invoice model instance.
+
+    Raises:
+        HTTPException: 404 if not found or belongs to another organization.
+    """
+    result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
+    invoice = result.scalar_one_or_none()
+
+    if not invoice or invoice.organization_id != user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+
+    return invoice
+
+
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
-async def get_invoice(invoice_id: UUID) -> InvoiceResponse:
+async def get_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> InvoiceResponse:
     """Get invoice details by ID.
 
     Returns full invoice data including extracted fields,
     confidence scores, and verification status.
+
+    Args:
+        invoice_id: UUID of the invoice.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Full invoice data with presigned document URL.
     """
-    # TODO: Implement get invoice
-    # 1. Find invoice by ID
-    # 2. Check user has access (same organization)
-    # 3. Return full invoice data
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get invoice not yet implemented",
-    )
+    invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Generate presigned URL for document download (fail-silent)
+    document_url = None
+    if invoice.document_path:
+        try:
+            document_url = await asyncio.to_thread(get_presigned_url, invoice.document_path)
+        except Exception:
+            logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
+
+    return _build_invoice_response(invoice, document_url)
+
+
+ALLOWED_SORT_COLUMNS = {
+    "created_at",
+    "invoice_date",
+    "total_amount",
+    "status",
+    "confidence_score",
+}
 
 
 @router.get("", response_model=InvoiceListResponse)
 async def list_invoices(
-    _user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     invoice_status: str | None = Query(default=None, alias="status"),
@@ -386,51 +509,217 @@ async def list_invoices(
     sort: str = "created_at",
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ) -> InvoiceListResponse:
-    """List invoices with filtering, sorting, and pagination."""
-    # TODO: Implement invoice listing
-    # 1. Build query with filters
-    # 2. Apply sorting
-    # 3. Paginate results
-    # 4. Return with pagination metadata
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="List invoices not yet implemented",
+    """List invoices with filtering, sorting, and pagination.
+
+    Args:
+        db: Database session.
+        user: Authenticated user.
+        page: Page number (1-based).
+        per_page: Items per page (1–100).
+        invoice_status: Filter by status (processing, review, verified, exported, error).
+        date_from: Filter invoices on or after this date (YYYY-MM-DD).
+        date_to: Filter invoices on or before this date (YYYY-MM-DD).
+        seller_pib: Filter by seller's PIB.
+        buyer_pib: Filter by buyer's PIB.
+        search: Search invoice number, seller name, or buyer name.
+        sort: Sort column (created_at, invoice_date, total_amount, status, confidence_score).
+        order: Sort direction (asc or desc).
+
+    Returns:
+        Paginated list of invoices with metadata.
+    """
+    from datetime import date as date_type
+
+    # Base filter: multi-tenant isolation
+    conditions = [Invoice.organization_id == user.organization_id]
+
+    # Status filter
+    if invoice_status:
+        conditions.append(Invoice.status == invoice_status)
+
+    # Date range filters
+    if date_from:
+        try:
+            parsed = date_type.fromisoformat(date_from)
+            conditions.append(Invoice.invoice_date >= parsed)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date_from format. Use YYYY-MM-DD.",
+            )
+
+    if date_to:
+        try:
+            parsed = date_type.fromisoformat(date_to)
+            conditions.append(Invoice.invoice_date <= parsed)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date_to format. Use YYYY-MM-DD.",
+            )
+
+    # PIB filters (JSON field access)
+    if seller_pib:
+        conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
+
+    if buyer_pib:
+        conditions.append(Invoice.buyer["pib"].as_string() == buyer_pib)
+
+    # Search (ILIKE on invoice_number, seller name, buyer name)
+    if search:
+        like_pattern = f"%{search}%"
+        conditions.append(
+            (Invoice.invoice_number.ilike(like_pattern))
+            | (Invoice.seller["name"].as_string().ilike(like_pattern))
+            | (Invoice.buyer["name"].as_string().ilike(like_pattern))
+        )
+
+    # Build base query with all filters
+    where_clause = select(Invoice).where(*conditions)
+
+    # Sorting (whitelist to prevent injection)
+    if sort not in ALLOWED_SORT_COLUMNS:
+        sort = "created_at"
+    sort_column = getattr(Invoice, sort)
+    order_func = desc if order == "desc" else asc
+    where_clause = where_clause.order_by(order_func(sort_column))
+
+    # Get total count
+    count_query = select(func.count()).select_from(select(Invoice).where(*conditions).subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Pagination
+    offset = (page - 1) * per_page
+    paginated_query = where_clause.offset(offset).limit(per_page)
+
+    result = await db.execute(paginated_query)
+    invoices = result.scalars().all()
+
+    # Build responses (no presigned URLs in list view — too expensive)
+    data = [_build_invoice_response(inv) for inv in invoices]
+
+    return InvoiceListResponse(
+        data=data,
+        pagination={
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page if total > 0 else 0,
+        },
     )
 
 
 @router.patch("/{invoice_id}", response_model=InvoiceResponse)
-async def update_invoice(invoice_id: UUID, update_data: InvoiceUpdate) -> InvoiceResponse:
-    """Update invoice fields.
+async def update_invoice(
+    invoice_id: UUID,
+    update_data: InvoiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> InvoiceResponse:
+    """Update invoice fields after OCR extraction.
 
-    Used for manual corrections after OCR extraction.
-    Tracks all changes in audit log.
+    Applies partial updates from the request body. Only invoices in
+    ``review`` or ``verified`` status can be edited. Editing a verified
+    invoice reverts it to ``review``.
+
+    Args:
+        invoice_id: UUID of the invoice to update.
+        update_data: Partial update payload.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Updated invoice data.
     """
-    # TODO: Implement invoice update
-    # 1. Find invoice by ID
-    # 2. Check user has edit access
-    # 3. Log correction (for ML feedback loop)
-    # 4. Update invoice fields
-    # 5. Recalculate confidence if needed
-    # 6. Return updated invoice
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Update invoice not yet implemented",
-    )
+    invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Only allow edits on review/verified invoices
+    if invoice.status not in ("review", "verified"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot edit invoice in '{invoice.status}' status",
+        )
+
+    updates = update_data.model_dump(exclude_unset=True)
+    if not updates:
+        return _build_invoice_response(invoice)
+
+    # Direct scalar fields
+    direct_fields = {
+        "invoice_number",
+        "invoice_date",
+        "due_date",
+        "subtotal",
+        "tax_rate",
+        "tax_amount",
+        "total_amount",
+        "currency",
+        "line_items",
+    }
+    for field in direct_fields & updates.keys():
+        setattr(invoice, field, updates[field])
+
+    # Seller fields → merge into seller JSON
+    seller_updates = {}
+    if "seller_pib" in updates:
+        seller_updates["pib"] = updates["seller_pib"]
+    if "seller_name" in updates:
+        seller_updates["name"] = updates["seller_name"]
+    if "seller_address" in updates:
+        seller_updates["address"] = updates["seller_address"]
+    if seller_updates:
+        invoice.seller = {**(invoice.seller or {}), **seller_updates}
+
+    # Buyer fields → merge into buyer JSON
+    buyer_updates = {}
+    if "buyer_pib" in updates:
+        buyer_updates["pib"] = updates["buyer_pib"]
+    if "buyer_name" in updates:
+        buyer_updates["name"] = updates["buyer_name"]
+    if "buyer_address" in updates:
+        buyer_updates["address"] = updates["buyer_address"]
+    if buyer_updates:
+        invoice.buyer = {**(invoice.buyer or {}), **buyer_updates}
+
+    # Revert verified → review when fields change
+    if invoice.status == "verified":
+        invoice.status = "review"
+
+    await db.commit()
+    await db.refresh(invoice)
+
+    return _build_invoice_response(invoice)
 
 
 @router.delete("/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_invoice(invoice_id: UUID) -> None:
-    """Delete invoice and associated document."""
-    # TODO: Implement invoice deletion
-    # 1. Find invoice by ID
-    # 2. Check user has delete access
-    # 3. Delete document from S3
-    # 4. Delete invoice from database
-    # 5. Log deletion
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Delete invoice not yet implemented",
-    )
+async def delete_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Delete an invoice and its associated document from storage.
+
+    Args:
+        invoice_id: UUID of the invoice to delete.
+        db: Database session.
+        user: Authenticated user.
+    """
+    invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Delete document from S3 (fail-silent — don't block DB deletion)
+    if invoice.document_path:
+        try:
+            await asyncio.to_thread(delete_document, invoice.document_path)
+        except Exception:
+            logger.warning(
+                "Failed to delete S3 document for invoice %s: %s",
+                invoice_id,
+                invoice.document_path,
+            )
+
+    await db.delete(invoice)
+    await db.commit()
 
 
 @router.get("/{invoice_id}/status", response_model=ProcessingStatus)
@@ -531,18 +820,53 @@ async def get_processing_status(
     )
 
 
-@router.post("/{invoice_id}/verify")
-async def verify_invoice(invoice_id: UUID) -> InvoiceResponse:
+@router.post("/{invoice_id}/verify", response_model=InvoiceResponse)
+async def verify_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> InvoiceResponse:
     """Mark invoice as verified after human review.
 
-    Sets status to 'verified' and enables export.
+    Validates that required fields are present and sets the status
+    to ``verified``, enabling export.
+
+    Args:
+        invoice_id: UUID of the invoice to verify.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Updated invoice with verified status.
     """
-    # TODO: Implement verification
-    # 1. Find invoice by ID
-    # 2. Check all required fields are present
-    # 3. Check no blocking warnings
-    # 4. Update status to verified
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Verify invoice not yet implemented",
-    )
+    invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Only review invoices can be verified
+    if invoice.status not in ("review",):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot verify invoice in '{invoice.status}' status. "
+            "Only invoices in 'review' status can be verified.",
+        )
+
+    # Check required fields
+    missing = []
+    if not invoice.invoice_number:
+        missing.append("invoice_number")
+    if not invoice.invoice_date:
+        missing.append("invoice_date")
+    if not invoice.seller:
+        missing.append("seller")
+    if not invoice.total_amount:
+        missing.append("total_amount")
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Missing required fields for verification: {', '.join(missing)}",
+        )
+
+    invoice.status = "verified"
+    await db.commit()
+    await db.refresh(invoice)
+
+    return _build_invoice_response(invoice)
