@@ -24,12 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -m -u 1000 worker
 WORKDIR /app
 
-# Copy and install ML package (base deps: torch, transformers, etc.)
+# Copy and install ML package in editable mode so volume mounts work in dev
 COPY packages/ml /app/packages/ml
-RUN pip install /app/packages/ml
+RUN pip install -e /app/packages/ml
 
 # Install worker dependencies + openai client for dots.ocr server
-RUN pip install celery[redis] boto3 httpx psycopg2-binary sqlalchemy openai
+RUN pip install celery[redis] boto3 httpx psycopg2-binary sqlalchemy openai anthropic
 
 # Copy worker code
 COPY workers/ocr_worker /app/ocr_worker

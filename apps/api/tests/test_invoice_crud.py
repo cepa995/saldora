@@ -118,7 +118,7 @@ async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
                     {
                         "field_name": "invoice_number",
                         "value": "INV-001",
-                        "confidence": 95.0,
+                        "confidence": 0.95,
                         "needs_review": False,
                     }
                 ],

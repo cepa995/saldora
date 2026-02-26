@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime
+from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -27,7 +28,6 @@ from app.schemas.invoice import (
 )
 from app.services.storage import (
     delete_document,
-    document_exists,
     get_presigned_url,
     upload_document,
 )
@@ -71,33 +71,12 @@ async def upload_invoice(
             detail=f"File too large. Maximum size is {settings.ocr_max_file_size_mb}MB",
         )
 
-    # 1. Compute content hash and check for duplicates
+    # Validate image resolution (skip PDFs — they render at fixed DPI)
+    if file.content_type and file.content_type.startswith("image/"):
+        _check_image_resolution(content, file.filename or "image")
+
+    # 1. Compute content hash (stored for reference, no dedup blocking)
     document_hash = hashlib.sha256(content).hexdigest()
-    existing = await db.execute(
-        select(Invoice).where(
-            Invoice.organization_id == user.organization_id,
-            Invoice.document_hash == document_hash,
-        )
-    )
-    duplicate = existing.scalar_one_or_none()
-    if duplicate:
-        # Verify the document still exists in S3 (may have been deleted, e.g. MinIO reset)
-        file_exists = (
-            await asyncio.to_thread(document_exists, duplicate.document_path)
-            if duplicate.document_path
-            else False
-        )
-        if file_exists:
-            return ProcessingStatus(
-                id=duplicate.id,
-                status="uploaded",
-                progress=0,
-                document_id=duplicate.id,
-                created_at=duplicate.created_at,
-            )
-        # Stale record — remove it so we can re-upload
-        await db.delete(duplicate)
-        await db.flush()
 
     # 2. Create Invoice record (flush to get id before S3 upload)
     invoice = Invoice(
@@ -170,6 +149,47 @@ ALLOWED_CONTENT_TYPES = {
 MAX_BATCH_FILES = 50
 MAX_BATCH_TOTAL_BYTES = 200 * 1024 * 1024  # 200 MB
 
+MIN_WIDTH = settings.ocr_min_image_width
+MIN_HEIGHT = settings.ocr_min_image_height
+
+
+def _get_resolution_error(content: bytes, filename: str) -> str | None:
+    """Return an error message if image is below minimum resolution, else None.
+
+    Args:
+        content: Raw image bytes.
+        filename: Original filename (for error message).
+
+    Returns:
+        Error string if too small, None if OK.
+    """
+    from PIL import Image
+
+    try:
+        with Image.open(BytesIO(content)) as img:
+            w, h = img.size
+    except Exception:
+        return f"Cannot read image '{filename}'"
+
+    if w < MIN_WIDTH or h < MIN_HEIGHT:
+        return f"Rezolucija slike je premala ({w}x{h}px). Minimum je {MIN_WIDTH}x{MIN_HEIGHT}px."
+    return None
+
+
+def _check_image_resolution(content: bytes, filename: str) -> None:
+    """Raise HTTPException if image is below minimum resolution.
+
+    Args:
+        content: Raw image bytes.
+        filename: Original filename (for error message).
+    """
+    error = _get_resolution_error(content, filename)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error,
+        )
+
 
 async def _process_single_file(
     file_content: bytes,
@@ -185,31 +205,8 @@ async def _process_single_file(
     Creates an invoice record, uploads to S3, and queues a Celery OCR task.
     Uses a savepoint so failures only roll back this file, not the whole batch.
     """
-    # 1. Dedup check
+    # 1. Compute content hash (stored for reference, no dedup blocking)
     document_hash = hashlib.sha256(file_content).hexdigest()
-    existing = await db.execute(
-        select(Invoice).where(
-            Invoice.organization_id == user.organization_id,
-            Invoice.document_hash == document_hash,
-        )
-    )
-    duplicate = existing.scalar_one_or_none()
-    if duplicate:
-        file_exists = (
-            await asyncio.to_thread(document_exists, duplicate.document_path)
-            if duplicate.document_path
-            else False
-        )
-        if file_exists:
-            return ProcessingStatus(
-                id=duplicate.id,
-                status="uploaded",
-                progress=0,
-                document_id=duplicate.id,
-                created_at=duplicate.created_at,
-            )
-        await db.delete(duplicate)
-        await db.flush()
 
     # 2. Create invoice record inside a savepoint
     async with db.begin_nested():
@@ -332,6 +329,21 @@ async def upload_batch(
             )
             continue
 
+        # Validate image resolution
+        if content_type.startswith("image/"):
+            error = _get_resolution_error(content, filename)
+            if error:
+                results.append(
+                    ProcessingStatus(
+                        id=uuid4(),
+                        status="failed",
+                        progress=0,
+                        error_message=error,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                continue
+
         # Process the file (dedup, S3 upload, Celery queue)
         try:
             result = await _process_single_file(
@@ -385,21 +397,32 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
         buyer = CompanyInfo(**invoice.buyer)
 
     # Convert field_confidence dict → list[FieldConfidence]
+    # Scale confidence from 0–1 (DB) to 0–100 (API), same as overall score
     field_confidences: list[FieldConfidence] = []
     if invoice.field_confidence:
         for item in invoice.field_confidence:
             if isinstance(item, dict):
-                field_confidences.append(FieldConfidence(**item))
+                scaled = dict(item)
+                raw = scaled.get("confidence", 0)
+                scaled["confidence"] = round(float(raw) * 100, 2) if raw is not None else 0
+                field_confidences.append(FieldConfidence(**scaled))
 
-    # Extract warning messages from structured warnings
+    # Extract warning messages and per-field severity from structured warnings
     warnings: list[str] = []
     blocked = False
+    field_warnings: dict[str, str] = {}
     if invoice.warnings:
         for w in invoice.warnings:
             if isinstance(w, dict):
                 warnings.append(w.get("message", str(w)))
-                if w.get("severity") == "error":
+                severity = w.get("severity", "warning")
+                if severity == "error":
                     blocked = True
+                # Track highest severity per field for UI highlighting
+                fn = w.get("field_name")
+                if fn:
+                    if fn not in field_warnings or severity == "error":
+                        field_warnings[fn] = severity
             elif isinstance(w, str):
                 warnings.append(w)
 
@@ -429,7 +452,10 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
         field_confidences=field_confidences,
         warnings=warnings,
         blocked=blocked,
+        field_warnings=field_warnings,
         document_url=document_url,
+        raw_ocr_text=invoice.raw_ocr_text,
+        raw_llm_output=invoice.raw_llm_output,
         created_at=invoice.created_at,
         updated_at=invoice.updated_at,
     )
@@ -647,8 +673,17 @@ async def update_invoice(
         )
 
     updates = update_data.model_dump(exclude_unset=True)
+
+    # Generate presigned URL so the document stays visible in the response
+    document_url = None
+    if invoice.document_path:
+        try:
+            document_url = await asyncio.to_thread(get_presigned_url, invoice.document_path)
+        except Exception:
+            logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
+
     if not updates:
-        return _build_invoice_response(invoice)
+        return _build_invoice_response(invoice, document_url)
 
     # Direct scalar fields
     direct_fields = {
@@ -667,23 +702,31 @@ async def update_invoice(
 
     # Seller fields → merge into seller JSON
     seller_updates = {}
-    if "seller_pib" in updates:
-        seller_updates["pib"] = updates["seller_pib"]
-    if "seller_name" in updates:
-        seller_updates["name"] = updates["seller_name"]
-    if "seller_address" in updates:
-        seller_updates["address"] = updates["seller_address"]
+    for key, json_key in [
+        ("seller_pib", "pib"),
+        ("seller_mb", "mb"),
+        ("seller_name", "name"),
+        ("seller_address", "address"),
+        ("seller_city", "city"),
+        ("seller_postal_code", "postal_code"),
+    ]:
+        if key in updates:
+            seller_updates[json_key] = updates[key]
     if seller_updates:
         invoice.seller = {**(invoice.seller or {}), **seller_updates}
 
     # Buyer fields → merge into buyer JSON
     buyer_updates = {}
-    if "buyer_pib" in updates:
-        buyer_updates["pib"] = updates["buyer_pib"]
-    if "buyer_name" in updates:
-        buyer_updates["name"] = updates["buyer_name"]
-    if "buyer_address" in updates:
-        buyer_updates["address"] = updates["buyer_address"]
+    for key, json_key in [
+        ("buyer_pib", "pib"),
+        ("buyer_mb", "mb"),
+        ("buyer_name", "name"),
+        ("buyer_address", "address"),
+        ("buyer_city", "city"),
+        ("buyer_postal_code", "postal_code"),
+    ]:
+        if key in updates:
+            buyer_updates[json_key] = updates[key]
     if buyer_updates:
         invoice.buyer = {**(invoice.buyer or {}), **buyer_updates}
 
@@ -694,7 +737,7 @@ async def update_invoice(
     await db.commit()
     await db.refresh(invoice)
 
-    return _build_invoice_response(invoice)
+    return _build_invoice_response(invoice, document_url)
 
 
 @router.delete("/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -874,4 +917,12 @@ async def verify_invoice(
     await db.commit()
     await db.refresh(invoice)
 
-    return _build_invoice_response(invoice)
+    # Generate presigned URL so the document stays visible in the response
+    document_url = None
+    if invoice.document_path:
+        try:
+            document_url = await asyncio.to_thread(get_presigned_url, invoice.document_path)
+        except Exception:
+            logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
+
+    return _build_invoice_response(invoice, document_url)

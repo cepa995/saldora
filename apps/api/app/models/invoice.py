@@ -67,6 +67,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     ocr_engine: Mapped[str | None] = mapped_column(String(50))
     processing_time_ms: Mapped[int | None] = mapped_column()
     raw_ocr_text: Mapped[str | None] = mapped_column(Text)
+    raw_llm_output: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
     organization: Mapped[Organization] = relationship(back_populates="invoices")

@@ -6,6 +6,7 @@
 
 export interface CompanyInfo {
   pib: string | null;
+  mb: string | null;
   name: string | null;
   address: string | null;
   city: string | null;
@@ -19,11 +20,17 @@ export interface InvoiceUpdate {
   invoice_date?: string;
   due_date?: string;
   seller_pib?: string;
+  seller_mb?: string;
   seller_name?: string;
   seller_address?: string;
+  seller_city?: string;
+  seller_postal_code?: string;
   buyer_pib?: string;
+  buyer_mb?: string;
   buyer_name?: string;
   buyer_address?: string;
+  buyer_city?: string;
+  buyer_postal_code?: string;
   subtotal?: string;
   tax_rate?: string;
   tax_amount?: string;
@@ -34,9 +41,9 @@ export interface InvoiceUpdate {
 
 export interface LineItem {
   description: string;
-  quantity: string;
-  unit_price: string;
-  total: string;
+  quantity: string | null;
+  unit_price: string | null;
+  total: string | null;
   tax_rate: string | null;
 }
 
@@ -72,7 +79,10 @@ export interface InvoiceResponse {
   field_confidences: FieldConfidence[];
   warnings: string[];
   blocked: boolean;
+  field_warnings: Record<string, 'error' | 'warning'>;
   document_url: string | null;
+  raw_ocr_text: string | null;
+  raw_llm_output: string | null;
   created_at: string;
   updated_at: string;
 }

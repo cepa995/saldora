@@ -112,6 +112,9 @@ class ExtractedInvoice:
     raw_text: str = ""
     raw_structured: dict[str, Any] = field(default_factory=dict)
 
+    # Raw LLM extraction output (JSON string for debugging)
+    raw_llm_output: str | None = None
+
 
 @dataclass
 class ExtractionResult:

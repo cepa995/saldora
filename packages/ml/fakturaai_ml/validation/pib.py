@@ -1,6 +1,7 @@
 """PIB (Tax ID) validation for Serbian companies."""
 
 import logging
+import re
 from typing import Any
 
 from fakturaai_ml.types import ValidationWarning, WarningType
@@ -31,6 +32,9 @@ class PIBValidator:
             True if valid, False otherwise
         """
         self._warnings = []
+
+        # Sanitize: strip whitespace and common OCR separators
+        pib = re.sub(r"[\s\-./]", "", pib.strip()) if pib else ""
 
         # Basic format check
         if not pib or not pib.isdigit():

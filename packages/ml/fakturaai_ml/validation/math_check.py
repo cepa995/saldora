@@ -14,9 +14,12 @@ class MathValidator:
 
     Checks:
     - Line items sum to subtotal
-    - Tax calculation is correct
     - Total = Subtotal + Tax
     - Line item math (quantity * unit_price = total)
+
+    Note: Tax amount (PDV) is NOT recomputed from subtotal × rate.
+    It is extracted directly from the document by the LLM, since invoices
+    often have mixed rates, per-item rounding, or non-standard tax bases.
     """
 
     # Tolerance rules from SRS (4.9.5)
@@ -49,12 +52,7 @@ class MathValidator:
             if not self._validate_line_items_sum(invoice):
                 all_valid = False
 
-        # Check 2: Tax calculation
-        if invoice.subtotal and invoice.tax_rate and invoice.tax_amount:
-            if not self._validate_tax_calculation(invoice):
-                all_valid = False
-
-        # Check 3: Total = Subtotal + Tax
+        # Check 2: Total = Subtotal + Tax
         if invoice.subtotal and invoice.tax_amount and invoice.total_amount:
             if not self._validate_total(invoice):
                 all_valid = False
@@ -93,32 +91,6 @@ class MathValidator:
                         f"sa međuzbirom ({invoice.subtotal})"
                     ),
                     field_name="subtotal",
-                    severity="warning",
-                    blocking=False,
-                )
-            )
-            return False
-
-        return True
-
-    def _validate_tax_calculation(self, invoice: ExtractedInvoice) -> bool:
-        """Validate tax calculation."""
-        if invoice.subtotal is None or invoice.tax_rate is None:
-            return True
-
-        expected_tax = invoice.subtotal * invoice.tax_rate / Decimal("100")
-        difference = abs(expected_tax - (invoice.tax_amount or Decimal("0")))
-        tolerance = self._get_tolerance(invoice.subtotal)
-
-        if difference > tolerance:
-            self._warnings.append(
-                ValidationWarning(
-                    warning_type=WarningType.MATH_MISMATCH,
-                    message=(
-                        f"Obračun PDV-a nije tačan. "
-                        f"Očekivano: {expected_tax}, Dobijeno: {invoice.tax_amount}"
-                    ),
-                    field_name="tax_amount",
                     severity="warning",
                     blocking=False,
                 )

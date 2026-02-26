@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 /**
@@ -31,7 +32,6 @@ const PIPELINE_STEPS: PipelineStep[] = [
   { key: 'queued', labelKey: 'queued', descKey: 'stepDescQueued' },
   { key: 'processing', labelKey: 'ocrProcessing', descKey: 'stepDescProcessing' },
   { key: 'review', labelKey: 'review', descKey: 'stepDescReview' },
-  { key: 'export', labelKey: 'exportStep', descKey: 'stepDescExport' },
 ];
 
 const STATUS_TO_ACTIVE_INDEX: Record<PipelineStatus, number> = {
@@ -41,14 +41,15 @@ const STATUS_TO_ACTIVE_INDEX: Record<PipelineStatus, number> = {
   processing: 2,
   completed: 3,
   review: 3,
-  verified: 4,
-  exported: 5,
+  verified: 3,
+  exported: 3,
   error: -1,
 };
 
 interface PipelineStepperProps {
   currentStatus: PipelineStatus;
   errorMessage?: string;
+  invoiceId?: string;
 }
 
 type StepState = 'completed' | 'active' | 'pending' | 'waiting' | 'error';
@@ -109,15 +110,6 @@ function ReviewStepIcon({ className }: { className: string }) {
   );
 }
 
-function ExportStepIcon({ className }: { className: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  );
-}
-
 function CheckStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,54 +126,66 @@ function ErrorStepIcon({ className }: { className: string }) {
   );
 }
 
-const STEP_ICONS = [UploadStepIcon, QueueStepIcon, ScanStepIcon, ReviewStepIcon, ExportStepIcon];
+const STEP_ICONS = [UploadStepIcon, QueueStepIcon, ScanStepIcon, ReviewStepIcon];
 
-function StepCircle({ state, index }: { state: StepState; index: number }) {
+function StepCircle({ state, index, href }: { state: StepState; index: number; href?: string }) {
   const Icon = STEP_ICONS[index];
   const size = 'w-12 h-12';
   const iconSize = 'w-5 h-5';
 
-  if (state === 'completed') {
-    return (
-      <div className={`${size} rounded-full bg-violet-600 flex items-center justify-center shadow-md shadow-violet-200`}>
-        <CheckStepIcon className={`${iconSize} text-white`} />
-      </div>
-    );
-  }
-
-  if (state === 'active') {
-    return (
-      <div className="relative flex items-center justify-center">
-        <div className={`absolute ${size} rounded-full bg-violet-400 animate-pulse-soft opacity-40`} />
-        <div className={`absolute w-16 h-16 rounded-full bg-violet-300 opacity-20 animate-ping`} />
-        <div className={`${size} rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center relative shadow-lg shadow-violet-300`}>
-          <Icon className={`${iconSize} text-white`} />
+  const circle = (() => {
+    if (state === 'completed') {
+      return (
+        <div className={`${size} rounded-full bg-violet-600 flex items-center justify-center shadow-md shadow-violet-200`}>
+          <CheckStepIcon className={`${iconSize} text-white`} />
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (state === 'error') {
+    if (state === 'active') {
+      return (
+        <div className="relative flex items-center justify-center">
+          <div className={`absolute ${size} rounded-full bg-violet-400 animate-pulse-soft opacity-40`} />
+          <div className={`absolute w-16 h-16 rounded-full bg-violet-300 opacity-20 animate-ping`} />
+          <div className={`${size} rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center relative shadow-lg shadow-violet-300`}>
+            <Icon className={`${iconSize} text-white`} />
+          </div>
+        </div>
+      );
+    }
+
+    if (state === 'error') {
+      return (
+        <div className={`${size} rounded-full bg-red-500 flex items-center justify-center shadow-md shadow-red-200`}>
+          <ErrorStepIcon className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+
+    if (state === 'waiting') {
+      return (
+        <div className={`${size} rounded-full bg-amber-100 border-2 border-amber-300 border-dashed flex items-center justify-center`}>
+          <Icon className={`${iconSize} text-amber-500`} />
+        </div>
+      );
+    }
+
     return (
-      <div className={`${size} rounded-full bg-red-500 flex items-center justify-center shadow-md shadow-red-200`}>
-        <ErrorStepIcon className={`${iconSize} text-white`} />
+      <div className={`${size} rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center`}>
+        <Icon className={`${iconSize} text-gray-400`} />
       </div>
     );
-  }
+  })();
 
-  if (state === 'waiting') {
+  if (href && (state === 'active' || state === 'completed')) {
     return (
-      <div className={`${size} rounded-full bg-amber-100 border-2 border-amber-300 border-dashed flex items-center justify-center`}>
-        <Icon className={`${iconSize} text-amber-500`} />
-      </div>
+      <Link href={href} className="cursor-pointer" title="Pregledaj fakturu">
+        {circle}
+      </Link>
     );
   }
 
-  return (
-    <div className={`${size} rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center`}>
-      <Icon className={`${iconSize} text-gray-400`} />
-    </div>
-  );
+  return circle;
 }
 
 function ConnectorLine({ leftState, rightState }: { leftState: StepState; rightState: StepState }) {
@@ -199,7 +203,7 @@ function ConnectorLine({ leftState, rightState }: { leftState: StepState; rightS
   );
 }
 
-export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepperProps) {
+export function PipelineStepper({ currentStatus, errorMessage, invoiceId }: PipelineStepperProps) {
   const t = useTranslations('upload');
   const stepStates = getStepStates(currentStatus);
 
@@ -209,7 +213,11 @@ export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepper
         {PIPELINE_STEPS.map((step, i) => (
           <div key={step.key} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center min-w-[72px]">
-              <StepCircle state={stepStates[i]} index={i} />
+              <StepCircle
+                state={stepStates[i]}
+                index={i}
+                href={i === 3 && invoiceId ? `/invoices/${invoiceId}` : undefined}
+              />
 
               <span
                 className={`mt-3 text-xs font-semibold text-center whitespace-nowrap tracking-wide ${
