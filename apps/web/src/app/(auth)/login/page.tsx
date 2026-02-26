@@ -3,30 +3,35 @@
 import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ApiError } from "@/lib/api-client";
 
-function getErrorMessage(error: unknown): string {
-  const apiError = error as ApiError;
-  if (apiError?.status === 401) return "Pogrešna e-mail adresa ili lozinka";
-  if (apiError?.status === 422) return "Molimo unesite ispravne podatke";
-  return "Greška u komunikaciji sa serverom. Pokušajte ponovo.";
+function useErrorMessage() {
+  const t = useTranslations("auth");
+  return (error: unknown): string => {
+    const apiError = error as ApiError;
+    if (apiError?.status === 401) return t("invalidCredentials");
+    if (apiError?.status === 422) return t("invalidData");
+    return t("serverError");
+  };
 }
 
 function RegistrationBanner() {
   const searchParams = useSearchParams();
+  const t = useTranslations("auth");
   if (searchParams.get("registered") !== "true") return null;
   return (
     <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl">
-      <p className="text-sm text-green-700">
-        Registracija uspešna! Prijavite se sa vašim novim nalogom.
-      </p>
+      <p className="text-sm text-green-700">{t("registrationSuccess")}</p>
     </div>
   );
 }
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const t = useTranslations("auth");
+  const getErrorMessage = useErrorMessage();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,10 +55,8 @@ export default function LoginPage() {
   return (
     <>
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Prijavite se</h1>
-        <p className="text-sm text-gray-500 mt-2">
-          Unesite vaše podatke za pristup nalogu
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">{t("loginTitle")}</h1>
+        <p className="text-sm text-gray-500 mt-2">{t("loginSubtitle")}</p>
       </div>
 
       <Suspense>
@@ -66,7 +69,7 @@ export default function LoginPage() {
             htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            E-mail adresa
+            {t("email")}
           </label>
           <input
             id="email"
@@ -74,7 +77,7 @@ export default function LoginPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="vas@email.com"
+            placeholder={t("emailPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="email"
           />
@@ -85,7 +88,7 @@ export default function LoginPage() {
             htmlFor="password"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            Lozinka
+            {t("password")}
           </label>
           <input
             id="password"
@@ -93,7 +96,7 @@ export default function LoginPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Unesite lozinku"
+            placeholder={t("passwordPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="current-password"
           />
@@ -102,7 +105,7 @@ export default function LoginPage() {
               href="/password-reset"
               className="text-sm text-violet-600 hover:text-violet-700 transition-colors"
             >
-              Zaboravili ste lozinku?
+              {t("forgotPassword")}
             </Link>
           </div>
         </div>
@@ -118,17 +121,17 @@ export default function LoginPage() {
           disabled={isLoading}
           className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-violet-500/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Prijava u toku..." : "Prijavite se"}
+          {isLoading ? t("loggingIn") : t("login")}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Nemate nalog?{" "}
+        {t("noAccount")}{" "}
         <Link
           href="/register"
           className="text-violet-600 font-medium hover:text-violet-700 transition-colors"
         >
-          Registrujte se
+          {t("createAccount")}
         </Link>
       </p>
     </>

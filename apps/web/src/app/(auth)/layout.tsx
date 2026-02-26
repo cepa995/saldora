@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
-export default function AuthLayout({
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getTranslations("common");
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background blobs */}
@@ -34,8 +36,8 @@ export default function AuthLayout({
         </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          &copy; 2026 FakturaAI. Sva prava zadržana.
+        <p className="text-center text-xs text-gray-500 mt-6">
+          {t("copyright", { year: new Date().getFullYear().toString() })}
         </p>
       </div>
     </div>

@@ -5,13 +5,31 @@
  */
 
 export interface CompanyInfo {
-  pib: string;
-  name: string;
+  pib: string | null;
+  name: string | null;
   address: string | null;
   city: string | null;
   postal_code: string | null;
   verified: boolean;
   apr_status: string | null;
+}
+
+export interface InvoiceUpdate {
+  invoice_number?: string;
+  invoice_date?: string;
+  due_date?: string;
+  seller_pib?: string;
+  seller_name?: string;
+  seller_address?: string;
+  buyer_pib?: string;
+  buyer_name?: string;
+  buyer_address?: string;
+  subtotal?: string;
+  tax_rate?: string;
+  tax_amount?: string;
+  total_amount?: string;
+  currency?: string;
+  line_items?: LineItem[];
 }
 
 export interface LineItem {

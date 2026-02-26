@@ -9,6 +9,7 @@ import type {
   InvoiceFilters,
   InvoiceListResponse,
   InvoiceResponse,
+  InvoiceUpdate,
 } from '@/lib/types/invoice';
 
 /**
@@ -60,5 +61,36 @@ export async function deleteInvoice(id: string): Promise<void> {
 export async function verifyInvoice(id: string): Promise<InvoiceResponse> {
   return apiClient<InvoiceResponse>(`/api/v1/invoices/${id}/verify`, {
     method: 'POST',
+  });
+}
+
+/**
+ * Fetch a single invoice by ID.
+ *
+ * Args:
+ *   id - UUID of the invoice.
+ * Returns:
+ *   Full invoice response.
+ */
+export async function fetchInvoice(id: string): Promise<InvoiceResponse> {
+  return apiClient<InvoiceResponse>(`/api/v1/invoices/${id}`);
+}
+
+/**
+ * Update an invoice (partial update).
+ *
+ * Args:
+ *   id - UUID of the invoice.
+ *   data - Fields to update.
+ * Returns:
+ *   Updated invoice response.
+ */
+export async function updateInvoice(
+  id: string,
+  data: InvoiceUpdate,
+): Promise<InvoiceResponse> {
+  return apiClient<InvoiceResponse>(`/api/v1/invoices/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
   });
 }

@@ -67,6 +67,7 @@ eggs/
 .eggs/
 lib/
 !apps/web/src/lib/
+!apps/web/src/__tests__/lib/
 lib64/
 parts/
 sdist/
