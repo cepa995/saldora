@@ -209,15 +209,14 @@ FakturaAI operates as a standalone web application with the following integratio
 ┌──────────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
 │   AI PROCESSING      │ │    DATABASE      │ │   FILE STORAGE       │
 │  ┌────────────────┐  │ │  ┌────────────┐  │ │  ┌────────────────┐  │
-│  │ PyTorch Models │  │ │  │ PostgreSQL │  │ │  │   S3/R2        │  │
-│  │ - dots.ocr VLM │  │ │  │            │  │ │  │   Compatible   │  │
-│  │ - NER Model    │  │ │  └────────────┘  │ │  └────────────────┘  │
-│  │ - EasyOCR (fb) │  │ │  ┌────────────┐  │ └──────────────────────┘
-│  └────────────────┘  │ │  │   Redis    │  │
-│  ┌────────────────┐  │ │  │  (Cache)   │  │
-│  │  Celery        │  │ │  └────────────┘  │
-│  │  (Task Queue)  │  │ └──────────────────┘
-│  └────────────────┘  │
+│  │ vLLM Server   │  │ │  │ PostgreSQL │  │ │  │   S3/R2        │  │
+│  │ - dots.ocr VLM│  │ │  │            │  │ │  │   Compatible   │  │
+│  │ (GPU sidecar) │  │ │  └────────────┘  │ │  └────────────────┘  │
+│  └────────────────┘  │ │  ┌────────────┐  │ └──────────────────────┘
+│  ┌────────────────┐  │ │  │   Redis    │  │
+│  │ OCR Worker     │  │ │  │  (Cache)   │  │
+│  │(Celery+OpenAI) │  │ │  └────────────┘  │
+│  └────────────────┘  │ └──────────────────┘
 └──────────────────────┘
 ```
 
@@ -1620,9 +1619,9 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
-| **Framework** | PyTorch | 2.2.x | Deep learning framework |
+| **Model Server** | vLLM | latest | OpenAI-compatible inference server for dots.ocr (GPU sidecar) |
 | **Document AI** | dots.ocr | latest | Vision-language model for unified layout detection + OCR (~100 languages, Cyrillic/Latin) |
-| **OCR Backup** | EasyOCR | 1.7.x | Fallback OCR when dots.ocr confidence is low |
+| **OCR Client** | openai (Python) | 1.x | OpenAI-compatible client for calling vLLM server |
 | **NER** | spaCy | 3.7.x | Named entity recognition (supplementary field extraction) |
 | **PDF Processing** | PyMuPDF | 1.24.x | PDF parsing |
 | **Image Processing** | Pillow | 10.x | Image manipulation |
@@ -2143,25 +2142,31 @@ Verify PIB against APR database.
 
 ### 9.1 OCR Pipeline Architecture
 
-dots.ocr is a vision-language model (VLM) that performs **unified layout detection and text extraction** in a single pass. This significantly simplifies the pipeline compared to traditional multi-stage approaches.
+dots.ocr is a vision-language model (VLM) that performs **unified layout detection and text extraction** in a single pass. It runs as a **vLLM HTTP server** (GPU sidecar container), called by a lightweight OCR worker via the OpenAI-compatible chat completions API.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        OCR Processing Pipeline                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────┐  │
-│  │   Input     │    │   Image     │    │       dots.ocr          │  │
-│  │  Document   │───▶│ Preprocessing│───▶│   (Vision-Language     │  │
-│  │ (PDF/Image) │    │             │    │        Model)           │  │
-│  └─────────────┘    └─────────────┘    └───────────┬─────────────┘  │
-│                                                     │                │
-│                                                     │ Structured     │
-│                                                     │ JSON Output    │
-│                                                     │ (layout +      │
-│                                                     │  text + bbox)  │
-│                           ┌─────────────────────────┘                │
-│                           ▼                                          │
+│  ┌─────────────┐    ┌─────────────────────────────────────────────┐  │
+│  │   Input     │    │          vLLM Server (GPU sidecar)          │  │
+│  │  Document   │    │  ┌───────────────────────────────────────┐  │  │
+│  │ (PDF/Image) │    │  │  dots.ocr Vision-Language Model       │  │  │
+│  └──────┬──────┘    │  │  (rednote-hilab/dots.ocr, 1.7B)      │  │  │
+│         │           │  └───────────────────────────────────────┘  │  │
+│         ▼           │  OpenAI-compatible API (:8000/v1)           │  │
+│  ┌─────────────┐    └──────────────────────┬──────────────────────┘  │
+│  │ OCR Worker  │                           │                         │
+│  │ (Celery,    │    HTTP POST              │ Structured              │
+│  │  no GPU)    │───▶/v1/chat/completions   │ JSON Output             │
+│  │             │    (base64 image +        │ (layout +               │
+│  │ openai      │     special tokens)       │  text + bbox)           │
+│  │ Python      │◀──────────────────────────┘                         │
+│  │ client      │                                                     │
+│  └──────┬──────┘                                                     │
+│         │                                                            │
+│         ▼                                                            │
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │              dots.ocr Structured Output                      │    │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │    │
@@ -2190,11 +2195,13 @@ dots.ocr is a vision-language model (VLM) that performs **unified layout detecti
 │                                                                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │                    Fallback Path (if needed)                 │    │
-│  │      If dots.ocr confidence < threshold → EasyOCR fallback   │    │
+│  │   If dots.ocr fails → manual review by user (no EasyOCR)    │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** Image preprocessing (grayscale, deskewing, denoising) is **skipped** for dots.ocr — VLMs work best with original color images. Preprocessing is only applied when using traditional OCR engines.
 
 **Key Advantages of dots.ocr VLM Approach:**
 - **Single model** handles layout detection + OCR (no separate LayoutParser needed)
@@ -2241,39 +2248,26 @@ class InvoicePreprocessor:
 
 ### 9.3 OCR Engine
 
-**Primary Engine:** dots.ocr
+**Primary Engine:** dots.ocr (via vLLM server)
 
-dots.ocr is optimized for document understanding and provides superior accuracy on structured documents like invoices, with excellent Cyrillic and Latin script support.
+dots.ocr is optimized for document understanding and provides superior accuracy on structured documents like invoices, with excellent Cyrillic and Latin script support. It runs as a separate **vLLM HTTP server** (GPU sidecar container) and is called by the OCR worker via the OpenAI-compatible chat completions API.
 
-**Configuration:**
-```python
-DOTS_OCR_CONFIG = {
-    "model": "dots.ocr",
-    "languages": ["sr_cyrl", "sr_latn", "en"],
-    "gpu": True,
-    "model_storage_directory": "/models/dots",
-    "document_type": "invoice",
-    "output_format": "structured",
-    "confidence_threshold": 0.7,
-}
+**Architecture:**
+- **dots-ocr-server**: `vllm/vllm-openai:latest` Docker image serving `rednote-hilab/dots.ocr` with `--trust-remote-code --chat-template-content-format string`
+- **ocr-worker**: Lightweight Python 3.12 container (no GPU) calling the server via `openai` Python client
+- Worker sends base64-encoded images with `<|img|><|imgpad|><|endofimg|>` prompt prefix
+
+**Configuration (environment variables):**
+```
+DOTS_OCR_SERVER_URL=http://dots-ocr-server:8000/v1
+DOTS_OCR_MODEL_NAME=model
+OCR_PRIMARY_ENGINE=dots
+OCR_FALLBACK_ENGINE=none
 ```
 
-**Fallback Engine:** EasyOCR
+**Fallback Strategy:** Manual review by user
 
-EasyOCR is used as a fallback when dots.ocr confidence is below threshold or when processing fails. It provides good Cyrillic support and is well-tested.
-
-```python
-EASYOCR_CONFIG = {
-    "languages": ["sr_cyrl", "sr_latn", "en"],
-    "gpu": True,
-    "model_storage_directory": "/models/easyocr",
-    "download_enabled": False,
-    "detector": True,
-    "recognizer": True,
-    "batch_size": 16,
-    "text_threshold": 0.7,
-}
-```
+There is no automated OCR fallback engine. If dots.ocr fails or returns low-confidence results, the invoice is flagged for manual review by the end user. This design decision was made because alternative OCR engines (e.g., EasyOCR) provide insufficient accuracy for Serbian Cyrillic/Latin documents.
 
 ### 9.4 Document Layout Analysis
 
@@ -2371,17 +2365,18 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 | Component | GPU Memory | Instances | Notes |
 |-----------|------------|-----------|-------|
-| dots.ocr (VLM) | 4-6 GB | 2-4 | Unified layout + OCR, 1.7B params |
-| EasyOCR (fallback) | 2 GB | 1-2 | Only used when dots.ocr confidence is low |
+| dots.ocr vLLM server | 6-8 GB | 1-2 | GPU sidecar running rednote-hilab/dots.ocr (1.7B params) |
+| OCR Worker | 0 (CPU only) | 1-2 | Lightweight Celery worker calling vLLM server via HTTP |
 | NER Model (optional) | 2 GB | 1-2 | For supplementary field extraction |
 
-**Note:** dots.ocr replaces the need for separate Layout Parser + OCR Engine, reducing infrastructure complexity.
+**Note:** dots.ocr replaces the need for separate Layout Parser + OCR Engine, reducing infrastructure complexity. There is no EasyOCR fallback — failed OCR results in manual review by the user.
 
 **Model Serving:**
-- TorchServe for PyTorch models
-- Triton Inference Server (optional)
+- **vLLM** (`vllm/vllm-openai:latest`) — OpenAI-compatible inference server for dots.ocr
+- Server flags: `--trust-remote-code --chat-template-content-format string --gpu-memory-utilization 0.90 --max-model-len 8192`
+- HuggingFace model cache persisted via Docker volume (`huggingface_cache`)
 
-**Model Note:** The system uses pre-trained models (dots.ocr, EasyOCR, spaCy) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
+**Model Note:** The system uses pre-trained models (dots.ocr, spaCy) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
 
 ### 9.8 Extraction Quality Monitoring
 
@@ -3862,8 +3857,8 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 4. GDPR - General Data Protection Regulation (reference framework)
 5. APR API Documentation
 6. NBS Exchange Rate API (Kursna lista Narodne banke Srbije)
-7. dots.ocr Documentation (Vision-Language Model)
-8. EasyOCR Documentation (fallback OCR)
+7. dots.ocr Documentation (Vision-Language Model) — https://github.com/rednote-hilab/dots.ocr
+8. vLLM Documentation (Model Inference Server) — https://docs.vllm.ai
 9. FastAPI Documentation
 10. Next.js Documentation
 11. Paddle Documentation (Payment Processing)
@@ -3879,6 +3874,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 1.2 | January 2025 | FakturaAI Team | Added: Accounting Intent Layer (4.10), Automation Rules Engine (4.11), SEF Integration (12.5), Expanded Feedback Loop Implementation (9.9.7) |
 | 1.3 | January 2025 | FakturaAI Team | Updated OCR stack: dots.ocr (VLM) as primary engine with unified layout+OCR, EasyOCR as fallback, removed separate LayoutParser (Tesseract removed) |
 | 2.0 | February 2026 | FakturaAI Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
+| 2.1 | February 2026 | FakturaAI Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
 
 ---
 

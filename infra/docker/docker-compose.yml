@@ -95,8 +95,39 @@ services:
       - /app/.next
     command: npm run dev
 
-  # OCR Worker (GPU version — requires NVIDIA Container Toolkit)
-  # To run without GPU, set OCR_USE_GPU=false and OCR_PRIMARY_ENGINE=easyocr
+  # vLLM server running dots.ocr model (GPU required)
+  dots-ocr-server:
+    image: vllm/vllm-openai:latest
+    container_name: fakturaai-dots-ocr
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ""
+    command: >
+      --model rednote-hilab/dots.ocr
+      --served-model-name model
+      --trust-remote-code
+      --chat-template-content-format string
+      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --port 8000
+    ports:
+      - "8100:8000"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 300s
+      retries: 5
+
+  # OCR Worker (connects to dots-ocr-server via HTTP)
   ocr-worker:
     build:
       context: ../..
@@ -105,26 +136,24 @@ services:
     environment:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REDIS_URL: redis://redis:6379/0
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
       STORAGE_BUCKET: fakturaai-documents
       DATABASE_URL: postgresql://fakturaai:fakturaai_dev@postgres:5432/fakturaai
-      OCR_USE_GPU: "true"
       OCR_PRIMARY_ENGINE: dots
+      OCR_FALLBACK_ENGINE: none
+      DOTS_OCR_SERVER_URL: http://dots-ocr-server:8000/v1
+      DOTS_OCR_MODEL_NAME: model
     depends_on:
       redis:
+        condition: service_healthy
+      dots-ocr-server:
         condition: service_healthy
     volumes:
       - ../../packages/ml:/app/packages/ml
       - ../../workers/ocr_worker:/app/ocr_worker
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
   # Flower - Celery monitoring
   flower:
@@ -142,3 +171,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  huggingface_cache:

@@ -1,0 +1,31 @@
+# Virtual environments
+.venv
+**/venv
+**/.venv
+
+# Node modules (installed inside container)
+**/node_modules
+
+# Next.js build output
+apps/web/.next
+
+# Python caches
+**/__pycache__
+**/*.pyc
+
+# ML playground and model caches
+packages/ml/playground
+**/.cache
+
+# Git
+.git
+
+# IDE
+.vscode
+.idea
+
+# Test and CI artifacts
+.pytest_cache
+**/.pytest_cache
+htmlcov
+.coverage

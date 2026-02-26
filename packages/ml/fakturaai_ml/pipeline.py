@@ -81,8 +81,10 @@ class InvoicePipeline:
                 self._primary_engine = EasyOCREngine(use_gpu=self.use_gpu)
         return self._primary_engine
 
-    def _get_fallback_engine(self) -> OCREngine:
-        """Lazy load fallback OCR engine."""
+    def _get_fallback_engine(self) -> OCREngine | None:
+        """Lazy load fallback OCR engine. Returns None if fallback is disabled."""
+        if self._fallback_engine_name == "none":
+            return None
         if self._fallback_engine is None:
             self._fallback_engine = EasyOCREngine(use_gpu=self.use_gpu)
         return self._fallback_engine
@@ -121,26 +123,39 @@ class InvoicePipeline:
             engine_used = self._primary_engine_name
 
             for i, image in enumerate(images):
-                # Preprocess image
-                processed_image = self.image_preprocessor.process(image)
-
                 # Primary OCR
                 primary_engine = self._get_primary_engine()
+
+                # Skip preprocessing for VLM engines (they work best with raw images)
+                skip_preprocess = getattr(primary_engine, "skip_preprocessing", False)
+                if skip_preprocess:
+                    processed_image = image
+                else:
+                    processed_image = self.image_preprocessor.process(image)
+
                 ocr_result = await primary_engine.recognize(processed_image)
 
                 # Check if fallback is needed
                 if ocr_result.confidence < self.confidence_threshold:
-                    logger.info(
-                        f"Primary OCR confidence {ocr_result.confidence:.2f} below threshold, "
-                        "using fallback"
-                    )
                     fallback_engine = self._get_fallback_engine()
-                    fallback_result = await fallback_engine.recognize(processed_image)
+                    if fallback_engine is not None:
+                        logger.info(
+                            f"Primary OCR confidence {ocr_result.confidence:.2f} below "
+                            "threshold, using fallback"
+                        )
+                        # Fallback (EasyOCR) benefits from preprocessing
+                        fallback_image = self.image_preprocessor.process(image)
+                        fallback_result = await fallback_engine.recognize(fallback_image)
 
-                    # Use fallback if it's better
-                    if fallback_result.confidence > ocr_result.confidence:
-                        ocr_result = fallback_result
-                        engine_used = self._fallback_engine_name
+                        # Use fallback if it's better
+                        if fallback_result.confidence > ocr_result.confidence:
+                            ocr_result = fallback_result
+                            engine_used = self._fallback_engine_name
+                    else:
+                        logger.info(
+                            f"Primary OCR confidence {ocr_result.confidence:.2f} below "
+                            "threshold, no fallback engine configured"
+                        )
 
                 all_text.append(ocr_result.text)
                 if ocr_result.structured:

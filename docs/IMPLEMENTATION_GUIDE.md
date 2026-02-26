@@ -144,7 +144,7 @@ This milestone is complete. It established the database module, core models (Use
 
 ## Milestone 3: OCR Processing Pipeline
 
-**Goal:** The Celery worker picks up queued tasks, preprocesses images, runs OCR (dots.ocr with EasyOCR fallback), extracts structured fields, calculates confidence scores, and saves results to the database. The API returns processing status.
+**Goal:** The Celery worker picks up queued tasks, preprocesses images, runs OCR (dots.ocr via vLLM server), extracts structured fields, calculates confidence scores, and saves results to the database. The API returns processing status with real-time Redis-based progress.
 
 ### Issues
 
@@ -172,41 +172,43 @@ This milestone is complete. It established the database module, core models (Use
 
 #### 3.2 — Integrate dots.ocr as primary OCR engine
 
-**Description:** Implement the dots.ocr VLM engine wrapper that performs unified layout detection and text extraction in a single pass.
+**Description:** Implement the dots.ocr VLM engine wrapper that connects to a vLLM server running dots.ocr and calls it via the OpenAI-compatible chat completions API (the official approach from the dots.ocr project).
 
 **Requirements covered:** FR-4.3.1, FR-4.3.3 (layout analysis), Section 3.4, Section 4.3.7
 
+**Architecture:** dots.ocr runs as a separate vLLM server (`vllm/vllm-openai` Docker image) with GPU access. The worker calls it over HTTP via the `openai` Python client. This follows the official `demo_vllm.py` pattern from the dots.ocr repo.
+
 **Tasks:**
 - Implement `DotsOCREngine` in `packages/ml/fakturaai_ml/ocr/dots_ocr.py`:
-  - Load dots.ocr model (1.7B params, ~4-6 GB GPU memory)
-  - Accept preprocessed image, return structured JSON output (regions with type, bbox, content, confidence)
-  - Support Cyrillic and Latin script recognition
-  - Optional vLLM acceleration for GPU inference
-  - Lazy model loading (expensive initialization only once)
+  - Connect to vLLM server via OpenAI-compatible API (`DOTS_OCR_SERVER_URL` env var)
+  - Send images as base64 data URIs with the official prompt format (includes `<|img|><|imgpad|><|endofimg|>` tokens)
+  - Accept raw color image (no preprocessing — VLMs work best with originals), return text/structured output
+  - Support Cyrillic and Latin script recognition (100+ languages)
+- Add `dots-ocr-server` service to `docker-compose.yml`:
+  - Uses `vllm/vllm-openai:latest` image with GPU reservation
+  - Launches with `--chat-template-content-format string --trust-remote-code`
+  - Model weights cached in `huggingface_cache` Docker volume
+  - Health check on `/health` endpoint (5-min start period for model loading)
 - Define `OCRResult` dataclass with regions, reading order, full text, overall confidence
-- Handle GPU unavailability gracefully (log warning, fall through to fallback)
+- Handle server unavailability gracefully (log error, return empty result for manual review)
 
-**Acceptance:** Feed a sample Serbian invoice image → receive structured output with header, table, totals regions, each with text content and confidence scores.
+**Acceptance:** Feed a sample Serbian invoice image → receive structured output with extracted text, layout regions, and confidence scores.
 
 ---
 
-#### 3.3 — Integrate EasyOCR as fallback engine
+#### 3.3 — Fallback handling when OCR fails
 
-**Description:** Implement EasyOCR fallback for cases where dots.ocr confidence is below threshold or processing fails.
+**Description:** When dots.ocr returns low confidence or the vLLM server is unavailable, the invoice is saved with status `review` for manual data entry by the user. EasyOCR was evaluated but dropped due to poor Serbian Cyrillic support and low extraction quality.
 
 **Requirements covered:** FR-4.3.1, Section 3.4 (fallback path), Section 4.3.7
 
 **Tasks:**
-- Implement `EasyOCREngine` in `packages/ml/fakturaai_ml/ocr/easyocr_fallback.py`:
-  - Initialize with Serbian Cyrillic, Serbian Latin, and English language support
-  - Accept preprocessed image, return text with bounding boxes and confidence
-  - CPU-friendly (no GPU required)
-- Implement fallback logic in `InvoicePipeline`:
-  - If dots.ocr overall confidence < `ocr_confidence_threshold` (default 0.80), run EasyOCR
-  - If dots.ocr throws an exception, fall through to EasyOCR
-  - Record which engine produced the final result (`ocr_engine` field)
+- Set `OCR_FALLBACK_ENGINE=none` in docker-compose (EasyOCR disabled)
+- When dots.ocr fails or returns low confidence, save invoice with status `review` and empty fields
+- Record `ocr_engine` field in the result to track which engine was used
+- User manually fills in fields via the review UI
 
-**Acceptance:** When dots.ocr returns low confidence, EasyOCR runs automatically. The `ocr_engine` field records which engine was used.
+**Acceptance:** When dots.ocr fails, the invoice is saved for manual review. No cascading fallback to a second OCR engine.
 
 ---
 
@@ -292,7 +294,7 @@ This milestone is complete. It established the database module, core models (Use
 - Unit test date parsing for all Serbian date formats
 - Unit test amount parsing for Serbian number format (`45.000,00`)
 - Integration test: mock OCR engine → field extraction → confidence scoring → result
-- Test fallback logic: low-confidence dots.ocr triggers EasyOCR
+- Test fallback logic: low-confidence dots.ocr saves invoice for manual review
 - Test worker task saves results to database correctly
 
 **Acceptance:** All tests pass. Pipeline coverage includes both happy paths and edge cases.

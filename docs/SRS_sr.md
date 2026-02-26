@@ -207,15 +207,14 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 ┌──────────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
 │   AI OBRADA           │ │    BAZA PODATAKA │ │   SKLADIŠTE FAJLOVA  │
 │  ┌────────────────┐  │ │  ┌────────────┐  │ │  ┌────────────────┐  │
-│  │ PyTorch modeli │  │ │  │ PostgreSQL │  │ │  │   S3/R2        │  │
-│  │ - dots.ocr VLM │  │ │  │            │  │ │  │   Kompatibilan │  │
-│  │ - NER model    │  │ │  └────────────┘  │ │  └────────────────┘  │
-│  │ - EasyOCR (fb) │  │ │  ┌────────────┐  │ └──────────────────────┘
-│  └────────────────┘  │ │  │   Redis    │  │
-│  ┌────────────────┐  │ │  │  (Keš)     │  │
-│  │  Celery        │  │ │  └────────────┘  │
-│  │  (Red zadataka)│  │ └──────────────────┘
-│  └────────────────┘  │
+│  │ vLLM Server   │  │ │  │ PostgreSQL │  │ │  │   S3/R2        │  │
+│  │ - dots.ocr VLM│  │ │  │            │  │ │  │   Kompatibilan │  │
+│  │ (GPU sidecar) │  │ │  └────────────┘  │ │  └────────────────┘  │
+│  └────────────────┘  │ │  ┌────────────┐  │ └──────────────────────┘
+│  ┌────────────────┐  │ │  │   Redis    │  │
+│  │ OCR Radnik     │  │ │  │  (Keš)     │  │
+│  │(Celery+OpenAI) │  │ │  └────────────┘  │
+│  └────────────────┘  │ └──────────────────┘
 └──────────────────────┘
 ```
 
@@ -1503,9 +1502,9 @@ Sistem TREBALO BI da pruži unapred pripremljene šablone pravila za česte srps
 
 | Komponenta | Tehnologija | Verzija | Svrha |
 |-----------|------------|---------|-------|
-| **Okvir** | PyTorch | 2.2.x | Okvir za duboko učenje |
+| **Server modela** | vLLM | najnovija | OpenAI-kompatibilan inference server za dots.ocr (GPU sidecar) |
 | **Document AI** | dots.ocr | najnovija | Vizuelno-jezički model za objedinjenu detekciju rasporeda + OCR (~100 jezika, ćirilica/latinica) |
-| **OCR rezerva** | EasyOCR | 1.7.x | Rezervni OCR kada pouzdanost dots.ocr-a padne ispod praga |
+| **OCR klijent** | openai (Python) | 1.x | OpenAI-kompatibilan klijent za pozivanje vLLM servera |
 | **NER** | spaCy | 3.7.x | Prepoznavanje imenovanih entiteta (dopunska ekstrakcija polja) |
 | **PDF obrada** | PyMuPDF | 1.24.x | Parsiranje PDF-a |
 | **Obrada slika** | Pillow | 10.x | Manipulacija slikama |
@@ -1979,25 +1978,31 @@ Verifikacija PIB-a prema APR bazi podataka.
 
 ### 9.1 Arhitektura OCR pipeline-a
 
-dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju rasporeda i ekstrakciju teksta** u jednom prolazu. Ovo značajno pojednostavljuje pipeline u poređenju sa tradicionalnim višestepenim pristupima.
+dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju rasporeda i ekstrakciju teksta** u jednom prolazu. Pokreće se kao **vLLM HTTP server** (GPU sidecar kontejner), a poziva ga laki OCR radnik putem OpenAI-kompatibilnog chat completions API-ja.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        OCR processing pipeline                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────┐  │
-│  │   Ulazni    │    │Predprocesir.│    │       dots.ocr          │  │
-│  │  dokument   │───▶│   slike     │───▶│   (Vizuelno-jezički     │  │
-│  │ (PDF/Slika) │    │             │    │        model)           │  │
-│  └─────────────┘    └─────────────┘    └───────────┬─────────────┘  │
-│                                                     │                │
-│                                                     │ Strukturirani  │
-│                                                     │ JSON izlaz     │
-│                                                     │ (raspored +    │
-│                                                     │  tekst + bbox) │
-│                           ┌─────────────────────────┘                │
-│                           ▼                                          │
+│  ┌─────────────┐    ┌─────────────────────────────────────────────┐  │
+│  │   Ulazni    │    │          vLLM Server (GPU sidecar)          │  │
+│  │  dokument   │    │  ┌───────────────────────────────────────┐  │  │
+│  │ (PDF/Slika) │    │  │  dots.ocr vizuelno-jezički model      │  │  │
+│  └──────┬──────┘    │  │  (rednote-hilab/dots.ocr, 1,7B)      │  │  │
+│         │           │  └───────────────────────────────────────┘  │  │
+│         ▼           │  OpenAI-kompatibilan API (:8000/v1)         │  │
+│  ┌─────────────┐    └──────────────────────┬──────────────────────┘  │
+│  │ OCR Radnik  │                           │                         │
+│  │ (Celery,    │    HTTP POST              │ Strukturirani           │
+│  │  bez GPU)   │───▶/v1/chat/completions   │ JSON izlaz              │
+│  │             │    (base64 slika +        │ (raspored +             │
+│  │ openai      │     specijalni tokeni)    │  tekst + bbox)          │
+│  │ Python      │◀──────────────────────────┘                         │
+│  │ klijent     │                                                     │
+│  └──────┬──────┘                                                     │
+│         │                                                            │
+│         ▼                                                            │
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │              dots.ocr strukturirani izlaz                    │    │
 │  │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────────────┐ │    │
@@ -2025,11 +2030,13 @@ dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju ra
 │                                                                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │                    Rezervni put (ako je potreban)            │    │
-│  │      Ako pouzdanost dots.ocr < praga → EasyOCR rezerva      │    │
+│  │   Ako dots.ocr ne uspe → ručni pregled od strane korisnika  │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Napomena:** Predprocesiranje slike (konverzija u sive tonove, ispravljanje nagiba, uklanjanje šuma) se **preskače** za dots.ocr — VLM modeli najbolje rade sa originalnim slikama u boji. Predprocesiranje se primenjuje samo pri korišćenju tradicionalnih OCR engine-a.
 
 **Ključne prednosti dots.ocr VLM pristupa:**
 - **Jedan model** obrađuje detekciju rasporeda + OCR (nije potreban zasebni LayoutParser)
@@ -2038,6 +2045,7 @@ dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju ra
 - **Očuvanje redosleda čitanja** za logičan tok dokumenta
 - **Razumevanje tabela** sa HTML izlazom za strukturirane tabele
 - **1,7B parametara** - kompaktan ali moćan
+- **Sidecar arhitektura** — GPU izolovan u vLLM serveru, radnik je lak i bez GPU-a
 
 ### 9.2 Predprocesiranje slike
 
@@ -2076,39 +2084,26 @@ class InvoicePreprocessor:
 
 ### 9.3 OCR engine
 
-**Primarni engine:** dots.ocr
+**Primarni engine:** dots.ocr (putem vLLM servera)
 
-dots.ocr je optimizovan za razumevanje dokumenata i pruža superiornu tačnost na strukturiranim dokumentima poput faktura, sa odličnom podrškom za ćirilično i latinično pismo.
+dots.ocr je optimizovan za razumevanje dokumenata i pruža superiornu tačnost na strukturiranim dokumentima poput faktura, sa odličnom podrškom za ćirilično i latinično pismo. Pokreće se kao zaseban **vLLM HTTP server** (GPU sidecar kontejner), a OCR radnik ga poziva putem OpenAI-kompatibilnog chat completions API-ja.
 
-**Konfiguracija:**
-```python
-DOTS_OCR_CONFIG = {
-    "model": "dots.ocr",
-    "languages": ["sr_cyrl", "sr_latn", "en"],
-    "gpu": True,
-    "model_storage_directory": "/models/dots",
-    "document_type": "invoice",
-    "output_format": "structured",
-    "confidence_threshold": 0.7,
-}
+**Arhitektura:**
+- **dots-ocr-server**: `vllm/vllm-openai:latest` Docker slika koja servira `rednote-hilab/dots.ocr` sa `--trust-remote-code --chat-template-content-format string`
+- **ocr-worker**: Lak Python 3.12 kontejner (bez GPU-a) koji poziva server putem `openai` Python klijenta
+- Radnik šalje base64-kodirane slike sa `<|img|><|imgpad|><|endofimg|>` prefiksom u promptu
+
+**Konfiguracija (promenljive okruženja):**
+```
+DOTS_OCR_SERVER_URL=http://dots-ocr-server:8000/v1
+DOTS_OCR_MODEL_NAME=model
+OCR_PRIMARY_ENGINE=dots
+OCR_FALLBACK_ENGINE=none
 ```
 
-**Rezervni engine:** EasyOCR
+**Strategija rezerve:** Ručni pregled od strane korisnika
 
-EasyOCR se koristi kao rezerva kada pouzdanost dots.ocr-a padne ispod praga ili kada obrada ne uspe. Pruža dobru podršku za ćirilicu i dobro je testiran.
-
-```python
-EASYOCR_CONFIG = {
-    "languages": ["sr_cyrl", "sr_latn", "en"],
-    "gpu": True,
-    "model_storage_directory": "/models/easyocr",
-    "download_enabled": False,
-    "detector": True,
-    "recognizer": True,
-    "batch_size": 16,
-    "text_threshold": 0.7,
-}
-```
+Ne postoji automatski rezervni OCR engine. Ako dots.ocr ne uspe ili vrati rezultate niske pouzdanosti, faktura se označava za ručni pregled od strane krajnjeg korisnika. Ova projektna odluka je doneta jer alternativni OCR engine-i (npr. EasyOCR) pružaju nedovoljnu tačnost za srpske dokumente na ćirilici/latinici.
 
 ### 9.4 Analiza rasporeda dokumenta
 
@@ -2183,17 +2178,18 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 | Komponenta | GPU memorija | Instance | Napomene |
 |-----------|-------------|---------|----------|
-| dots.ocr (VLM) | 4-6 GB | 2-4 | Objedinjen raspored + OCR, 1,7B parametara |
-| EasyOCR (rezerva) | 2 GB | 1-2 | Koristi se samo kada pouzdanost dots.ocr-a padne |
+| dots.ocr vLLM server | 6-8 GB | 1-2 | GPU sidecar koji pokreće rednote-hilab/dots.ocr (1,7B parametara) |
+| OCR Radnik | 0 (samo CPU) | 1-2 | Lak Celery radnik koji poziva vLLM server putem HTTP-a |
 | NER model (opciono) | 2 GB | 1-2 | Za dopunsku ekstrakciju polja |
 
-**Napomena:** dots.ocr zamenjuje potrebu za zasebnim Layout Parser + OCR Engine, smanjujući složenost infrastrukture.
+**Napomena:** dots.ocr zamenjuje potrebu za zasebnim Layout Parser + OCR Engine, smanjujući složenost infrastrukture. Ne postoji EasyOCR rezerva — neuspešan OCR rezultira ručnim pregledom od strane korisnika.
 
 **Serviranje modela:**
-- TorchServe za PyTorch modele
-- Triton Inference Server (opciono)
+- **vLLM** (`vllm/vllm-openai:latest`) — OpenAI-kompatibilan inference server za dots.ocr
+- Zastavice servera: `--trust-remote-code --chat-template-content-format string --gpu-memory-utilization 0.90 --max-model-len 8192`
+- HuggingFace keš modela se čuva putem Docker volume-a (`huggingface_cache`)
 
-**Napomena o modelu:** Sistem koristi unapred trenirane modele (dots.ocr, EasyOCR, spaCy) bez naknadnog treniranja na korisničkim podacima. Ovaj pristup eliminiše potrebu za prikupljanjem podataka za trening, upravljanjem saglasnošću i složenom MLOps infrastrukturom, dok istovremeno obezbeđuje zaštitu privatnosti korisnika.
+**Napomena o modelu:** Sistem koristi unapred trenirane modele (dots.ocr, spaCy) bez naknadnog treniranja na korisničkim podacima. Ovaj pristup eliminiše potrebu za prikupljanjem podataka za trening, upravljanjem saglasnošću i složenom MLOps infrastrukturom, dok istovremeno obezbeđuje zaštitu privatnosti korisnika.
 
 ### 9.8 Praćenje kvaliteta ekstrakcije
 
@@ -3716,8 +3712,8 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 2. Zakon o porezu na dodatu vrednost (Sl. glasnik RS, br. 84/2004, sa izmenama)
 3. Zakon o zaštiti podataka o ličnosti - ZZPL (Sl. glasnik RS, br. 87/2018)
 4. GDPR - Opšta uredba o zaštiti podataka (referentni standard)
-5. dots.ocr dokumentacija (vizuelno-jezički model)
-6. EasyOCR dokumentacija (rezervni OCR)
+5. dots.ocr dokumentacija (vizuelno-jezički model) — https://github.com/rednote-hilab/dots.ocr
+6. vLLM dokumentacija (server za inferencu modela) — https://docs.vllm.ai
 7. FastAPI dokumentacija
 8. Next.js dokumentacija
 9. Zakon o elektronskom fakturisanju (Sl. glasnik RS, br. 44/2021)
@@ -3734,6 +3730,7 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 1.2 | Januar 2025 | FakturaAI Tim | Dodato: Sloj računovodstvene namere (4.10), Motor za automatizaciju pravila (4.11), SEF integracija (12.5) |
 | 1.3 | Januar 2025 | FakturaAI Tim | Ažuriran OCR stek: dots.ocr (VLM) kao primarni engine, EasyOCR kao rezerva |
 | 2.0 | Februar 2026 | FakturaAI Tim | Srpska verzija sa svim ispravkama: uklonjen model training/retraining, ZZPL kao primarni zakon, Paddle umesto Stripe, KPR/KIR terminologija, SEF polling umesto webhook-ova, NBS kursna lista, podrška za ćirilicu i latinicu, PIB constraint za strane entitete, retencija dokumenata 10 godina |
+| 2.1 | Februar 2026 | FakturaAI Tim | dots.ocr arhitektura: vLLM HTTP server sidecar (GPU) + lak OCR radnik (CPU, OpenAI klijent), uklonjen EasyOCR kao rezerva (ručni pregled umesto toga), preskakanje predprocesiranja za VLM |
 
 ---
 

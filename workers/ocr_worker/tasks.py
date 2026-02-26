@@ -8,6 +8,7 @@ from typing import Any
 from celery import Task
 
 from ocr_worker.celery_app import app
+from ocr_worker.redis_progress import publish_progress
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def get_pipeline():
         logger.info("Initializing InvoicePipeline...")
         _pipeline = InvoicePipeline(
             primary_engine=os.getenv("OCR_PRIMARY_ENGINE", "dots"),
-            fallback_engine=os.getenv("OCR_FALLBACK_ENGINE", "easyocr"),
+            fallback_engine=os.getenv("OCR_FALLBACK_ENGINE", "none"),
             use_gpu=os.getenv("OCR_USE_GPU", "true").lower() == "true",
         )
         logger.info("InvoicePipeline initialized")
@@ -69,24 +70,28 @@ def process_invoice(
     logger.info(f"Processing invoice {invoice_id} from {document_path}")
 
     try:
-        # Update task state
+        # Stage: downloading (10%)
         self.update_state(
-            state="PROCESSING",
-            meta={"progress": 10, "stage": "downloading"},
+            state="PROCESSING", meta={"progress": 10, "stage": "downloading"}
         )
+        publish_progress(invoice_id, "downloading", 10)
 
-        # Download document from storage
         document_bytes = _download_document(document_path)
 
+        # Stage: preprocessing (20%)
         self.update_state(
-            state="PROCESSING",
-            meta={"progress": 20, "stage": "preprocessing"},
+            state="PROCESSING", meta={"progress": 20, "stage": "preprocessing"}
         )
+        publish_progress(invoice_id, "preprocessing", 20)
 
-        # Get pipeline and process
         pipeline = get_pipeline()
 
-        # Run async extraction in sync context
+        # Stage: ocr_running (40%)
+        self.update_state(
+            state="PROCESSING", meta={"progress": 40, "stage": "ocr_running"}
+        )
+        publish_progress(invoice_id, "ocr_running", 40)
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -94,18 +99,29 @@ def process_invoice(
         finally:
             loop.close()
 
+        # Stage: extracting_fields (70%)
         self.update_state(
-            state="PROCESSING",
-            meta={"progress": 90, "stage": "saving"},
+            state="PROCESSING", meta={"progress": 70, "stage": "extracting_fields"}
         )
+        publish_progress(invoice_id, "extracting_fields", 70)
 
-        # Convert result to dictionary
         result_dict = _serialize_result(result)
 
-        # Save result to database
+        # Stage: validating (85%)
+        self.update_state(
+            state="PROCESSING", meta={"progress": 85, "stage": "validating"}
+        )
+        publish_progress(invoice_id, "validating", 85)
+
+        # Stage: saving (90%)
+        self.update_state(state="PROCESSING", meta={"progress": 90, "stage": "saving"})
+        publish_progress(invoice_id, "saving", 90)
+
         _save_extraction_result(invoice_id, result_dict)
 
-        # Send webhook if configured
+        # Stage: complete (100%)
+        publish_progress(invoice_id, "complete", 100)
+
         if callback_url:
             _send_webhook(callback_url, invoice_id, result_dict)
 
@@ -114,6 +130,7 @@ def process_invoice(
 
     except Exception as e:
         logger.exception(f"Failed to process invoice {invoice_id}: {e}")
+        publish_progress(invoice_id, "failed", 0, error=str(e))
         _update_invoice_status(invoice_id, "error", str(e))
         raise
 
@@ -246,23 +263,28 @@ def _download_document(path: str) -> bytes:
 def _serialize_result(result) -> dict[str, Any]:
     """Serialize extraction result to dictionary."""
     from dataclasses import asdict
+    from datetime import date
+    from decimal import Decimal
+    from enum import Enum
 
     # Convert dataclass to dict
     result_dict = asdict(result)
 
-    # Convert Decimal to string for JSON serialization
-    def convert_decimals(obj):
-        from decimal import Decimal
-
+    # Convert non-JSON-serializable types
+    def convert(obj):
         if isinstance(obj, Decimal):
             return str(obj)
+        if isinstance(obj, Enum):
+            return obj.value
+        if isinstance(obj, date):
+            return obj.isoformat()
         if isinstance(obj, dict):
-            return {k: convert_decimals(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [convert_decimals(i) for i in obj]
+            return {k: convert(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [convert(i) for i in obj]
         return obj
 
-    return convert_decimals(result_dict)
+    return convert(result_dict)
 
 
 def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:

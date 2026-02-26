@@ -140,6 +140,10 @@ class ProcessingStatus(BaseModel):
     id: UUID
     status: Literal["uploaded", "queued", "processing", "completed", "failed"]
     progress: int = Field(ge=0, le=100, default=0)
+    stage: str | None = Field(
+        default=None,
+        description="Current processing sub-stage",
+    )
     estimated_time: int | None = Field(
         default=None, description="Estimated remaining time in seconds"
     )
