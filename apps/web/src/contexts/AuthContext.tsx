@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setTokens(tokens);
       setUser(extractUserFromToken(tokens.access_token));
-      router.push("/upload");
+      router.push("/dashboard");
     },
     [router],
   );
