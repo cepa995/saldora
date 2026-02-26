@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 class CompanyInfo(BaseModel):
     """Company information extracted from invoice."""
 
-    pib: str = Field(description="Tax ID (PIB) - 9 digits")
-    name: str
+    pib: str | None = Field(default=None, description="Tax ID (PIB) - 9 digits")
+    name: str | None = None
     address: str | None = None
     city: str | None = None
     postal_code: str | None = None

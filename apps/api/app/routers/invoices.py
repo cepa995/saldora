@@ -375,9 +375,14 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
     Returns:
         InvoiceResponse ready for serialization.
     """
-    # Convert seller/buyer JSON dicts to CompanyInfo
-    seller = CompanyInfo(**invoice.seller) if invoice.seller else None
-    buyer = CompanyInfo(**invoice.buyer) if invoice.buyer else None
+    # Convert seller/buyer JSON dicts to CompanyInfo.
+    # OCR may produce dicts with all-null values; treat those as absent.
+    seller = None
+    if invoice.seller and any(v is not None for v in invoice.seller.values()):
+        seller = CompanyInfo(**invoice.seller)
+    buyer = None
+    if invoice.buyer and any(v is not None for v in invoice.buyer.values()):
+        buyer = CompanyInfo(**invoice.buyer)
 
     # Convert field_confidence dict → list[FieldConfidence]
     field_confidences: list[FieldConfidence] = []
