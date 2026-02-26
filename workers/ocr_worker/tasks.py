@@ -25,7 +25,7 @@ def get_pipeline():
         logger.info("Initializing InvoicePipeline...")
         _pipeline = InvoicePipeline(
             primary_engine=os.getenv("OCR_PRIMARY_ENGINE", "dots"),
-            fallback_engine=os.getenv("OCR_FALLBACK_ENGINE", "easyocr"),
+            fallback_engine=os.getenv("OCR_FALLBACK_ENGINE", "none"),
             use_gpu=os.getenv("OCR_USE_GPU", "true").lower() == "true",
         )
         logger.info("InvoicePipeline initialized")

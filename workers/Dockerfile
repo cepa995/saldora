@@ -1,5 +1,6 @@
-# OCR Worker Dockerfile with GPU support
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+# OCR Worker Dockerfile
+# The worker connects to the dots.ocr vLLM server via HTTP — no GPU needed here.
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,56 +9,41 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies + Python 3.12 via deadsnakes PPA (Ubuntu 22.04 ships 3.10)
+# Install system dependencies for OpenCV and image processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 \
-    python3.12-venv \
-    python3.12-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Set Python 3.12 as default and install pip
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
-    && python3 -m ensurepip --upgrade \
-    && python3 -m pip install --upgrade pip
 
 # Create non-root user
 RUN useradd -m -u 1000 worker
 WORKDIR /app
 
-# Copy and install ML package (base deps include torch, transformers, easyocr)
-# Note: [gpu] extra skipped — flash-attn requires torch at build time.
-# GPU acceleration works via CUDA base image + torch auto-detection.
+# Copy and install ML package (base deps: torch, transformers, etc.)
 COPY packages/ml /app/packages/ml
-RUN python3 -m pip install /app/packages/ml
+RUN pip install /app/packages/ml
 
-# Install worker dependencies (not in ML package)
-RUN python3 -m pip install celery[redis] boto3 httpx psycopg2-binary sqlalchemy
+# Install worker dependencies + openai client for dots.ocr server
+RUN pip install celery[redis] boto3 httpx psycopg2-binary sqlalchemy openai
 
 # Copy worker code
 COPY workers/ocr_worker /app/ocr_worker
-
-# Download models during build (optional - can also be done at runtime)
-# RUN python3 -c "from fakturaai_ml import InvoicePipeline; p = InvoicePipeline(); import asyncio; asyncio.run(p._get_primary_engine().load())"
 
 # Switch to non-root user
 USER worker
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -m celery -A ocr_worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
+    CMD python -m celery -A ocr_worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
-# Run Celery worker
-CMD ["python3", "-m", "celery", "-A", "ocr_worker.celery_app", "worker", \
+# Run Celery worker with solo pool
+CMD ["python", "-m", "celery", "-A", "ocr_worker.celery_app", "worker", \
      "--loglevel=info", \
-     "--concurrency=1", \
+     "--pool=solo", \
      "--queues=ocr", \
      "--hostname=ocr-worker@%h"]

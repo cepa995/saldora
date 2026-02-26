@@ -132,8 +132,8 @@
   │       │   ├── pipeline.py        # Main orchestrator (272 lines)
   │       │   ├── ocr/
   │       │   │   ├── base.py        # OCREngine abstract base class
-  │       │   │   ├── dots_ocr.py    # Primary: dots.ocr vision-language model
-  │       │   │   └── easyocr_fallback.py  # Fallback: EasyOCR for Cyrillic
+  │       │   │   ├── dots_ocr.py    # Primary: dots.ocr VLM (calls vLLM server via OpenAI API)
+  │       │   │   └── easyocr_fallback.py  # Legacy fallback (disabled — poor Serbian support)
   │       │   ├── extraction/
   │       │   │   ├── fields.py      # Regex-based field extraction (Cyrillic + Latin)
   │       │   │   └── tables.py      # Table extraction (stub)
@@ -401,10 +401,14 @@
         STORAGE_ENDPOINT: http://minio:9000
         STORAGE_ACCESS_KEY: minioadmin
         STORAGE_SECRET_KEY: minioadmin
-        OCR_USE_GPU: "false"             # CPU mode for dev (no NVIDIA GPU needed)
-        OCR_PRIMARY_ENGINE: easyocr      # Use EasyOCR in dev (no vLLM needed)
+        OCR_PRIMARY_ENGINE: dots
+        OCR_FALLBACK_ENGINE: none
+        DOTS_OCR_SERVER_URL: http://dots-ocr-server:8000/v1
+        DOTS_OCR_MODEL_NAME: model
       depends_on:
         redis:
+          condition: service_healthy
+        dots-ocr-server:
           condition: service_healthy
       volumes:
         - ../../packages/ml:/app/packages/ml
@@ -691,8 +695,10 @@
   STRIPE_WEBHOOK_SECRET=
   SENTRY_DSN=
 
-  OCR_PRIMARY_ENGINE=easyocr      # Use EasyOCR locally (no GPU needed)
-  OCR_USE_GPU=false
+  OCR_PRIMARY_ENGINE=dots
+  OCR_FALLBACK_ENGINE=none
+  DOTS_OCR_SERVER_URL=http://localhost:8100/v1   # vLLM server (dots-ocr-server in docker-compose)
+  DOTS_OCR_MODEL_NAME=model
   ```
 
   #### Staging
@@ -1158,31 +1164,16 @@
                       └────────┬─────────┘
                               │
                       ┌────────▼─────────┐
-                      │   Preprocess     │
-                      │  (enhance,       │
-                      │   deskew,        │
-                      │   binarize)      │
-                      └────────┬─────────┘
-                              │
-                      ┌────────▼─────────┐
-                      │  Primary OCR     │  ← dots.ocr (Vision-Language Model)
-                      │  (recognize)     │     Needs GPU + vLLM
+                      │  dots.ocr VLM    │  ← Raw color image (no preprocessing)
+                      │  (vLLM server)   │     Called via OpenAI API over HTTP
                       └────────┬─────────┘
                               │
                       confidence < 0.80?
                         ┌──────┴──────┐
                         │ YES         │ NO
                         ▼             ▼
-              ┌────────────┐   use primary
-              │Fallback OCR│   result
-              │ (EasyOCR)  │
-              └──────┬─────┘
-                      │
-              better than primary?
-              ┌─────┴──────┐
-              │YES         │NO
-              ▼            ▼
-          use fallback  use primary
+                save for manual   use OCR result
+                review by user
                       │
                       ▼
             ┌──────────────────┐
