@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
@@ -17,17 +18,16 @@ export default async function AuthLayout({
         {/* Logo */}
         <Link
           href="/"
-          className="flex items-center justify-center gap-3 mb-8 group"
+          className="flex items-center justify-center mb-8 group"
         >
-          <div className="relative">
-            <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 transition-all duration-300 group-hover:scale-105">
-              <span className="text-white font-bold text-lg">F</span>
-            </div>
-            <div className="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-300" />
-          </div>
-          <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-            FakturaAI
-          </span>
+          <Image
+            src="/logo.png"
+            alt="FakturaAI"
+            width={180}
+            height={120}
+            className="group-hover:scale-105 transition-transform duration-300"
+            priority
+          />
         </Link>
 
         {/* Card */}

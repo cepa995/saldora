@@ -1,8 +1,8 @@
 # Software Requirements Specification (SRS)
 # FakturaAI - AI-Powered Invoice Processing Platform
 
-**Version:** 1.0
-**Date:** January 2025
+**Version:** 2.2
+**Date:** February 2026
 **Status:** Draft
 
 ---
@@ -217,6 +217,10 @@ FakturaAI operates as a standalone web application with the following integratio
 │  │ OCR Worker     │  │ │  │  (Cache)   │  │
 │  │(Celery+OpenAI) │  │ │  └────────────┘  │
 │  └────────────────┘  │ └──────────────────┘
+│  ┌────────────────┐  │
+│  │ LLM Extractor  │  │
+│  │ (Claude API)   │  │
+│  └────────────────┘  │
 └──────────────────────┘
 ```
 
@@ -275,16 +279,16 @@ FakturaAI operates as a standalone web application with the following integratio
 
 ```
 ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  User    │     │  Upload  │     │   OCR    │     │ Extract  │
-│  Uploads │────▶│  Service │────▶│  Engine  │────▶│  Fields  │
-│  Invoice │     │          │     │          │     │          │
+│  User    │     │  Upload  │     │   OCR    │     │   LLM    │
+│  Uploads │────▶│  Service │────▶│  Engine  │────▶│  Extract │
+│  Invoice │     │  (S3)    │     │(dots.ocr)│     │ (Claude) │
 └──────────┘     └──────────┘     └──────────┘     └──────────┘
                                                          │
                                                          ▼
 ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Export  │     │  User    │     │   PIB    │     │  NER     │
-│  Data    │◀────│  Review  │◀────│  Verify  │◀────│  Model   │
-│          │     │  & Edit  │     │  (APR)   │     │          │
+│  Export  │     │  User    │     │   PIB    │     │  Math    │
+│  Data    │◀────│  Review  │◀────│  Verify  │◀────│  Validate│
+│          │     │  & Edit  │     │          │     │          │
 └──────────┘     └──────────┘     └──────────┘     └──────────┘
 ```
 
@@ -373,6 +377,8 @@ FakturaAI operates as a standalone web application with the following integratio
 | ID | FR-4.3.2 |
 |----|----------|
 | **Description** | System MUST extract structured invoice fields |
+| **Primary Method** | LLM-based extraction (Anthropic Claude) — sends raw OCR text with JSON schema, receives complete structured output |
+| **Fallback Method** | Regex pattern matching when LLM is unavailable |
 
 **Required Fields:**
 
@@ -382,17 +388,24 @@ FakturaAI operates as a standalone web application with the following integratio
 | invoice_date | Date of invoice issue | Valid date format |
 | due_date | Payment due date | Valid date, >= invoice_date |
 | seller_name | Seller company name | Non-empty string |
-| seller_pib | Seller tax ID (PIB) | 9 digits |
+| seller_pib | Seller tax ID (PIB) | 9 digits, mod-11 checksum |
+| seller_mb | Seller registration number (MB) | 8 digits |
 | seller_address | Seller address | Non-empty string |
+| seller_city | Seller city | String |
+| seller_postal_code | Seller postal code | String |
 | buyer_name | Buyer company name | Non-empty string |
-| buyer_pib | Buyer tax ID (PIB) | 9 digits |
+| buyer_pib | Buyer tax ID (PIB) | 9 digits, mod-11 checksum |
+| buyer_mb | Buyer registration number (MB) | 8 digits |
 | buyer_address | Buyer address | Non-empty string |
+| buyer_city | Buyer city | String |
+| buyer_postal_code | Buyer postal code | String |
 | subtotal | Amount before tax | Decimal number |
 | tax_rate | VAT rate applied | 0%, 10%, or 20% |
 | tax_amount | Calculated tax | Decimal number |
 | total_amount | Total including tax | Decimal number |
 | currency | Currency code | RSD, EUR, USD |
 | line_items | Individual items/services | Array of items |
+| tax_groups | Per-section PDV breakdown | Array of tax groups |
 
 **Line Item Fields:**
 
@@ -402,14 +415,26 @@ FakturaAI operates as a standalone web application with the following integratio
 | quantity | Number of units |
 | unit_price | Price per unit |
 | total | Line total |
+| tax_rate | VAT rate for this line item |
+
+**Tax Group Fields:**
+
+| Field | Description |
+|-------|-------------|
+| rate | VAT rate (e.g., 20, 10, 0) |
+| base_amount | Taxable base (osnovica) for this group |
+| tax_amount | Tax amount (PDV iznos) for this group |
+
+**Note:** Each separate PDV line on the invoice becomes its own `tax_group` entry. Groups are NOT merged even when they share the same rate (e.g., goods at 20% and services at 20% remain as two separate entries).
 
 #### FR-4.3.3 Confidence Scoring
 | ID | FR-4.3.3 |
 |----|----------|
-| **Description** | System MUST provide confidence scores for extracted fields |
-| **Scale** | 0-100% confidence |
-| **Threshold** | Fields below 80% confidence flagged for manual review |
-| **Display** | Visual indication (color coding) of confidence levels |
+| **Description** | System MUST provide confidence scores at both overall and per-field level |
+| **Scale** | 0-100% confidence (stored as 0.0-1.0 in DB, scaled in API) |
+| **Threshold** | Fields below 80% confidence individually flagged with `needs_review: true` |
+| **Display** | Per-field confidence badges (color coded: green > 80%, yellow 60-80%, red < 60%) |
+| **Field Confidence** | Each extracted field has: `field_name`, `value`, `confidence`, `needs_review` |
 
 #### FR-4.3.4 Multi-Page Document Support
 | ID | FR-4.3.4 |
@@ -432,8 +457,10 @@ FakturaAI operates as a standalone web application with the following integratio
 | ID | FR-4.4.2 |
 |----|----------|
 | **Description** | System MUST verify invoice calculations |
-| **Checks** | Subtotal + Tax = Total, Line items sum = Subtotal |
-| **Tolerance** | Allow 0.01 RSD rounding difference |
+| **Checks** | Line items sum = Subtotal, Subtotal + Tax = Total, Line item math (qty * price = total), Tax groups consistency |
+| **Tolerance** | Tiered tolerance based on amount range (see Section 4.9.5) |
+| **Tax Groups** | Sum of group base_amounts ≈ subtotal; sum of group tax_amounts ≈ tax_amount |
+| **Note** | Tax amount is extracted as-printed from the document; it is NOT recomputed from subtotal * rate |
 
 #### FR-4.4.3 Duplicate Detection
 | ID | FR-4.4.3 |
@@ -455,8 +482,12 @@ FakturaAI operates as a standalone web application with the following integratio
 | ID | FR-4.5.2 |
 |----|----------|
 | **Description** | System MUST allow editing of extracted fields |
-| **Validation** | Real-time validation on edit |
-| **History** | Track changes with timestamps |
+| **Validation** | Real-time validation on edit, field-level warning/error highlighting |
+| **Features** | Per-field confidence badges, dirty-state indicators, per-field reset, Ctrl+S save shortcut |
+| **Line Items** | Add, edit, and remove individual line items inline |
+| **Tax Groups** | Add, edit, and remove tax rate groups inline |
+| **Status** | Editing a verified invoice reverts it to `review` status |
+| **Feedback** | Toast notifications for save and verify actions |
 
 #### FR-4.5.3 Bulk Editing
 | ID | FR-4.5.3 |
@@ -590,20 +621,26 @@ SAME_PARTY_CHECK(seller, buyer):
 | Missing/unclear | N/A | ⚠️ Flag for review, suggest 20% |
 
 **Multi-Rate Invoice Handling:**
+
+Invoices with multiple VAT sections are modeled using `tax_groups` — an array of `{rate, base_amount, tax_amount}` extracted directly from the invoice's PDV breakdown table. Each printed PDV row becomes one tax_group entry, even when multiple rows share the same rate (e.g., goods at 20% and services at 20% are kept separate).
+
 ```
-VALIDATE_VAT_RATES(line_items):
+VALIDATE_VAT_RATES(invoice):
   valid_rates = [0, 10, 20]
 
-  FOR EACH item IN line_items:
-    IF item.tax_rate NOT IN valid_rates:
-      FLAG_FOR_REVIEW(f"Nepoznata stopa PDV: {item.tax_rate}%")
+  # Validate individual tax group rates
+  FOR EACH group IN invoice.tax_groups:
+    IF group.rate NOT IN valid_rates:
+      FLAG_FOR_REVIEW(f"Nepoznata stopa PDV: {group.rate}%")
 
-  # Calculate expected totals per rate
-  totals_by_rate = GROUP_BY(line_items, tax_rate)
-  FOR rate, items IN totals_by_rate:
-    expected_tax = SUM(items.subtotal) * rate / 100
-    IF ABS(expected_tax - items.tax_amount) > TOLERANCE:
-      FLAG_FOR_REVIEW("Neslaganje u obračunu PDV-a")
+  # Validate tax groups sum to invoice totals
+  IF invoice.tax_groups IS NOT EMPTY:
+    group_base_sum = SUM(tax_groups.base_amount)
+    group_tax_sum = SUM(tax_groups.tax_amount)
+    IF ABS(group_base_sum - invoice.subtotal) > TOLERANCE:
+      FLAG("Osnovice po stopama se ne slažu sa međuzbirom")
+    IF ABS(group_tax_sum - invoice.tax_amount) > TOLERANCE:
+      FLAG("PDV iznosi po stopama se ne slažu sa ukupnim PDV-om")
 ```
 
 #### 4.9.4 Currency Handling
@@ -647,21 +684,29 @@ VERIFY_CALCULATIONS(invoice):
   IF ABS(calculated_subtotal - invoice.subtotal) > TOLERANCE:
     FLAG("Stavke se ne slažu sa međuzbirom")
 
-  # Check 2: Tax calculation
-  expected_tax = invoice.subtotal * invoice.tax_rate / 100
-  IF ABS(expected_tax - invoice.tax_amount) > TOLERANCE:
-    FLAG("Obračun PDV-a nije tačan")
-
-  # Check 3: Total = Subtotal + Tax
+  # Check 2: Total = Subtotal + Tax
   expected_total = invoice.subtotal + invoice.tax_amount
   IF ABS(expected_total - invoice.total_amount) > TOLERANCE:
     FLAG("Zbir nije tačan")
+
+  # Check 3: Tax groups consistency (if present)
+  IF invoice.tax_groups IS NOT EMPTY:
+    group_base_sum = SUM(tax_groups.base_amount)
+    group_tax_sum = SUM(tax_groups.tax_amount)
+    IF ABS(group_base_sum - invoice.subtotal) > TOLERANCE:
+      FLAG("Osnovice po stopama se ne slažu sa međuzbirom")
+    IF ABS(group_tax_sum - invoice.tax_amount) > TOLERANCE:
+      FLAG("PDV iznosi po stopama se ne slažu sa ukupnim PDV-om")
 
   # Check 4: Line item math
   FOR EACH item IN line_items:
     expected = item.quantity * item.unit_price
     IF ABS(expected - item.total) > 1:  # 1 RSD tolerance per line
       FLAG(f"Greška u stavci: {item.description}")
+
+  # Note: Tax amount is NOT recomputed from subtotal * rate.
+  # It is extracted as-printed from the document, because Serbian
+  # invoices may have rounding differences or per-section PDV lines.
 ```
 
 #### 4.9.6 Date Validation
@@ -1622,7 +1667,8 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 | **Model Server** | vLLM | latest | OpenAI-compatible inference server for dots.ocr (GPU sidecar) |
 | **Document AI** | dots.ocr | latest | Vision-language model for unified layout detection + OCR (~100 languages, Cyrillic/Latin) |
 | **OCR Client** | openai (Python) | 1.x | OpenAI-compatible client for calling vLLM server |
-| **NER** | spaCy | 3.7.x | Named entity recognition (supplementary field extraction) |
+| **LLM Extraction** | anthropic (Python) | latest | Anthropic Claude API client for structured field extraction from OCR text |
+| **LLM Model** | Claude (Haiku/Sonnet) | configurable | Primary field extraction — converts raw OCR text to structured JSON |
 | **PDF Processing** | PyMuPDF | 1.24.x | PDF parsing |
 | **Image Processing** | Pillow | 10.x | Image manipulation |
 | **OpenCV** | opencv-python | 4.9.x | Computer vision |
@@ -1698,32 +1744,37 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
                           │ features (JSON) │
                           └─────────────────┘
 
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│    invoices     │       │   line_items    │       │   companies     │
-├─────────────────┤       ├─────────────────┤       ├─────────────────┤
-│ id (PK)         │───────│ id (PK)         │       │ id (PK)         │
-│ organization_id │       │ invoice_id (FK) │       │ pib             │
-│ user_id (FK)    │       │ description     │       │ name            │
-│ document_id(FK) │       │ quantity        │       │ address         │
-│ status          │       │ unit_price      │       │ status          │
-│ invoice_number  │       │ total           │       │ apr_data (JSON) │
-│ invoice_date    │       │ position        │       │ last_verified   │
-│ due_date        │       └─────────────────┘       └─────────────────┘
-│ seller_id (FK)  │───────────────────────────────────────────┘
-│ buyer_id (FK)   │───────────────────────────────────────────┘
-│ subtotal        │
-│ tax_rate        │       ┌─────────────────┐       ┌─────────────────┐
-│ tax_amount      │       │    documents    │       │  api_keys       │
-│ total_amount    │       ├─────────────────┤       ├─────────────────┤
-│ currency        │       │ id (PK)         │       │ id (PK)         │
-│ confidence      │       │ organization_id │       │ organization_id │
-│ raw_data (JSON) │       │ original_name   │       │ user_id (FK)    │
-│ created_at      │       │ storage_path    │       │ key_hash        │
-│ updated_at      │       │ mime_type       │       │ name            │
-└─────────────────┘       │ size_bytes      │       │ permissions     │
-                          │ page_count      │       │ last_used       │
-                          │ created_at      │       │ expires_at      │
-                          └─────────────────┘       └─────────────────┘
+┌─────────────────────┐                             ┌─────────────────┐
+│      invoices       │                             │  api_keys       │
+├─────────────────────┤                             ├─────────────────┤
+│ id (PK)             │                             │ id (PK)         │
+│ organization_id(FK) │                             │ organization_id │
+│ status              │                             │ user_id (FK)    │
+│ invoice_number      │                             │ key_hash        │
+│ invoice_date        │                             │ name            │
+│ due_date            │                             │ permissions     │
+│ seller (JSON)       │  ← {pib, mb, name, ...}    │ last_used       │
+│ buyer (JSON)        │  ← {pib, mb, name, ...}    │ expires_at      │
+│ subtotal            │                             └─────────────────┘
+│ tax_rate            │
+│ tax_amount          │
+│ total_amount        │
+│ currency            │
+│ line_items (JSON)   │  ← [{description, qty, ...}]
+│ tax_groups (JSON)   │  ← [{rate, base_amount, tax_amount}]
+│ confidence_score    │
+│ field_confidence(J) │  ← [{field_name, value, confidence, ...}]
+│ warnings (JSON)     │  ← [{message, severity, field_name}]
+│ document_hash       │
+│ document_path       │  ← S3 key
+│ document_content_type│
+│ ocr_engine          │
+│ processing_time_ms  │
+│ raw_ocr_text        │
+│ raw_llm_output      │
+│ created_at          │
+│ updated_at          │
+└─────────────────────┘
 
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
 │  audit_logs     │       │  usage_records  │       │    webhooks     │
@@ -1785,31 +1836,51 @@ CREATE INDEX idx_organizations_slug ON organizations(slug);
 ```
 
 #### 7.2.3 invoices
+
+Seller/buyer data, line items, and tax groups are stored as JSON columns directly on the invoice record rather than as foreign keys to separate tables. This accommodates the diverse structures found in OCR-extracted invoices without requiring schema migrations.
+
 ```sql
 CREATE TABLE invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id),
-    user_id UUID NOT NULL REFERENCES users(id),
-    document_id UUID REFERENCES documents(id),
 
     status VARCHAR(20) NOT NULL DEFAULT 'processing',
 
+    -- Core invoice fields
     invoice_number VARCHAR(100),
     invoice_date DATE,
     due_date DATE,
 
-    seller_id UUID REFERENCES companies(id),
-    buyer_id UUID REFERENCES companies(id),
+    -- Seller/buyer as JSON: {pib, mb, name, address, city, postal_code, verified, apr_status}
+    seller JSON,
+    buyer JSON,
 
+    -- Amounts
     subtotal DECIMAL(15, 2),
     tax_rate DECIMAL(5, 2),
     tax_amount DECIMAL(15, 2),
     total_amount DECIMAL(15, 2),
     currency VARCHAR(3) DEFAULT 'RSD',
 
-    confidence_score DECIMAL(5, 2),
-    raw_ocr_data JSONB,
-    extracted_data JSONB,
+    -- Structured data (JSON arrays)
+    line_items JSON,       -- [{description, quantity, unit_price, total, tax_rate}]
+    tax_groups JSON,       -- [{rate, base_amount, tax_amount}]
+
+    -- Confidence and validation
+    confidence_score DECIMAL(5, 4),  -- 0.0000–1.0000 in DB, scaled to 0–100 in API
+    field_confidence JSON,  -- [{field_name, value, confidence, needs_review}]
+    warnings JSON,          -- [{message, severity, field_name}]
+
+    -- Document storage
+    document_hash VARCHAR(64),         -- SHA-256 of uploaded file
+    document_path VARCHAR(500),        -- S3/R2 key
+    document_content_type VARCHAR(100),
+
+    -- Processing metadata
+    ocr_engine VARCHAR(50),
+    processing_time_ms INTEGER,
+    raw_ocr_text TEXT,
+    raw_llm_output TEXT,               -- Raw LLM extraction JSON for debugging
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -1820,50 +1891,9 @@ CREATE TABLE invoices (
 CREATE INDEX idx_invoices_organization ON invoices(organization_id);
 CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_invoices_date ON invoices(invoice_date);
-CREATE INDEX idx_invoices_seller ON invoices(seller_id);
-CREATE INDEX idx_invoices_buyer ON invoices(buyer_id);
 ```
 
-#### 7.2.4 companies
-```sql
-CREATE TABLE companies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pib VARCHAR(20) NOT NULL,  -- VARCHAR(20) to support foreign entities with longer tax IDs
-    country_code VARCHAR(2) NOT NULL DEFAULT 'RS',
-    is_foreign BOOLEAN NOT NULL DEFAULT FALSE,
-    name VARCHAR(255) NOT NULL,
-    address TEXT,
-    city VARCHAR(100),
-    postal_code VARCHAR(10),
-    status VARCHAR(20),
-    apr_data JSONB,
-    last_verified_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    CONSTRAINT unique_pib_per_country UNIQUE (pib, country_code)
-);
-
-CREATE INDEX idx_companies_pib ON companies(pib);
-CREATE INDEX idx_companies_name ON companies USING gin(to_tsvector('simple', name));
-```
-
-#### 7.2.5 documents
-```sql
-CREATE TABLE documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-    original_filename VARCHAR(255) NOT NULL,
-    storage_path VARCHAR(500) NOT NULL,
-    mime_type VARCHAR(100) NOT NULL,
-    size_bytes BIGINT NOT NULL,
-    page_count INTEGER DEFAULT 1,
-    checksum VARCHAR(64),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_documents_organization ON documents(organization_id);
-```
+**Note:** The `companies` and `documents` tables described in earlier SRS versions have been replaced by inline JSON columns (`seller`, `buyer`) and direct storage fields (`document_hash`, `document_path`, `document_content_type`) on the invoices table. A standalone `companies` table may be reintroduced for APR verification caching in a future milestone.
 
 ---
 
@@ -1979,30 +2009,55 @@ Get invoice details.
   "due_date": "2025-02-15",
   "seller": {
     "pib": "123456789",
+    "mb": "12345678",
     "name": "Firma ABC d.o.o.",
-    "address": "Bulevar Kralja Aleksandra 1, Beograd",
-    "verified": true
+    "address": "Bulevar Kralja Aleksandra 1",
+    "city": "Beograd",
+    "postal_code": "11000",
+    "verified": false,
+    "apr_status": null
   },
   "buyer": {
     "pib": "987654321",
+    "mb": "87654321",
     "name": "Kompanija XYZ d.o.o.",
-    "address": "Cara Dušana 15, Novi Sad",
-    "verified": true
+    "address": "Cara Dušana 15",
+    "city": "Novi Sad",
+    "postal_code": "21000",
+    "verified": false,
+    "apr_status": null
   },
   "line_items": [
     {
       "description": "Usluge konsaltinga",
-      "quantity": 10,
-      "unit_price": 5000.00,
-      "total": 50000.00
+      "quantity": "10",
+      "unit_price": "5000.00",
+      "total": "50000.00",
+      "tax_rate": "20"
     }
   ],
-  "subtotal": 50000.00,
-  "tax_rate": 20.00,
-  "tax_amount": 10000.00,
-  "total_amount": 60000.00,
+  "tax_groups": [
+    {
+      "rate": "20",
+      "base_amount": "50000.00",
+      "tax_amount": "10000.00"
+    }
+  ],
+  "subtotal": "50000.00",
+  "tax_rate": "20.00",
+  "tax_amount": "10000.00",
+  "total_amount": "60000.00",
   "currency": "RSD",
+  "field_confidences": [
+    {"field_name": "invoice_number", "value": "2025-00042", "confidence": 95.0, "needs_review": false},
+    {"field_name": "seller_pib", "value": "123456789", "confidence": 92.0, "needs_review": false}
+  ],
+  "warnings": [],
+  "blocked": false,
+  "field_warnings": {},
   "document_url": "https://storage.fakturaai.rs/docs/...",
+  "raw_ocr_text": null,
+  "raw_llm_output": null,
   "created_at": "2025-01-15T10:30:00Z",
   "updated_at": "2025-01-15T10:30:05Z"
 }
@@ -2040,13 +2095,18 @@ List invoices with filtering.
 ```
 
 #### PATCH /invoices/{id}
-Update invoice data.
+Update invoice data (partial update). Supports all extracted fields including seller/buyer fields, line_items, and tax_groups.
 
 **Request:**
 ```json
 {
   "invoice_number": "2025-00042-A",
-  "total_amount": 61000.00
+  "seller_pib": "123456789",
+  "total_amount": 61000.00,
+  "tax_groups": [
+    {"rate": "20", "base_amount": "50000.00", "tax_amount": "10000.00"},
+    {"rate": "10", "base_amount": "1000.00", "tax_amount": "100.00"}
+  ]
 }
 ```
 
@@ -2179,10 +2239,11 @@ dots.ocr is a vision-language model (VLM) that performs **unified layout detecti
 │                                    │                                 │
 │                                    ▼                                 │
 │  ┌─────────────────────────────────────────────────────────────┐    │
-│  │              Field Extraction & NER (Optional)               │    │
-│  │           (Pattern matching + spaCy for edge cases)          │    │
+│  │        LLM Field Extraction (Anthropic Claude API)          │    │
+│  │    Primary: Claude extracts all fields from raw OCR text    │    │
+│  │    Fallback: Regex pattern matching if LLM unavailable      │    │
 │  │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────────┐ │    │
-│  │  │ PIB  │ │ Date │ │Amount│ │ Name │ │Address│ │ Inv. No. │ │    │
+│  │  │ PIB  │ │ Date │ │Amount│ │ Name │ │TaxGrp│ │Line Items│ │    │
 │  │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘ └──────────┘ │    │
 │  └──────────────────────────┬──────────────────────────────────┘    │
 │                             │                                        │
@@ -2310,15 +2371,19 @@ dots.ocr provides layout detection as part of its unified vision-language model.
 }
 ```
 
-### 9.5 Named Entity Recognition
+### 9.5 Field Extraction
 
-**Model:** Custom spaCy NER model trained on Serbian invoices
+**Primary method:** LLM-based extraction via Anthropic Claude API
 
-**Entity Types:**
+The raw OCR text from dots.ocr is sent to Claude along with a structured JSON schema prompt. The LLM returns a complete JSON object with all invoice fields extracted. This approach handles the diversity of Serbian invoice formats (mixed Cyrillic/Latin, varying layouts, multi-section invoices) more robustly than hand-crafted regex patterns.
 
-| Entity | Pattern Examples | Validation |
+**Fallback method:** Regex pattern matching (`FieldExtractor`) when LLM is unavailable.
+
+**Extracted Fields:**
+
+| Field | Pattern Examples | Validation |
 |--------|------------------|------------|
-| PIB | `PIB: 123456789`, `ПИБ: 123456789` | 9-digit number |
+| PIB | `PIB: 123456789`, `ПИБ: 123456789` | 9-digit number, mod-11 checksum |
 | MB | `МБ: 12345678`, `MB: 12345678` | 8-digit number |
 | DATE | `15.01.2025`, `15/01/2025` | Valid date |
 | AMOUNT | `45.000,00 RSD`, `45000.00` | Decimal number |
@@ -2326,6 +2391,13 @@ dots.ocr provides layout detection as part of its unified vision-language model.
 | COMPANY | `Firma ABC d.o.o.` | Company name |
 | ADDRESS | `Bulevar Kralja Aleksandra 1` | Address string |
 | TAX_RATE | `PDV 20%`, `ПДВ 20%` | 0%, 10%, 20% |
+| TAX_GROUPS | Per-PDV-section breakdown | rate, base_amount, tax_amount per group |
+| LINE_ITEMS | Table rows | description, quantity, unit_price, total, tax_rate |
+
+**LLM Extraction Design Decisions:**
+- Tax amounts are extracted as-printed from the document; they are NOT recomputed from subtotal * rate
+- Each separate PDV line on the invoice becomes its own `tax_group` entry, even when groups share the same rate (e.g., goods at 20% and services at 20% are kept as two separate groups)
+- The LLM receives the complete OCR text (not pre-parsed fragments) for maximum context
 
 ### 9.6 Confidence Scoring
 
@@ -2366,17 +2438,17 @@ def calculate_confidence(extracted_data: dict) -> float:
 | Component | GPU Memory | Instances | Notes |
 |-----------|------------|-----------|-------|
 | dots.ocr vLLM server | 6-8 GB | 1-2 | GPU sidecar running rednote-hilab/dots.ocr (1.7B params) |
-| OCR Worker | 0 (CPU only) | 1-2 | Lightweight Celery worker calling vLLM server via HTTP |
-| NER Model (optional) | 2 GB | 1-2 | For supplementary field extraction |
+| OCR Worker | 0 (CPU only) | 1-2 | Lightweight Celery worker calling vLLM server and Claude API |
+| LLM Extraction (Claude) | 0 (API call) | N/A | Anthropic Claude API for structured field extraction from OCR text |
 
-**Note:** dots.ocr replaces the need for separate Layout Parser + OCR Engine, reducing infrastructure complexity. There is no EasyOCR fallback — failed OCR results in manual review by the user.
+**Note:** dots.ocr replaces the need for separate Layout Parser + OCR Engine, reducing infrastructure complexity. Field extraction is performed by Claude LLM via API call (no local GPU needed). If dots.ocr fails, the invoice is flagged for manual review by the user.
 
 **Model Serving:**
 - **vLLM** (`vllm/vllm-openai:latest`) — OpenAI-compatible inference server for dots.ocr
 - Server flags: `--trust-remote-code --chat-template-content-format string --gpu-memory-utilization 0.90 --max-model-len 8192`
 - HuggingFace model cache persisted via Docker volume (`huggingface_cache`)
 
-**Model Note:** The system uses pre-trained models (dots.ocr, spaCy) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
+**Model Note:** The system uses pre-trained models (dots.ocr for OCR, Claude for field extraction) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
 
 ### 9.8 Extraction Quality Monitoring
 
@@ -3859,9 +3931,10 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 6. NBS Exchange Rate API (Kursna lista Narodne banke Srbije)
 7. dots.ocr Documentation (Vision-Language Model) — https://github.com/rednote-hilab/dots.ocr
 8. vLLM Documentation (Model Inference Server) — https://docs.vllm.ai
-9. FastAPI Documentation
-10. Next.js Documentation
-11. Paddle Documentation (Payment Processing)
+9. Anthropic Claude API Documentation — https://docs.anthropic.com
+10. FastAPI Documentation
+11. Next.js Documentation
+12. Paddle Documentation (Payment Processing)
 
 ---
 
@@ -3875,6 +3948,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 1.3 | January 2025 | FakturaAI Team | Updated OCR stack: dots.ocr (VLM) as primary engine with unified layout+OCR, EasyOCR as fallback, removed separate LayoutParser (Tesseract removed) |
 | 2.0 | February 2026 | FakturaAI Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
 | 2.1 | February 2026 | FakturaAI Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
+| 2.2 | February 2026 | FakturaAI Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
 
 ---
 

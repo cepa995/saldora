@@ -396,13 +396,13 @@ class TestMathValidatorTax:
         )
         assert validator.validate(invoice) is True
 
-    def test_invalid_tax_calculation(self):
+    def test_invalid_total_does_not_equal_subtotal_plus_tax(self):
         validator = MathValidator()
         invoice = ExtractedInvoice(
             subtotal=Decimal("100000"),
             tax_rate=Decimal("20"),
-            tax_amount=Decimal("99999"),  # should be 20000
-            total_amount=Decimal("199999"),
+            tax_amount=Decimal("20000"),
+            total_amount=Decimal("999999"),  # should be 120000
         )
         assert validator.validate(invoice) is False
         assert any(w.warning_type == WarningType.MATH_MISMATCH for w in validator.get_warnings())
@@ -446,6 +446,36 @@ class TestMathValidatorLineItems:
             ],
         )
         assert validator.validate(invoice) is False
+
+    def test_line_items_vat_inclusive_matches_total(self):
+        """Items priced with VAT sum to total_amount, not subtotal — valid."""
+        validator = MathValidator()
+        invoice = ExtractedInvoice(
+            subtotal=Decimal("10482.58"),
+            tax_amount=Decimal("2096.52"),
+            total_amount=Decimal("12579.10"),
+            tax_rate=Decimal("20"),
+            line_items=[
+                LineItemData(description="FILTER KABINE", total=Decimal("1639.50")),
+                LineItemData(description="FILTER ULJA", total=Decimal("1111.50")),
+                LineItemData(description="Usluga servisa", total=Decimal("9828.10")),
+            ],
+        )
+        assert validator.validate(invoice) is True
+        assert not any(w.field_name == "subtotal" for w in validator.get_warnings())
+
+    def test_line_items_neither_subtotal_nor_total(self):
+        """Items sum matches neither subtotal nor total — genuine mismatch."""
+        validator = MathValidator()
+        invoice = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            total_amount=Decimal("12000"),
+            line_items=[
+                LineItemData(description="Item", total=Decimal("5000")),
+            ],
+        )
+        assert validator.validate(invoice) is False
+        assert any(w.field_name == "subtotal" for w in validator.get_warnings())
 
     def test_line_item_math_valid(self):
         validator = MathValidator()

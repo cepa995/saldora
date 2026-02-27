@@ -8,7 +8,12 @@ from decimal import Decimal, InvalidOperation
 
 import anthropic
 
-from fakturaai_ml.types import CompanyData, ExtractedInvoice, LineItemData
+from fakturaai_ml.types import (
+    CompanyData,
+    ExtractedInvoice,
+    LineItemData,
+    TaxGroupData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,18 @@ _SYSTEM_PROMPT = (  # noqa: E501
     "- For MB (matični broj): typically 8 digits.\n"
     "- Extract ALL line items from tables, "
     "including HTML tables in OCR output.\n"
+    "- For each line item, if the invoice prints a per-item PDV/tax "
+    "amount (e.g. 'Iznos PDV-a', 'PDV' column), extract it into "
+    "tax_amount. If the invoice does not show per-item tax, use null.\n"
+    "- Extract EVERY separate PDV line into tax_groups. "
+    "Each printed PDV row becomes one tax_group entry with rate, "
+    "base_amount (osnovica), and tax_amount (PDV iznos). "
+    "Do NOT merge rows that share the same rate. "
+    "If goods show 'PDV 20%: 19590.00' and services show "
+    "'PDV 20%: 11200.00', return TWO tax_groups both with "
+    "rate=20, not one combined group. "
+    "If only a single PDV line exists, include one entry. "
+    "Leave tax_groups as empty array if no breakdown is visible.\n"
     "- If a field cannot be determined from the text, use null.\n"
     "- seller = the entity that issued the invoice "
     "(prodavac, dobavljač, isporučilac).\n"
@@ -88,7 +105,15 @@ _JSON_SCHEMA = """\
       "quantity": number_or_null,
       "unit_price": number_or_null,
       "total": number_or_null,
-      "tax_rate": number_or_null
+      "tax_rate": number_or_null,
+      "tax_amount": number_or_null
+    }
+  ],
+  "tax_groups": [
+    {
+      "rate": number,
+      "base_amount": number,
+      "tax_amount": number
     }
   ]
 }"""
@@ -213,8 +238,16 @@ class LLMFieldExtractor:
                     unit_price=_parse_decimal(item.get("unit_price")),
                     total=_parse_decimal(item.get("total")),
                     tax_rate=_parse_decimal(item.get("tax_rate")),
+                    tax_amount=_parse_decimal(item.get("tax_amount")),
                 )
             )
+
+        for group in data.get("tax_groups") or []:
+            rate = _parse_decimal(group.get("rate"))
+            base = _parse_decimal(group.get("base_amount"))
+            tax = _parse_decimal(group.get("tax_amount"))
+            if rate is not None and base is not None and tax is not None:
+                invoice.tax_groups.append(TaxGroupData(rate=rate, base_amount=base, tax_amount=tax))
 
         return invoice
 

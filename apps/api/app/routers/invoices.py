@@ -25,6 +25,7 @@ from app.schemas.invoice import (
     InvoiceResponse,
     InvoiceUpdate,
     ProcessingStatus,
+    TaxGroup,
 )
 from app.services.storage import (
     delete_document,
@@ -374,6 +375,19 @@ async def upload_batch(
     return results
 
 
+def _json_safe(obj):
+    """Recursively convert Decimal/date to str for JSON column storage."""
+    from decimal import Decimal
+
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(i) for i in obj]
+    return obj
+
+
 def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -> InvoiceResponse:
     """Convert an Invoice model to an InvoiceResponse schema.
 
@@ -434,6 +448,13 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
     # Convert line_items JSON → list[dict] (Pydantic handles the rest)
     line_items = invoice.line_items or []
 
+    # Convert tax_groups JSON → list[TaxGroup]
+    tax_groups: list[TaxGroup] = []
+    if invoice.tax_groups:
+        for tg in invoice.tax_groups:
+            if isinstance(tg, dict):
+                tax_groups.append(TaxGroup(**tg))
+
     return InvoiceResponse(
         id=invoice.id,
         status=invoice.status,
@@ -449,6 +470,7 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
         total_amount=invoice.total_amount,
         currency=invoice.currency,
         line_items=line_items,
+        tax_groups=tax_groups,
         field_confidences=field_confidences,
         warnings=warnings,
         blocked=blocked,
@@ -696,9 +718,16 @@ async def update_invoice(
         "total_amount",
         "currency",
         "line_items",
+        "tax_groups",
     }
+
+    # JSON columns need Decimal→str conversion for serialization
+    json_columns = {"line_items", "tax_groups"}
     for field in direct_fields & updates.keys():
-        setattr(invoice, field, updates[field])
+        value = updates[field]
+        if field in json_columns and isinstance(value, list):
+            value = _json_safe(value)
+        setattr(invoice, field, value)
 
     # Seller fields → merge into seller JSON
     seller_updates = {}

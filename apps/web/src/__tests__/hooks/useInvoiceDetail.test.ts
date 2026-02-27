@@ -18,6 +18,7 @@ const mockInvoice: InvoiceResponse = {
   total_amount: '12000',
   currency: 'RSD',
   line_items: [],
+  tax_groups: null,
   field_confidences: [
     { field_name: 'invoice_number', value: 'INV-001', confidence: 95, needs_review: false },
   ],

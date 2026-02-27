@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=300 \
     DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies for OpenCV and image processing
@@ -23,6 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root user
 RUN useradd -m -u 1000 worker
 WORKDIR /app
+
+# Install CPU-only PyTorch first — the worker talks to external services
+# (dots.ocr vLLM server, Claude API) via HTTP so CUDA is unnecessary.
+# This avoids downloading ~2 GB of nvidia_cu* packages.
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Copy and install ML package in editable mode so volume mounts work in dev
 COPY packages/ml /app/packages/ml

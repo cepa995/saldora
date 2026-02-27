@@ -71,7 +71,21 @@ class LineItemData:
     unit_price: Decimal | None = None
     total: Decimal | None = None
     tax_rate: Decimal | None = None
+    tax_amount: Decimal | None = None
     confidence: float = 0.0
+
+
+@dataclass
+class TaxGroupData:
+    """A single tax rate group extracted from an invoice.
+
+    Represents one section of tax breakdown (e.g. "goods at 20%").
+    Values are extracted as printed on the document, never computed.
+    """
+
+    rate: Decimal
+    base_amount: Decimal
+    tax_amount: Decimal
 
 
 @dataclass
@@ -107,6 +121,9 @@ class ExtractedInvoice:
 
     # Line items
     line_items: list[LineItemData] = field(default_factory=list)
+
+    # Tax breakdown by rate (multi-rate invoices)
+    tax_groups: list[TaxGroupData] = field(default_factory=list)
 
     # Raw OCR output
     raw_text: str = ""

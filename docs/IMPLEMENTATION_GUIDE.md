@@ -9,7 +9,7 @@
 
 This guide breaks the FakturaAI SRS into **9 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
 
-> **Note:** Line items are stored as JSONB within the invoice record (not a separate relational table) for schema flexibility during the OCR extraction phase. This is an intentional design decision — invoices from different formats have varying line item structures, and JSONB accommodates this without schema migrations.
+> **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
 ### Milestone Map
 
@@ -214,32 +214,37 @@ This milestone is complete. It established the database module, core models (Use
 
 #### 3.4 — Implement field extraction from OCR output
 
-**Description:** Extract structured invoice fields (PIB, dates, amounts, invoice number, seller/buyer info, line items) from raw OCR text using regex patterns and optional NER.
+**Description:** Extract structured invoice fields (PIB, dates, amounts, invoice number, seller/buyer info, line items, tax groups) from raw OCR text. Uses a dual-extractor architecture: LLM-based extraction as primary method (Anthropic Claude), with regex pattern matching as fallback.
 
 **Requirements covered:** FR-4.3.2, Section 4.3.4, Section 4.3.5
 
+**Architecture:** The LLM receives the complete raw OCR text and a structured JSON schema prompt, returning all fields in a single API call. This approach handles the diversity of Serbian invoice formats far more robustly than hand-crafted regex patterns. The regex `FieldExtractor` serves as fallback when the LLM is unavailable.
+
 **Tasks:**
-- Implement `FieldExtractor` in `packages/ml/fakturaai_ml/extraction/fields.py`:
+- Implement `LLMFieldExtractor` in `packages/ml/fakturaai_ml/extraction/llm_extractor.py` (PRIMARY):
+  - Send raw OCR text to Anthropic Claude API with structured JSON schema prompt
+  - Extract all fields in a single LLM call: seller/buyer (PIB, MB, name, address, city, postal_code), invoice number, dates, amounts, currency, line items, tax groups
+  - Extract `tax_groups` as per-PDV-section breakdown: each printed PDV row becomes one entry with rate, base_amount, tax_amount — groups are NOT merged even when they share the same rate
+  - Parse and validate LLM JSON response
+  - Configurable model via `ANTHROPIC_MODEL` env var (default: `claude-haiku-4-5-20251001`)
+  - Requires `ANTHROPIC_API_KEY` env var
+- Implement `FieldExtractor` in `packages/ml/fakturaai_ml/extraction/fields.py` (FALLBACK):
   - PIB extraction (9-digit patterns, both `PIB:` and `ПИБ:` prefixes)
   - MB extraction (8-digit matični broj)
-  - Invoice number extraction (multiple patterns: `Faktura br:`, `Račun:`, `Br. fakture:`)
-  - Date extraction (Serbian formats: `15.01.2025`, `15/01/2025`, `15. januar 2025.`)
-  - Amount extraction (Serbian number format: `45.000,00 RSD`)
-  - Currency detection (RSD, EUR, USD with Serbian labels)
-  - VAT rate extraction (`PDV 20%`, `ПДВ 20%`)
+  - Invoice number, date, amount, currency, VAT rate extraction via regex
   - Company name and address extraction
-- Implement `TableExtractor` in `packages/ml/fakturaai_ml/extraction/tables.py`:
-  - Parse HTML tables from dots.ocr output into structured line items
-  - Extract description, quantity, unit price, total per line
-- Implement per-field confidence scoring in `packages/ml/fakturaai_ml/postprocessing/confidence.py`:
-  - OCR character confidence (40% weight)
-  - Field validation success (30% weight)
-  - Layout consistency (20% weight)
-  - Cross-validation (10% weight)
-  - Fields below 80% confidence flagged for manual review
+- Implement PIB validation in `packages/ml/fakturaai_ml/validation/pib.py`:
+  - 9-digit format check, no leading zero, mod-11 weighted checksum
+  - Runs as part of the ML pipeline (not as a separate API service)
+- Implement math validation in `packages/ml/fakturaai_ml/validation/math_check.py`:
+  - Line items sum ≈ subtotal, subtotal + tax ≈ total, line item math (qty * price ≈ total)
+  - Tax groups consistency: sum of group base_amounts ≈ subtotal, sum of group tax_amounts ≈ tax_amount
+  - Tiered tolerance by amount range (Section 4.9.5)
+  - Design decision: tax amount is NOT recomputed from subtotal * rate
+- Implement per-field confidence scoring in `packages/ml/fakturaai_ml/postprocessing/confidence.py`
 - Write tests with sample OCR outputs covering Cyrillic, Latin, and mixed-script invoices
 
-**Acceptance:** Given OCR text from a Serbian invoice, all required fields are extracted with per-field confidence scores. Cyrillic and Latin are both handled.
+**Acceptance:** Given OCR text from a Serbian invoice, all required fields are extracted with per-field confidence scores. LLM extraction is primary; regex is fallback. Tax groups preserve per-section PDV breakdowns.
 
 ---
 
@@ -253,8 +258,9 @@ This milestone is complete. It established the database module, core models (Use
 - Implement `_save_extraction_result()` in `workers/ocr_worker/tasks.py`:
   - Use synchronous SQLAlchemy engine (psycopg2, not asyncpg — Celery tasks are sync)
   - Map extraction result fields to Invoice model columns
-  - Store `raw_ocr_text`, `field_confidences`, `warnings`, `ocr_engine`, `processing_time_ms`
+  - Store `raw_ocr_text`, `raw_llm_output`, `field_confidences`, `warnings`, `ocr_engine`, `processing_time_ms`, `tax_groups`
   - Update invoice status to `review` on success, `error` on failure
+  - Pipeline configuration: `use_llm` (bool), `llm_api_key`, `llm_model` parameters
 - Implement `_update_invoice_status()` for status transitions
 - Implement `_download_document()` to fetch file from S3 for processing
 - Handle errors: update invoice status to `error`, store error details in `warnings` JSON
@@ -353,12 +359,14 @@ This milestone is complete. It established the database module, core models (Use
 
 **Description:** Build the APR integration service to verify Serbian PIB numbers against the Business Registers Agency database. Cache responses for 24 hours.
 
+**Note:** PIB format validation (9 digits, no leading zero, mod-11 checksum) is already implemented in the ML pipeline (`packages/ml/fakturaai_ml/validation/pib.py`) and runs during extraction. This issue covers the remaining APR API integration work.
+
 **Requirements covered:** FR-4.4.1, Section 10.1, Section 4.4.1
 
 **Tasks:**
 - Create `apps/api/app/services/apr.py`:
   - `verify_pib(pib: str) -> APRVerificationResult` — call APR API, return company info + status
-  - PIB format validation: exactly 9 digits, doesn't start with 0, mod-11 checksum
+  - ~~PIB format validation: exactly 9 digits, doesn't start with 0, mod-11 checksum~~ (already in ML pipeline)
   - Cache successful responses in Redis for 24 hours
   - Handle APR unavailability gracefully (return `APR_UNAVAILABLE` status, allow manual override)
 - Create `apps/api/app/models/company.py` matching Section 8.2.4 schema
@@ -379,20 +387,20 @@ This milestone is complete. It established the database module, core models (Use
 
 **Description:** Verify invoice calculations (line items sum, tax calculation, total) and apply date/currency validation rules.
 
+**Note:** Core math validation is already implemented in the ML pipeline (`packages/ml/fakturaai_ml/validation/math_check.py`) and runs during extraction. Completed checks: line items sum ≈ subtotal, subtotal + tax ≈ total, line item math (qty * price ≈ total), tax groups consistency. This issue covers the remaining verification work not yet in the pipeline.
+
 **Requirements covered:** FR-4.4.2, FR-4.4.3, Section 4.4.2, 4.4.3, 4.4.4, 4.4.5, 4.4.6
 
 **Tasks:**
-- Create `apps/api/app/services/verification.py`:
-  - `verify_calculations(invoice)` — check line items sum to subtotal, tax calculation, total = subtotal + tax
-  - Apply tolerance rules per amount range (Section 4.4.3)
+- ~~`verify_calculations(invoice)` — check line items sum to subtotal, tax calculation, total = subtotal + tax~~ (already in ML pipeline)
+- ~~Apply tolerance rules per amount range (Section 4.4.3)~~ (already in ML pipeline)
+- ~~Multi-rate invoice handling~~ (already via `tax_groups` in ML pipeline)
+- Remaining work in `apps/api/app/services/verification.py`:
   - VAT rate validation: only 0%, 10%, 20% are valid Serbian rates
-  - Multi-rate invoice handling (per-line-item VAT)
   - Date validation: future invoice date, due date before invoice date, very old invoices
   - Currency validation: detect mixed currencies, validate currency code
   - Duplicate detection: same invoice number + seller PIB + date
-- Run verification automatically after OCR extraction completes
-- Store verification warnings in invoice `warnings` JSON field
-- Apply export blocking rules (Section 4.4.7): block if PIB invalid, required fields missing, math fails, or unreviewed warnings
+  - Apply export blocking rules (Section 4.4.7): block if PIB invalid, required fields missing, math fails, or unreviewed warnings
 
 **Acceptance:** Invoice with wrong total → warning flagged. Duplicate invoice → user warned. Invalid VAT rate → flagged for review. Export blocked for unresolved critical issues.
 
@@ -1311,7 +1319,7 @@ This milestone is complete. It established the database module, core models (Use
 |-----------|--------|----------------|
 | **M1: Foundation & Auth** [DONE] | 1.1–1.6 | Users can register, login, JWT auth works, test infrastructure established |
 | **M2: Document Storage & Upload** | 2.1–2.4 | Files upload to S3, database records created, Celery tasks queued |
-| **M3: OCR Processing Pipeline** | 3.1–3.7 | dots.ocr + EasyOCR extract structured data from invoices, results saved to DB |
+| **M3: OCR Processing Pipeline** | 3.1–3.7 | dots.ocr (OCR) + Claude LLM (field extraction) extract structured data including tax_groups; regex fallback; PIB + math validation in pipeline; results saved to DB |
 | **M4: Invoice Management & Verification** | 4.1–4.7 | Full CRUD, APR PIB verification, math checks, correction logging, audit trail |
 | **M5: Accounting Intelligence & Rules** | 5.1–5.4 | AccountingIntent, VAT treatment, konta, PDV books, automation rules engine |
 | **M6: Data Export** | 6.1–6.5 | XLSX/CSV/JSON export, custom templates, audit export for tax inspections |

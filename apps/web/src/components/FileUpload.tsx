@@ -6,6 +6,13 @@ import { useDropzone, FileRejection } from 'react-dropzone';
 import { useTranslations } from 'next-intl';
 import { apiClient } from '@/lib/api-client';
 import { usePollingStatus, ProcessingStatusResponse } from '@/hooks/usePollingStatus';
+import {
+  useUploadFiles,
+  setUploadFiles,
+  clearUploadFiles,
+  removeUploadFile,
+  type UploadedFile,
+} from '@/stores/uploadStore';
 import { PipelineStepper } from './PipelineStepper';
 import type { PipelineStatus } from './PipelineStepper';
 
@@ -35,15 +42,7 @@ const STAGE_KEYS: Record<string, string> = {
   saving: 'stageSaving',
 };
 
-export interface UploadedFile {
-  file: File;
-  preview: string | null;
-  status: 'pending' | 'uploading' | 'uploaded' | 'processing' | 'success' | 'error';
-  progress: number;
-  stage?: string | null;
-  error?: string;
-  jobId?: string;
-}
+export type { UploadedFile };
 
 export interface BatchUploadResult {
   id: string;
@@ -99,7 +98,7 @@ export function FileUpload({
 }: FileUploadProps) {
   const t = useTranslations('upload');
   const router = useRouter();
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const uploadedFiles = useUploadFiles();
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const isUploading = uploadedFiles.some((f) => f.status === 'uploading');
@@ -133,7 +132,7 @@ export function FileUpload({
 
   const handleStatusUpdate = useCallback(
     (jobId: string, data: ProcessingStatusResponse) => {
-      setUploadedFiles((prev) =>
+      setUploadFiles((prev) =>
         prev.map((f) => {
           if (f.jobId !== jobId) return f;
           switch (data.status) {
@@ -223,7 +222,7 @@ export function FileUpload({
         }));
 
         const updated = [...currentPending, ...newFiles];
-        setUploadedFiles(updated);
+        setUploadFiles(updated);
         onFilesAccepted?.(acceptedFiles);
       }
     },
@@ -245,7 +244,7 @@ export function FileUpload({
     const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending');
     if (pendingFiles.length === 0) return;
 
-    setUploadedFiles((prev) =>
+    setUploadFiles((prev) =>
       prev.map((f) => (f.status === 'pending' ? { ...f, status: 'uploading' as const, progress: 0 } : f))
     );
     onUploadStart?.();
@@ -261,7 +260,7 @@ export function FileUpload({
         body: formData,
       });
 
-      setUploadedFiles((prev) => {
+      setUploadFiles((prev) => {
         let resultIdx = 0;
         return prev.map((f) => {
           if (f.status !== 'uploading') return f;
@@ -290,7 +289,7 @@ export function FileUpload({
         error && typeof error === 'object' && 'message' in error
           ? String((error as { message: string }).message)
           : t('uploadError');
-      setUploadedFiles((prev) =>
+      setUploadFiles((prev) =>
         prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'error' as const, error: errorMsg } : f))
       );
       onError?.(errorMsg);
@@ -298,19 +297,12 @@ export function FileUpload({
   };
 
   const handleRemoveFile = (index: number) => {
-    setUploadedFiles((prev) => {
-      const file = prev[index];
-      if (file?.preview) URL.revokeObjectURL(file.preview);
-      return prev.filter((_, i) => i !== index);
-    });
+    removeUploadFile(index);
     setValidationError(null);
   };
 
   const handleClearAll = () => {
-    uploadedFiles.forEach((f) => {
-      if (f.preview) URL.revokeObjectURL(f.preview);
-    });
-    setUploadedFiles([]);
+    clearUploadFiles();
     setValidationError(null);
   };
 

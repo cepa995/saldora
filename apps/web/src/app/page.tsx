@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 // Icons as inline SVGs
@@ -242,17 +243,8 @@ function Navigation() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <a href="#" className="flex items-center gap-3 group">
-              <div className="relative">
-                <div className={`w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 transition-all duration-300 group-hover:scale-105 ${scrolled ? "" : ""}`}>
-                  <span className="text-white font-bold text-lg">F</span>
-                </div>
-                <div className="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-300" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">FakturaAI</span>
-                <span className="text-[10px] text-gray-400 font-medium tracking-wider uppercase hidden sm:block">AI za fakture</span>
-              </div>
+            <a href="#" className="flex items-center">
+              <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">FakturaAI</span>
             </a>
 
             {/* Desktop Navigation */}
@@ -2046,14 +2038,14 @@ function Footer() {
         {/* Top section with logo and newsletter */}
         <div className="flex flex-col lg:flex-row justify-between items-start gap-12 mb-16">
           <div className="max-w-sm">
-            <div className="flex items-center gap-3 mb-6 group">
-              <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center group-hover:shadow-lg group-hover:shadow-violet-500/30 transition-all duration-300 group-hover:scale-105">
-                  <span className="text-white font-bold text-xl">F</span>
-                </div>
-                <div className="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-0 group-hover:opacity-30 transition-opacity" />
-              </div>
-              <span className="text-2xl font-bold text-white">FakturaAI</span>
+            <div className="mb-6">
+              <Image
+                src="/logo.png"
+                alt="FakturaAI"
+                width={160}
+                height={107}
+                className="brightness-0 invert"
+              />
             </div>
             <p className="text-gray-400 text-lg leading-relaxed mb-6">
               AI asistent za automatsku obradu faktura. Napravljeno za računovođe u Srbiji.

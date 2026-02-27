@@ -57,6 +57,11 @@ class MathValidator:
             if not self._validate_total(invoice):
                 all_valid = False
 
+        # Check 3: Tax groups consistency
+        if invoice.tax_groups:
+            if not self._validate_tax_groups(invoice):
+                all_valid = False
+
         # Check 4: Individual line item math
         if invoice.line_items:
             if not self._validate_line_item_math(invoice):
@@ -73,31 +78,37 @@ class MathValidator:
         return Decimal("50")  # Default for very large amounts
 
     def _validate_line_items_sum(self, invoice: ExtractedInvoice) -> bool:
-        """Validate that line items sum to subtotal."""
-        calculated_subtotal = sum(item.total or Decimal("0") for item in invoice.line_items)
+        """Validate that line items sum to subtotal or total.
+
+        Serbian invoices may list prices as "Cena sa PDV" (VAT-inclusive)
+        or "Cena bez PDV" (VAT-exclusive). When prices include VAT, line
+        items sum to total_amount rather than subtotal (osnovica). Both
+        patterns are valid.
+        """
+        items_sum = sum(item.total or Decimal("0") for item in invoice.line_items)
 
         if invoice.subtotal is None:
             return True
 
-        difference = abs(calculated_subtotal - invoice.subtotal)
-        tolerance = self._get_tolerance(invoice.subtotal)
+        # Prices without VAT → items sum ≈ subtotal
+        if abs(items_sum - invoice.subtotal) <= self._get_tolerance(invoice.subtotal):
+            return True
 
-        if difference > tolerance:
-            self._warnings.append(
-                ValidationWarning(
-                    warning_type=WarningType.MATH_MISMATCH,
-                    message=(
-                        f"Stavke ({calculated_subtotal}) se ne slažu "
-                        f"sa međuzbirom ({invoice.subtotal})"
-                    ),
-                    field_name="subtotal",
-                    severity="warning",
-                    blocking=False,
-                )
+        # Prices with VAT → items sum ≈ total_amount
+        if invoice.total_amount is not None:
+            if abs(items_sum - invoice.total_amount) <= self._get_tolerance(invoice.total_amount):
+                return True
+
+        self._warnings.append(
+            ValidationWarning(
+                warning_type=WarningType.MATH_MISMATCH,
+                message=(f"Stavke ({items_sum}) se ne slažu sa međuzbirom ({invoice.subtotal})"),
+                field_name="subtotal",
+                severity="warning",
+                blocking=False,
             )
-            return False
-
-        return True
+        )
+        return False
 
     def _validate_total(self, invoice: ExtractedInvoice) -> bool:
         """Validate total = subtotal + tax."""
@@ -124,6 +135,64 @@ class MathValidator:
             return False
 
         return True
+
+    def _validate_tax_groups(self, invoice: ExtractedInvoice) -> bool:
+        """Validate tax group sums against invoice totals.
+
+        Checks:
+        - Sum of group base_amounts ≈ invoice subtotal
+        - Sum of group tax_amounts ≈ invoice tax_amount
+
+        Args:
+            invoice: ExtractedInvoice with non-empty tax_groups.
+
+        Returns:
+            True if all tax group checks pass, False otherwise.
+        """
+        all_valid = True
+
+        group_base_sum = sum(g.base_amount for g in invoice.tax_groups)
+        group_tax_sum = sum(g.tax_amount for g in invoice.tax_groups)
+
+        if invoice.subtotal is not None:
+            diff = abs(group_base_sum - invoice.subtotal)
+            tolerance = self._get_tolerance(invoice.subtotal)
+            if diff > tolerance:
+                self._warnings.append(
+                    ValidationWarning(
+                        warning_type=WarningType.MATH_MISMATCH,
+                        message=(
+                            f"Zbir osnovica iz grupa ({group_base_sum}) "
+                            f"se ne slaže sa međuzbirom "
+                            f"({invoice.subtotal})"
+                        ),
+                        field_name="tax_groups_base",
+                        severity="warning",
+                        blocking=False,
+                    )
+                )
+                all_valid = False
+
+        if invoice.tax_amount is not None:
+            diff = abs(group_tax_sum - invoice.tax_amount)
+            tolerance = self._get_tolerance(invoice.tax_amount)
+            if diff > tolerance:
+                self._warnings.append(
+                    ValidationWarning(
+                        warning_type=WarningType.MATH_MISMATCH,
+                        message=(
+                            f"Zbir PDV-a iz grupa ({group_tax_sum}) "
+                            f"se ne slaže sa ukupnim PDV-om "
+                            f"({invoice.tax_amount})"
+                        ),
+                        field_name="tax_groups_tax",
+                        severity="warning",
+                        blocking=False,
+                    )
+                )
+                all_valid = False
+
+        return all_valid
 
     def _validate_line_item_math(self, invoice: ExtractedInvoice) -> bool:
         """Validate individual line item calculations."""

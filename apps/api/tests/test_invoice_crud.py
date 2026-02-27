@@ -108,6 +108,7 @@ async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
                     }
                 ],
             ),
+            tax_groups=overrides.get("tax_groups", None),
             document_hash=overrides.get("document_hash", uuid4().hex),
             document_path=overrides.get("document_path", "orgs/test/inv/original.pdf"),
             document_content_type=overrides.get("document_content_type", "application/pdf"),
@@ -407,6 +408,64 @@ async def test_update_invoice_reverts_verified_to_review(client: AsyncClient, te
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "review"
+
+
+async def test_update_invoice_tax_groups(client: AsyncClient, test_engine):
+    """PATCH with tax_groups saves and returns the groups."""
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+    inv_id = await _insert_invoice(test_engine, org_id, status="review")
+
+    tax_groups = [
+        {"rate": "20", "base_amount": "97950.00", "tax_amount": "19590.00"},
+        {"rate": "20", "base_amount": "56000.00", "tax_amount": "11200.00"},
+    ]
+    resp = await client.patch(
+        f"/api/v1/invoices/{inv_id}",
+        headers=headers,
+        json={"tax_groups": tax_groups},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["tax_groups"]) == 2
+    assert data["tax_groups"][0]["rate"] == "20"
+    assert data["tax_groups"][0]["base_amount"] == "97950.00"
+    assert data["tax_groups"][1]["tax_amount"] == "11200.00"
+
+
+async def test_get_invoice_with_tax_groups(client: AsyncClient, test_engine):
+    """GET detail returns tax_groups when present in DB."""
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+    inv_id = await _insert_invoice(
+        test_engine,
+        org_id,
+        tax_groups=[
+            {"rate": "10", "base_amount": "5000.00", "tax_amount": "500.00"},
+        ],
+    )
+
+    with patch("app.routers.invoices.get_presigned_url", return_value=""):
+        resp = await client.get(f"/api/v1/invoices/{inv_id}", headers=headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["tax_groups"]) == 1
+    assert data["tax_groups"][0]["rate"] == "10"
+    assert data["tax_groups"][0]["base_amount"] == "5000.00"
+
+
+async def test_get_invoice_without_tax_groups(client: AsyncClient, test_engine):
+    """GET detail returns empty tax_groups when null in DB."""
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+    inv_id = await _insert_invoice(test_engine, org_id)
+
+    with patch("app.routers.invoices.get_presigned_url", return_value=""):
+        resp = await client.get(f"/api/v1/invoices/{inv_id}", headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["tax_groups"] == []
 
 
 async def test_update_invoice_rejects_processing_status(client: AsyncClient, test_engine):

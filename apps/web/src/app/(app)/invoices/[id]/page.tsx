@@ -11,7 +11,7 @@ import { DocumentViewer } from '@/components/DocumentViewer';
 import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { formatAmountSr } from '@/lib/formatters';
-import type { InvoiceUpdate, FieldConfidence, LineItem } from '@/lib/types/invoice';
+import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
 
@@ -159,13 +159,35 @@ export default function InvoiceDetailPage({
   }
 
   function addLineItem() {
-    const items = [...getLineItems(), { description: '', quantity: '1', unit_price: '0', total: '0', tax_rate: null }];
+    const items = [...getLineItems(), { description: '', quantity: '1', unit_price: '0', total: '0', tax_rate: null, tax_amount: null }];
     setField('line_items', items as unknown as string);
   }
 
   function removeLineItem(index: number) {
     const items = getLineItems().filter((_, i) => i !== index);
     setField('line_items', items as unknown as string);
+  }
+
+  // Tax groups editing
+  function getTaxGroups(): TaxGroup[] {
+    if (editedFields.tax_groups) return editedFields.tax_groups as unknown as TaxGroup[];
+    return invoice?.tax_groups ?? [];
+  }
+
+  function setTaxGroup(index: number, field: keyof TaxGroup, value: string) {
+    const groups = [...getTaxGroups()];
+    groups[index] = { ...groups[index], [field]: value };
+    setField('tax_groups', groups as unknown as string);
+  }
+
+  function addTaxGroup() {
+    const groups = [...getTaxGroups(), { rate: '20', base_amount: '0', tax_amount: '0' }];
+    setField('tax_groups', groups as unknown as string);
+  }
+
+  function removeTaxGroup(index: number) {
+    const groups = getTaxGroups().filter((_, i) => i !== index);
+    setField('tax_groups', groups as unknown as string);
   }
 
   if (isLoading) {
@@ -618,6 +640,97 @@ export default function InvoiceDetailPage({
             )}
           </FieldGroup>
 
+          {/* Tax breakdown by rate */}
+          {(getTaxGroups().length > 0 || !isProcessing) && (
+            <FieldGroup
+              title={t('taxBreakdown')}
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              }
+              collapsed={collapsedSections.has('taxGroups')}
+              onToggle={() => toggleSection('taxGroups')}
+            >
+              {getTaxGroups().length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500 mb-2">{tCommon('noData')}</p>
+                  {!isProcessing && (
+                    <button
+                      onClick={addTaxGroup}
+                      className="text-sm text-violet-600 hover:text-violet-700 font-medium"
+                    >
+                      + {t('addTaxGroup')}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {getTaxGroups().map((group, i) => (
+                    <div key={i} className="p-3 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-500">
+                          {t('taxGroupRate')}: {group.rate}%
+                        </span>
+                        {!isProcessing && (
+                          <button
+                            onClick={() => removeTaxGroup(i)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                            title={t('removeTaxGroup')}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('taxGroupRate')} (%)</label>
+                          <input
+                            type="number"
+                            value={group.rate}
+                            onChange={(e) => setTaxGroup(i, 'rate', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('taxGroupBase')}</label>
+                          <input
+                            type="number"
+                            value={group.base_amount}
+                            onChange={(e) => setTaxGroup(i, 'base_amount', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('taxGroupTax')}</label>
+                          <input
+                            type="number"
+                            value={group.tax_amount}
+                            onChange={(e) => setTaxGroup(i, 'tax_amount', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {!isProcessing && (
+                    <button
+                      onClick={addTaxGroup}
+                      className="w-full py-2 text-sm text-violet-600 hover:text-violet-700 hover:bg-violet-50 font-medium rounded-xl transition-colors"
+                    >
+                      + {t('addTaxGroup')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </FieldGroup>
+          )}
+
           {/* Line items */}
           <FieldGroup
             title={t('lineItems')}
@@ -643,62 +756,78 @@ export default function InvoiceDetailPage({
               </div>
             ) : (
               <div className="space-y-3">
-                {getLineItems().map((item, i) => (
-                  <div key={i} className="p-3 bg-gray-50 rounded-xl space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <input
-                        value={item.description}
-                        onChange={(e) => setLineItem(i, 'description', e.target.value)}
-                        disabled={isProcessing}
-                        placeholder={t('description')}
-                        className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
-                      />
-                      {!isProcessing && (
-                        <button
-                          onClick={() => removeLineItem(i)}
-                          className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0"
-                          title={t('removeItem')}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
+                {(() => {
+                  const items = getLineItems();
+                  const hasTaxAmounts = items.some((item) => item.tax_amount != null);
+                  return items.map((item, i) => (
+                    <div key={i} className="p-3 bg-gray-50 rounded-xl space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <input
+                          value={item.description}
+                          onChange={(e) => setLineItem(i, 'description', e.target.value)}
+                          disabled={isProcessing}
+                          placeholder={t('description')}
+                          className="flex-1 px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                        />
+                        {!isProcessing && (
+                          <button
+                            onClick={() => removeLineItem(i)}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                            title={t('removeItem')}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                      <div className={`grid gap-2 ${hasTaxAmounts ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('quantity')}</label>
+                          <input
+                            type="number"
+                            value={item.quantity ?? ''}
+                            onChange={(e) => setLineItem(i, 'quantity', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('unitPrice')}</label>
+                          <input
+                            type="number"
+                            value={item.unit_price ?? ''}
+                            onChange={(e) => setLineItem(i, 'unit_price', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                        {hasTaxAmounts && (
+                          <div>
+                            <label className="text-[10px] text-gray-400 mb-0.5 block">{t('itemTaxAmount')}</label>
+                            <input
+                              type="number"
+                              value={item.tax_amount ?? ''}
+                              onChange={(e) => setLineItem(i, 'tax_amount', e.target.value)}
+                              disabled={isProcessing}
+                              className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-[10px] text-gray-400 mb-0.5 block">{t('itemTotal')}</label>
+                          <input
+                            type="number"
+                            value={item.total ?? ''}
+                            onChange={(e) => setLineItem(i, 'total', e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[10px] text-gray-400 mb-0.5 block">{t('quantity')}</label>
-                        <input
-                          type="number"
-                          value={item.quantity ?? ''}
-                          onChange={(e) => setLineItem(i, 'quantity', e.target.value)}
-                          disabled={isProcessing}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-gray-400 mb-0.5 block">{t('unitPrice')}</label>
-                        <input
-                          type="number"
-                          value={item.unit_price ?? ''}
-                          onChange={(e) => setLineItem(i, 'unit_price', e.target.value)}
-                          disabled={isProcessing}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-gray-400 mb-0.5 block">{t('itemTotal')}</label>
-                        <input
-                          type="number"
-                          value={item.total ?? ''}
-                          onChange={(e) => setLineItem(i, 'total', e.target.value)}
-                          disabled={isProcessing}
-                          className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-right font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ));
+                })()}
                 {!isProcessing && (
                   <button
                     onClick={addLineItem}

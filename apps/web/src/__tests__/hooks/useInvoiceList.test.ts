@@ -18,6 +18,7 @@ const mockInvoice = (overrides: Partial<InvoiceResponse> = {}): InvoiceResponse 
   total_amount: '12000',
   currency: 'RSD',
   line_items: [],
+  tax_groups: null,
   field_confidences: [],
   warnings: [],
   blocked: false,

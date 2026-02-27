@@ -29,6 +29,15 @@ class LineItem(BaseModel):
     unit_price: Decimal | None = None
     total: Decimal | None = None
     tax_rate: Decimal | None = None
+    tax_amount: Decimal | None = None
+
+
+class TaxGroup(BaseModel):
+    """A single tax rate group from invoice breakdown."""
+
+    rate: Decimal
+    base_amount: Decimal
+    tax_amount: Decimal
 
 
 class FieldConfidence(BaseModel):
@@ -82,6 +91,7 @@ class InvoiceUpdate(BaseModel):
     total_amount: Decimal | None = None
     currency: str | None = None
     line_items: list[LineItem] | None = None
+    tax_groups: list[TaxGroup] | None = None
 
 
 class InvoiceResponse(BaseModel):
@@ -109,6 +119,9 @@ class InvoiceResponse(BaseModel):
 
     # Line items
     line_items: list[LineItem] = Field(default_factory=list)
+
+    # Tax breakdown by rate
+    tax_groups: list[TaxGroup] = Field(default_factory=list)
 
     # Confidence details
     field_confidences: list[FieldConfidence] = Field(default_factory=list)

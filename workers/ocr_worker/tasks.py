@@ -313,6 +313,7 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     seller = invoice.get("seller")
     buyer = invoice.get("buyer")
     line_items = invoice.get("line_items")
+    tax_groups = invoice.get("tax_groups")
 
     session = get_session()
     try:
@@ -330,6 +331,7 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                     total_amount = :total_amount,
                     currency = :currency,
                     line_items = :line_items,
+                    tax_groups = :tax_groups,
                     confidence_score = :confidence_score,
                     field_confidence = :field_confidence,
                     warnings = :warnings,
@@ -359,6 +361,9 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                 "currency": invoice.get("currency", "RSD"),
                 "line_items": json.dumps(line_items, default=str, ensure_ascii=False)
                 if line_items
+                else None,
+                "tax_groups": json.dumps(tax_groups, default=str, ensure_ascii=False)
+                if tax_groups
                 else None,
                 "confidence_score": result.get("overall_confidence"),
                 "field_confidence": json.dumps(

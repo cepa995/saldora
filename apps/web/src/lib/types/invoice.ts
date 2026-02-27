@@ -37,6 +37,7 @@ export interface InvoiceUpdate {
   total_amount?: string;
   currency?: string;
   line_items?: LineItem[];
+  tax_groups?: TaxGroup[];
 }
 
 export interface LineItem {
@@ -45,6 +46,13 @@ export interface LineItem {
   unit_price: string | null;
   total: string | null;
   tax_rate: string | null;
+  tax_amount: string | null;
+}
+
+export interface TaxGroup {
+  rate: string;
+  base_amount: string;
+  tax_amount: string;
 }
 
 export interface FieldConfidence {
@@ -76,6 +84,7 @@ export interface InvoiceResponse {
   total_amount: string | null;
   currency: string;
   line_items: LineItem[];
+  tax_groups: TaxGroup[] | null;
   field_confidences: FieldConfidence[];
   warnings: string[];
   blocked: boolean;
