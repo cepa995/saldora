@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 class CompanyInfo(BaseModel):
     """Company information extracted from invoice."""
 
-    pib: str = Field(description="Tax ID (PIB) - 9 digits")
-    name: str
+    pib: str | None = Field(default=None, description="Tax ID (PIB) - 9 digits")
+    mb: str | None = Field(default=None, description="Registration number (MB) - 8 digits")
+    name: str | None = None
     address: str | None = None
     city: str | None = None
     postal_code: str | None = None
@@ -24,10 +25,19 @@ class LineItem(BaseModel):
     """Invoice line item."""
 
     description: str
-    quantity: Decimal = Field(decimal_places=2)
-    unit_price: Decimal = Field(decimal_places=2)
-    total: Decimal = Field(decimal_places=2)
-    tax_rate: Decimal | None = Field(default=None, decimal_places=2)
+    quantity: Decimal | None = None
+    unit_price: Decimal | None = None
+    total: Decimal | None = None
+    tax_rate: Decimal | None = None
+    tax_amount: Decimal | None = None
+
+
+class TaxGroup(BaseModel):
+    """A single tax rate group from invoice breakdown."""
+
+    rate: Decimal
+    base_amount: Decimal
+    tax_amount: Decimal
 
 
 class FieldConfidence(BaseModel):
@@ -64,17 +74,24 @@ class InvoiceUpdate(BaseModel):
     invoice_date: date | None = None
     due_date: date | None = None
     seller_pib: str | None = None
+    seller_mb: str | None = None
     seller_name: str | None = None
     seller_address: str | None = None
+    seller_city: str | None = None
+    seller_postal_code: str | None = None
     buyer_pib: str | None = None
+    buyer_mb: str | None = None
     buyer_name: str | None = None
     buyer_address: str | None = None
+    buyer_city: str | None = None
+    buyer_postal_code: str | None = None
     subtotal: Decimal | None = None
     tax_rate: Decimal | None = None
     tax_amount: Decimal | None = None
     total_amount: Decimal | None = None
     currency: str | None = None
     line_items: list[LineItem] | None = None
+    tax_groups: list[TaxGroup] | None = None
 
 
 class InvoiceResponse(BaseModel):
@@ -103,15 +120,26 @@ class InvoiceResponse(BaseModel):
     # Line items
     line_items: list[LineItem] = Field(default_factory=list)
 
+    # Tax breakdown by rate
+    tax_groups: list[TaxGroup] = Field(default_factory=list)
+
     # Confidence details
     field_confidences: list[FieldConfidence] = Field(default_factory=list)
 
     # Warnings and flags
     warnings: list[str] = Field(default_factory=list)
     blocked: bool = Field(default=False, description="Export blocked due to errors")
+    field_warnings: dict[str, str] = Field(
+        default_factory=dict,
+        description="field_name → severity ('error'|'warning')",
+    )
 
     # Document
     document_url: str | None = None
+
+    # OCR debug data
+    raw_ocr_text: str | None = Field(default=None, description="Raw OCR output text")
+    raw_llm_output: str | None = Field(default=None, description="Raw LLM extraction JSON")
 
     # Timestamps
     created_at: datetime

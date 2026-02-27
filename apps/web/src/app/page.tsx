@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 // Icons as inline SVGs
@@ -242,17 +243,8 @@ function Navigation() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <a href="#" className="flex items-center gap-3 group">
-              <div className="relative">
-                <div className={`w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 transition-all duration-300 group-hover:scale-105 ${scrolled ? "" : ""}`}>
-                  <span className="text-white font-bold text-lg">F</span>
-                </div>
-                <div className="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-300" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">FakturaAI</span>
-                <span className="text-[10px] text-gray-400 font-medium tracking-wider uppercase hidden sm:block">AI za fakture</span>
-              </div>
+            <a href="#" className="flex items-center">
+              <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">FakturaAI</span>
             </a>
 
             {/* Desktop Navigation */}
@@ -2046,14 +2038,14 @@ function Footer() {
         {/* Top section with logo and newsletter */}
         <div className="flex flex-col lg:flex-row justify-between items-start gap-12 mb-16">
           <div className="max-w-sm">
-            <div className="flex items-center gap-3 mb-6 group">
-              <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center group-hover:shadow-lg group-hover:shadow-violet-500/30 transition-all duration-300 group-hover:scale-105">
-                  <span className="text-white font-bold text-xl">F</span>
-                </div>
-                <div className="absolute -inset-1 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl blur opacity-0 group-hover:opacity-30 transition-opacity" />
-              </div>
-              <span className="text-2xl font-bold text-white">FakturaAI</span>
+            <div className="mb-6">
+              <Image
+                src="/logo.png"
+                alt="FakturaAI"
+                width={160}
+                height={107}
+                className="brightness-0 invert"
+              />
             </div>
             <p className="text-gray-400 text-lg leading-relaxed mb-6">
               AI asistent za automatsku obradu faktura. Napravljeno za računovođe u Srbiji.
@@ -2207,78 +2199,6 @@ export default function Home() {
       <CTASection />
       <Footer />
 
-      {/* Custom animations */}
-      <style jsx global>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-12px) rotate(2deg); }
-        }
-
-        @keyframes float-delayed {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          50% { transform: translateY(-8px) rotate(-2deg); }
-        }
-
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(1.05); }
-        }
-
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-
-        @keyframes scan {
-          0% { top: 0; opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { top: 100%; opacity: 1; }
-        }
-
-        @keyframes scroll-indicator {
-          0%, 100% { transform: translateY(0); opacity: 1; }
-          50% { transform: translateY(4px); opacity: 0.5; }
-        }
-
-        @keyframes gradient {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-
-        @keyframes scale-in {
-          0% { transform: scale(0); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        .animate-float { animation: float 5s ease-in-out infinite; }
-        .animate-float-delayed { animation: float-delayed 6s ease-in-out infinite; }
-        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
-        .animate-bounce-slow { animation: bounce-slow 2s ease-in-out infinite; }
-        .animate-scan { animation: scan 2.5s ease-in-out infinite; }
-        .animate-scroll-indicator { animation: scroll-indicator 1.5s ease-in-out infinite; }
-        .animate-gradient { animation: gradient 4s ease infinite; background-size: 200% auto; }
-        .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
-        .animate-spin-slow { animation: spin-slow 10s linear infinite; }
-
-        .animation-delay-2000 { animation-delay: 2s; }
-        .animation-delay-4000 { animation-delay: 4s; }
-
-        @keyframes dash {
-          to { stroke-dashoffset: -20; }
-        }
-        .animate-dash { animation: dash 1s linear infinite; }
-
-        @keyframes scan-horizontal {
-          0%, 100% { transform: translateX(-100%); }
-          50% { transform: translateX(100%); }
-        }
-        .animate-scan-horizontal { animation: scan-horizontal 2s ease-in-out infinite; }
-      `}</style>
     </main>
   );
 }

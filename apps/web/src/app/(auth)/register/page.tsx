@@ -2,19 +2,24 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ApiError } from "@/lib/api-client";
 
-function getErrorMessage(error: unknown): string {
-  const apiError = error as ApiError;
-  if (apiError?.status === 409)
-    return "Korisnik sa ovom e-mail adresom već postoji";
-  if (apiError?.status === 422) return "Molimo unesite ispravne podatke";
-  return "Greška u komunikaciji sa serverom. Pokušajte ponovo.";
+function useErrorMessage() {
+  const t = useTranslations("auth");
+  return (error: unknown): string => {
+    const apiError = error as ApiError;
+    if (apiError?.status === 409) return t("emailExists");
+    if (apiError?.status === 422) return t("invalidData");
+    return t("serverError");
+  };
 }
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const t = useTranslations("auth");
+  const getErrorMessage = useErrorMessage();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -30,11 +35,11 @@ export default function RegisterPage() {
     setError(null);
 
     if (password.length < 8) {
-      setError("Lozinka mora imati minimum 8 karaktera");
+      setError(t("passwordTooShort"));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Lozinke se ne poklapaju");
+      setError(t("passwordMismatch"));
       return;
     }
 
@@ -57,10 +62,8 @@ export default function RegisterPage() {
   return (
     <>
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Registrujte se</h1>
-        <p className="text-sm text-gray-500 mt-2">
-          Kreirajte nalog i počnite sa obradom faktura
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">{t("registerTitle")}</h1>
+        <p className="text-sm text-gray-500 mt-2">{t("registerSubtitle")}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -70,7 +73,7 @@ export default function RegisterPage() {
               htmlFor="firstName"
               className="block text-sm font-medium text-gray-700 mb-1.5"
             >
-              Ime
+              {t("firstName")}
             </label>
             <input
               id="firstName"
@@ -87,7 +90,7 @@ export default function RegisterPage() {
               htmlFor="lastName"
               className="block text-sm font-medium text-gray-700 mb-1.5"
             >
-              Prezime
+              {t("lastName")}
             </label>
             <input
               id="lastName"
@@ -106,7 +109,7 @@ export default function RegisterPage() {
             htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            E-mail adresa <span className="text-red-500">*</span>
+            {t("email")} <span className="text-red-500">*</span>
           </label>
           <input
             id="email"
@@ -114,7 +117,7 @@ export default function RegisterPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="vas@email.com"
+            placeholder={t("emailPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="email"
           />
@@ -125,14 +128,14 @@ export default function RegisterPage() {
             htmlFor="organizationName"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            Naziv organizacije
+            {t("organizationName")}
           </label>
           <input
             id="organizationName"
             type="text"
             value={organizationName}
             onChange={(e) => setOrganizationName(e.target.value)}
-            placeholder="Vaša firma d.o.o."
+            placeholder={t("companyNamePlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="organization"
           />
@@ -143,7 +146,7 @@ export default function RegisterPage() {
             htmlFor="password"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            Lozinka <span className="text-red-500">*</span>
+            {t("password")} <span className="text-red-500">*</span>
           </label>
           <input
             id="password"
@@ -151,11 +154,11 @@ export default function RegisterPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Unesite lozinku"
+            placeholder={t("passwordPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="new-password"
           />
-          <p className="text-xs text-gray-500 mt-1">Minimum 8 karaktera</p>
+          <p className="text-xs text-gray-500 mt-1">{t("passwordMinLength")}</p>
         </div>
 
         <div>
@@ -163,7 +166,7 @@ export default function RegisterPage() {
             htmlFor="confirmPassword"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            Potvrdite lozinku <span className="text-red-500">*</span>
+            {t("confirmPassword")} <span className="text-red-500">*</span>
           </label>
           <input
             id="confirmPassword"
@@ -171,7 +174,7 @@ export default function RegisterPage() {
             required
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Ponovite lozinku"
+            placeholder={t("repeatPasswordPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="new-password"
           />
@@ -188,17 +191,17 @@ export default function RegisterPage() {
           disabled={isLoading}
           className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-violet-500/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Registracija u toku..." : "Registrujte se"}
+          {isLoading ? t("registering") : t("register")}
         </button>
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-6">
-        Već imate nalog?{" "}
+        {t("haveAccount")}{" "}
         <Link
           href="/login"
           className="text-violet-600 font-medium hover:text-violet-700 transition-colors"
         >
-          Prijavite se
+          {t("login")}
         </Link>
       </p>
     </>

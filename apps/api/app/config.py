@@ -52,6 +52,9 @@ class Settings(BaseSettings):
 
     # Storage (S3/R2)
     storage_endpoint: str | None = None
+    storage_public_endpoint: str | None = (
+        None  # Browser-accessible URL (e.g. http://localhost:9010)
+    )
     storage_bucket: str = "fakturaai-documents"
     storage_access_key: str = ""
     storage_secret_key: str = ""
@@ -73,6 +76,8 @@ class Settings(BaseSettings):
     ocr_confidence_threshold: float = 0.80
     ocr_max_file_size_mb: int = 20
     ocr_supported_formats: list[str] = ["pdf", "png", "jpg", "jpeg", "tiff", "webp"]
+    ocr_min_image_width: int = 600
+    ocr_min_image_height: int = 400
 
 
 @lru_cache

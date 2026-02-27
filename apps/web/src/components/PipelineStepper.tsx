@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+
 /**
  * Visual pipeline stepper showing invoice processing stages.
  *
- * Stages: Otpremanje → Na čekanju → OCR obrada → Pregled → Izvoz
+ * Stages: Otpremanje -> Na čekanju -> OCR obrada -> Pregled -> Izvoz
  * Each step can be completed, active (pulsing), pending, waiting, or error.
- * Uses the app's violet brand color (#7c3aed) and custom animations from globals.css.
  */
 
 export type PipelineStatus =
@@ -21,34 +23,33 @@ export type PipelineStatus =
 
 interface PipelineStep {
   key: string;
-  label: string;
-  description: string;
+  labelKey: string;
+  descKey: string;
 }
 
 const PIPELINE_STEPS: PipelineStep[] = [
-  { key: 'upload', label: 'Otpremanje', description: 'Fajl otpremljen' },
-  { key: 'queued', label: 'Na čekanju', description: 'Čeka na obradu' },
-  { key: 'processing', label: 'OCR obrada', description: 'Ekstrakcija podataka' },
-  { key: 'review', label: 'Pregled', description: 'Spremno za pregled' },
-  { key: 'export', label: 'Izvoz', description: 'Spremno za izvoz' },
+  { key: 'upload', labelKey: 'uploading', descKey: 'stepDescUpload' },
+  { key: 'queued', labelKey: 'queued', descKey: 'stepDescQueued' },
+  { key: 'processing', labelKey: 'ocrProcessing', descKey: 'stepDescProcessing' },
+  { key: 'review', labelKey: 'review', descKey: 'stepDescReview' },
 ];
 
-// Map PipelineStatus → index of the active step (0-based)
 const STATUS_TO_ACTIVE_INDEX: Record<PipelineStatus, number> = {
   uploading: 0,
-  uploaded: 0,  // step 0 completed, nothing active (OCR unavailable)
+  uploaded: 0,
   queued: 1,
   processing: 2,
   completed: 3,
   review: 3,
-  verified: 4,
-  exported: 5,  // all done (past last index)
-  error: -1,    // handled separately
+  verified: 3,
+  exported: 3,
+  error: -1,
 };
 
 interface PipelineStepperProps {
   currentStatus: PipelineStatus;
   errorMessage?: string;
+  invoiceId?: string;
 }
 
 type StepState = 'completed' | 'active' | 'pending' | 'waiting' | 'error';
@@ -60,7 +61,6 @@ function getStepStates(currentStatus: PipelineStatus): StepState[] {
 
   const activeIndex = STATUS_TO_ACTIVE_INDEX[currentStatus];
 
-  // 'uploaded' = step 0 done, remaining are 'waiting' (OCR not available)
   if (currentStatus === 'uploaded') {
     return PIPELINE_STEPS.map((_, i) => (i === 0 ? 'completed' : 'waiting'));
   }
@@ -72,9 +72,7 @@ function getStepStates(currentStatus: PipelineStatus): StepState[] {
   });
 }
 
-// --- Step Icons (one per pipeline stage) ---
-
-function UploadIcon({ className }: { className: string }) {
+function UploadStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -83,7 +81,7 @@ function UploadIcon({ className }: { className: string }) {
   );
 }
 
-function QueueIcon({ className }: { className: string }) {
+function QueueStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -92,7 +90,7 @@ function QueueIcon({ className }: { className: string }) {
   );
 }
 
-function ScanIcon({ className }: { className: string }) {
+function ScanStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -101,7 +99,7 @@ function ScanIcon({ className }: { className: string }) {
   );
 }
 
-function ReviewIcon({ className }: { className: string }) {
+function ReviewStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -112,16 +110,7 @@ function ReviewIcon({ className }: { className: string }) {
   );
 }
 
-function ExportIcon({ className }: { className: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  );
-}
-
-function CheckIcon({ className }: { className: string }) {
+function CheckStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -129,7 +118,7 @@ function CheckIcon({ className }: { className: string }) {
   );
 }
 
-function ErrorIcon({ className }: { className: string }) {
+function ErrorStepIcon({ className }: { className: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -137,60 +126,67 @@ function ErrorIcon({ className }: { className: string }) {
   );
 }
 
-const STEP_ICONS = [UploadIcon, QueueIcon, ScanIcon, ReviewIcon, ExportIcon];
+const STEP_ICONS = [UploadStepIcon, QueueStepIcon, ScanStepIcon, ReviewStepIcon];
 
-// --- Step Circle ---
-
-function StepCircle({ state, index }: { state: StepState; index: number }) {
+function StepCircle({ state, index, href }: { state: StepState; index: number; href?: string }) {
   const Icon = STEP_ICONS[index];
   const size = 'w-12 h-12';
   const iconSize = 'w-5 h-5';
 
-  if (state === 'completed') {
-    return (
-      <div className={`${size} rounded-full bg-violet-600 flex items-center justify-center shadow-md shadow-violet-200`}>
-        <CheckIcon className={`${iconSize} text-white`} />
-      </div>
-    );
-  }
-
-  if (state === 'active') {
-    return (
-      <div className="relative flex items-center justify-center">
-        <div className={`absolute ${size} rounded-full bg-violet-400 animate-pulse-soft opacity-40`} />
-        <div className={`absolute w-16 h-16 rounded-full bg-violet-300 opacity-20 animate-ping`} />
-        <div className={`${size} rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center relative shadow-lg shadow-violet-300`}>
-          <Icon className={`${iconSize} text-white`} />
+  const circle = (() => {
+    if (state === 'completed') {
+      return (
+        <div className={`${size} rounded-full bg-violet-600 flex items-center justify-center shadow-md shadow-violet-200`}>
+          <CheckStepIcon className={`${iconSize} text-white`} />
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (state === 'error') {
+    if (state === 'active') {
+      return (
+        <div className="relative flex items-center justify-center">
+          <div className={`absolute ${size} rounded-full bg-violet-400 animate-pulse-soft opacity-40`} />
+          <div className={`absolute w-16 h-16 rounded-full bg-violet-300 opacity-20 animate-ping`} />
+          <div className={`${size} rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center relative shadow-lg shadow-violet-300`}>
+            <Icon className={`${iconSize} text-white`} />
+          </div>
+        </div>
+      );
+    }
+
+    if (state === 'error') {
+      return (
+        <div className={`${size} rounded-full bg-red-500 flex items-center justify-center shadow-md shadow-red-200`}>
+          <ErrorStepIcon className={`${iconSize} text-white`} />
+        </div>
+      );
+    }
+
+    if (state === 'waiting') {
+      return (
+        <div className={`${size} rounded-full bg-amber-100 border-2 border-amber-300 border-dashed flex items-center justify-center`}>
+          <Icon className={`${iconSize} text-amber-500`} />
+        </div>
+      );
+    }
+
     return (
-      <div className={`${size} rounded-full bg-red-500 flex items-center justify-center shadow-md shadow-red-200`}>
-        <ErrorIcon className={`${iconSize} text-white`} />
+      <div className={`${size} rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center`}>
+        <Icon className={`${iconSize} text-gray-400`} />
       </div>
     );
-  }
+  })();
 
-  if (state === 'waiting') {
+  if (href && (state === 'active' || state === 'completed')) {
     return (
-      <div className={`${size} rounded-full bg-amber-100 border-2 border-amber-300 border-dashed flex items-center justify-center`}>
-        <Icon className={`${iconSize} text-amber-500`} />
-      </div>
+      <Link href={href} className="cursor-pointer" title="Pregledaj fakturu">
+        {circle}
+      </Link>
     );
   }
 
-  // pending
-  return (
-    <div className={`${size} rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center`}>
-      <Icon className={`${iconSize} text-gray-400`} />
-    </div>
-  );
+  return circle;
 }
-
-// --- Connector Line ---
 
 function ConnectorLine({ leftState, rightState }: { leftState: StepState; rightState: StepState }) {
   const isActive =
@@ -207,22 +203,22 @@ function ConnectorLine({ leftState, rightState }: { leftState: StepState; rightS
   );
 }
 
-// --- Main Component ---
-
-export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepperProps) {
+export function PipelineStepper({ currentStatus, errorMessage, invoiceId }: PipelineStepperProps) {
+  const t = useTranslations('upload');
   const stepStates = getStepStates(currentStatus);
 
   return (
     <div className="w-full">
-      {/* Steps row */}
       <div className="flex items-start">
         {PIPELINE_STEPS.map((step, i) => (
           <div key={step.key} className="flex items-center flex-1 last:flex-none">
-            {/* Step column */}
             <div className="flex flex-col items-center min-w-[72px]">
-              <StepCircle state={stepStates[i]} index={i} />
+              <StepCircle
+                state={stepStates[i]}
+                index={i}
+                href={i === 3 && invoiceId ? `/invoices/${invoiceId}` : undefined}
+              />
 
-              {/* Label */}
               <span
                 className={`mt-3 text-xs font-semibold text-center whitespace-nowrap tracking-wide ${
                   stepStates[i] === 'completed' || stepStates[i] === 'active'
@@ -234,10 +230,9 @@ export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepper
                         : 'text-gray-400'
                 }`}
               >
-                {step.label}
+                {t(step.labelKey)}
               </span>
 
-              {/* Description (visible for active, completed, waiting) */}
               <span
                 className={`mt-0.5 text-[11px] text-center transition-opacity duration-300 ${
                   stepStates[i] === 'active'
@@ -251,11 +246,10 @@ export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepper
                           : 'text-gray-300 opacity-0'
                 }`}
               >
-                {stepStates[i] === 'waiting' ? 'Čeka na servis' : step.description}
+                {stepStates[i] === 'waiting' ? t('waitingForService') : t(step.descKey)}
               </span>
             </div>
 
-            {/* Connector (centered vertically with circles) */}
             {i < PIPELINE_STEPS.length - 1 && (
               <div className="flex-1 pt-[22px]">
                 <ConnectorLine leftState={stepStates[i]} rightState={stepStates[i + 1]} />
@@ -265,7 +259,6 @@ export function PipelineStepper({ currentStatus, errorMessage }: PipelineStepper
         ))}
       </div>
 
-      {/* Error banner */}
       {currentStatus === 'error' && errorMessage && (
         <div className="mt-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
           <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">

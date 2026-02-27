@@ -40,6 +40,9 @@ class InvoicePipeline:
         confidence_threshold: float = 0.80,
         use_gpu: bool = True,
         model_path: str | None = None,
+        use_llm: bool = False,
+        llm_api_key: str | None = None,
+        llm_model: str = "claude-sonnet-4-20250514",
     ):
         """
         Initialize the invoice processing pipeline.
@@ -50,6 +53,9 @@ class InvoicePipeline:
             confidence_threshold: Threshold below which to use fallback
             use_gpu: Whether to use GPU acceleration
             model_path: Custom path for model weights
+            use_llm: Whether to use LLM-based field extraction (primary)
+            llm_api_key: Anthropic API key for LLM extraction
+            llm_model: Claude model to use for LLM extraction
         """
         self.confidence_threshold = confidence_threshold
         self.use_gpu = use_gpu
@@ -61,6 +67,17 @@ class InvoicePipeline:
         self.pib_validator = PIBValidator()
         self.math_validator = MathValidator()
         self.confidence_calculator = ConfidenceCalculator()
+
+        # LLM extractor (primary field extraction when enabled)
+        self._llm_extractor = None
+        if use_llm:
+            try:
+                from fakturaai_ml.extraction.llm_extractor import LLMFieldExtractor
+
+                self._llm_extractor = LLMFieldExtractor(api_key=llm_api_key, model=llm_model)
+                logger.info("LLM field extraction enabled (model: %s)", llm_model)
+            except Exception as e:
+                logger.warning("Failed to initialize LLM extractor: %s", e)
 
         # Initialize OCR engines (lazy loading)
         self._primary_engine_name = primary_engine
@@ -164,8 +181,20 @@ class InvoicePipeline:
             # Combine text from all pages
             combined_text = "\n\n".join(all_text)
 
-            # Extract structured fields
-            invoice = self.field_extractor.extract(combined_text, all_structured)
+            # Extract structured fields (LLM primary, regex fallback)
+            extractor_used = "regex"
+            if self._llm_extractor is not None:
+                try:
+                    invoice = self._llm_extractor.extract(combined_text, all_structured)
+                    extractor_used = "llm"
+                    logger.info("Field extraction via LLM succeeded")
+                except Exception as e:
+                    logger.warning("LLM extraction failed, falling back to regex: %s", e)
+                    invoice = self.field_extractor.extract(combined_text, all_structured)
+            else:
+                invoice = self.field_extractor.extract(combined_text, all_structured)
+
+            logger.info("Extractor used: %s", extractor_used)
             invoice.raw_text = combined_text
             invoice.raw_structured = all_structured
 

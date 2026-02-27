@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 _s3_client = None
+_s3_public_client = None
 
 _MIME_TO_EXT: dict[str, str] = {
     "application/pdf": ".pdf",
@@ -114,8 +115,35 @@ def upload_document(
     return key
 
 
+def _get_public_s3_client():
+    """Get or create an S3 client for browser-facing presigned URLs.
+
+    When ``STORAGE_PUBLIC_ENDPOINT`` is configured, this returns a client
+    pointing at the public URL so the signature matches the host the browser
+    uses.  Falls back to the internal client when no public endpoint is set.
+
+    Returns:
+        boto3 S3 client configured with the public endpoint.
+    """
+    if not settings.storage_public_endpoint:
+        return get_s3_client()
+    global _s3_public_client
+    if _s3_public_client is None:
+        _s3_public_client = boto3.client(
+            "s3",
+            endpoint_url=settings.storage_public_endpoint,
+            aws_access_key_id=settings.storage_access_key,
+            aws_secret_access_key=settings.storage_secret_key,
+            region_name=settings.storage_region,
+        )
+    return _s3_public_client
+
+
 def get_presigned_url(key: str, expires_in: int = 3600) -> str:
     """Generate a presigned URL for downloading a document.
+
+    Uses ``STORAGE_PUBLIC_ENDPOINT`` (when set) so the signature is valid
+    when the browser accesses the URL from outside Docker.
 
     Args:
         key: S3 object key returned by :func:`upload_document`.
@@ -124,7 +152,7 @@ def get_presigned_url(key: str, expires_in: int = 3600) -> str:
     Returns:
         A temporary URL that grants unauthenticated download access.
     """
-    client = get_s3_client()
+    client = _get_public_s3_client()
     return client.generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.storage_bucket, "Key": key},

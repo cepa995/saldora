@@ -2,10 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function PasswordResetPage() {
   const { requestPasswordReset } = useAuth();
+  const t = useTranslations("auth");
 
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export default function PasswordResetPage() {
       await requestPasswordReset(email);
       setIsSubmitted(true);
     } catch {
-      setError("Greška u komunikaciji sa serverom. Pokušajte ponovo.");
+      setError(t("serverError"));
     } finally {
       setIsLoading(false);
     }
@@ -47,11 +49,10 @@ export default function PasswordResetPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Proverite vaš inbox
+          {t("checkInbox")}
         </h1>
         <p className="text-sm text-gray-500 mb-8">
-          Ako nalog sa tom e-mail adresom postoji, poslaćemo vam uputstva za
-          resetovanje lozinke.
+          {t("resetSuccess")}
         </p>
 
         <Link
@@ -71,7 +72,7 @@ export default function PasswordResetPage() {
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          Nazad na prijavu
+          {t("backToLogin")}
         </Link>
       </div>
     );
@@ -81,11 +82,10 @@ export default function PasswordResetPage() {
     <>
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">
-          Zaboravljena lozinka
+          {t("passwordResetTitle")}
         </h1>
         <p className="text-sm text-gray-500 mt-2">
-          Unesite vašu e-mail adresu i poslaćemo vam link za resetovanje
-          lozinke
+          {t("passwordResetSubtitle")}
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export default function PasswordResetPage() {
             htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-1.5"
           >
-            E-mail adresa
+            {t("email")}
           </label>
           <input
             id="email"
@@ -103,7 +103,7 @@ export default function PasswordResetPage() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="vas@email.com"
+            placeholder={t("emailPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="email"
           />
@@ -120,7 +120,7 @@ export default function PasswordResetPage() {
           disabled={isLoading}
           className="w-full py-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-violet-500/30 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Slanje u toku..." : "Pošaljite link"}
+          {isLoading ? t("sending") : t("sendResetLink")}
         </button>
       </form>
 
@@ -142,7 +142,7 @@ export default function PasswordResetPage() {
               d="M10 19l-7-7m0 0l7-7m-7 7h18"
             />
           </svg>
-          Nazad na prijavu
+          {t("backToLogin")}
         </Link>
       </div>
     </>

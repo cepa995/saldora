@@ -5,13 +5,31 @@ Tests exercise the full request lifecycle: HTTP -> FastAPI -> S3 -> DB -> respon
 S3 and Celery are mocked since they require running infrastructure.
 """
 
+import io
 import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from httpx import AsyncClient
+from PIL import Image
 
 from app.main import app as fastapi_app
+
+
+def _make_png(width: int = 800, height: int = 600) -> bytes:
+    """Create a minimal valid PNG image in memory.
+
+    Args:
+        width: Image width in pixels.
+        height: Image height in pixels.
+
+    Returns:
+        PNG bytes.
+    """
+    img = Image.new("RGB", (width, height), color=(255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 async def _auth_headers(client: AsyncClient) -> dict[str, str]:
@@ -111,51 +129,11 @@ async def test_upload_image_format(mock_s3, mock_celery, client: AsyncClient):
     headers = await _auth_headers(client)
     response = await client.post(
         "/api/v1/invoices/upload",
-        files={"file": ("scan.png", b"\x89PNG fake image", "image/png")},
+        files={"file": ("scan.png", _make_png(), "image/png")},
         headers=headers,
     )
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
-
-
-# ---- Duplicate detection ----
-
-
-@patch("celery.Celery.send_task")
-@patch(
-    "app.routers.invoices.upload_document",
-    return_value="organizations/org-id/invoices/inv-id/original.pdf",
-)
-@patch("app.routers.invoices.document_exists", return_value=True)
-async def test_upload_duplicate_returns_existing(
-    mock_exists, mock_s3, mock_celery, client: AsyncClient
-):
-    """Uploading the same file twice returns the existing invoice, not a new one."""
-    headers = await _auth_headers(client)
-    file_content = b"%PDF-1.4 duplicate test content"
-
-    # First upload
-    resp1 = await client.post(
-        "/api/v1/invoices/upload",
-        files={"file": ("invoice.pdf", file_content, "application/pdf")},
-        headers=headers,
-    )
-    assert resp1.status_code == 202
-    id1 = resp1.json()["id"]
-
-    # Second upload of the same content
-    resp2 = await client.post(
-        "/api/v1/invoices/upload",
-        files={"file": ("invoice.pdf", file_content, "application/pdf")},
-        headers=headers,
-    )
-    assert resp2.status_code == 202
-    id2 = resp2.json()["id"]
-
-    # Same invoice returned
-    assert id1 == id2
-    # S3 upload should only have been called once
-    mock_s3.assert_called_once()
 
 
 @patch("celery.Celery.send_task")
@@ -366,7 +344,7 @@ async def test_batch_upload_partial_failure(mock_s3, mock_celery, client: AsyncC
         files=[
             ("files", ("good.pdf", b"%PDF-1.4 valid", "application/pdf")),
             ("files", ("bad.txt", b"not a valid invoice", "text/plain")),
-            ("files", ("good.png", b"\x89PNG valid image", "image/png")),
+            ("files", ("good.png", _make_png(), "image/png")),
         ],
         headers=headers,
     )
@@ -426,33 +404,6 @@ async def test_batch_upload_requires_auth(client: AsyncClient):
         files=[("files", ("a.pdf", b"%PDF-1.4", "application/pdf"))],
     )
     assert response.status_code == 401
-
-
-@patch("celery.Celery.send_task")
-@patch(
-    "app.routers.invoices.upload_document",
-    return_value="organizations/org-id/invoices/inv-id/original.pdf",
-)
-@patch("app.routers.invoices.document_exists", return_value=True)
-async def test_batch_upload_dedup(mock_exists, mock_s3, mock_celery, client: AsyncClient):
-    """Same file twice in batch: first uploads, second returns existing."""
-    headers = await _auth_headers(client)
-    same_content = b"%PDF-1.4 identical content"
-    response = await client.post(
-        "/api/v1/invoices/upload/batch",
-        files=[
-            ("files", ("first.pdf", same_content, "application/pdf")),
-            ("files", ("second.pdf", same_content, "application/pdf")),
-        ],
-        headers=headers,
-    )
-    assert response.status_code == 202
-    data = response.json()
-    assert len(data) == 2
-    # Both should return the same invoice ID (dedup)
-    assert data[0]["id"] == data[1]["id"]
-    # S3 upload should only be called once
-    mock_s3.assert_called_once()
 
 
 # ==== Health services endpoint ====

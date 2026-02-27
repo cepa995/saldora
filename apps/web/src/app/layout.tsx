@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
 
 const inter = Inter({
-  subsets: ["latin", "latin-ext"],
+  subsets: ["latin", "latin-ext", "cyrillic", "cyrillic-ext"],
   variable: "--font-inter",
 });
 
@@ -19,25 +21,30 @@ export const metadata: Metadata = {
     "automatizacija",
     "AI",
     "Srbija",
-    "księgovodstvo",
   ],
   openGraph: {
     title: "FakturaAI - Automatska obrada faktura",
-    description: "AI koji čita vaše fakture i automatski izvlači sve podatke.",
+    description:
+      "AI koji čita vaše fakture i automatski izvlači sve podatke.",
     locale: "sr_RS",
     type: "website",
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="sr" className="scroll-smooth">
+    <html lang={locale === "en" ? "en" : "sr"} className="scroll-smooth">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <NextIntlClientProvider messages={messages}>
+          <AuthProvider>{children}</AuthProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

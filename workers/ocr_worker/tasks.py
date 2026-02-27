@@ -22,11 +22,22 @@ def get_pipeline():
     if _pipeline is None:
         from fakturaai_ml import InvoicePipeline
 
-        logger.info("Initializing InvoicePipeline...")
+        use_llm = os.getenv("LLM_EXTRACTION_ENABLED", "false").lower() == "true"
+        llm_api_key = os.getenv("ANTHROPIC_API_KEY")
+        llm_model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+
+        logger.info(
+            "Initializing InvoicePipeline (LLM extraction: %s, model: %s)...",
+            use_llm,
+            llm_model if use_llm else "n/a",
+        )
         _pipeline = InvoicePipeline(
             primary_engine=os.getenv("OCR_PRIMARY_ENGINE", "dots"),
             fallback_engine=os.getenv("OCR_FALLBACK_ENGINE", "none"),
             use_gpu=os.getenv("OCR_USE_GPU", "true").lower() == "true",
+            use_llm=use_llm,
+            llm_api_key=llm_api_key,
+            llm_model=llm_model,
         )
         logger.info("InvoicePipeline initialized")
 
@@ -302,6 +313,7 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     seller = invoice.get("seller")
     buyer = invoice.get("buyer")
     line_items = invoice.get("line_items")
+    tax_groups = invoice.get("tax_groups")
 
     session = get_session()
     try:
@@ -319,12 +331,14 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                     total_amount = :total_amount,
                     currency = :currency,
                     line_items = :line_items,
+                    tax_groups = :tax_groups,
                     confidence_score = :confidence_score,
                     field_confidence = :field_confidence,
                     warnings = :warnings,
                     ocr_engine = :ocr_engine,
                     processing_time_ms = :processing_time_ms,
                     raw_ocr_text = :raw_ocr_text,
+                    raw_llm_output = :raw_llm_output,
                     status = 'review',
                     updated_at = NOW()
                 WHERE id = :invoice_id
@@ -348,6 +362,9 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                 "line_items": json.dumps(line_items, default=str, ensure_ascii=False)
                 if line_items
                 else None,
+                "tax_groups": json.dumps(tax_groups, default=str, ensure_ascii=False)
+                if tax_groups
+                else None,
                 "confidence_score": result.get("overall_confidence"),
                 "field_confidence": json.dumps(
                     result.get("field_confidences", []),
@@ -362,6 +379,7 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                 "ocr_engine": result.get("ocr_engine"),
                 "processing_time_ms": result.get("processing_time_ms"),
                 "raw_ocr_text": invoice.get("raw_text"),
+                "raw_llm_output": invoice.get("raw_llm_output"),
             },
         )
         session.commit()

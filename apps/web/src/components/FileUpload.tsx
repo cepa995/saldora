@@ -1,13 +1,21 @@
 'use client';
 
-import { useCallback, useMemo, useState, InputHTMLAttributes } from 'react';
+import { useCallback, useEffect, useMemo, useState, InputHTMLAttributes } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDropzone, FileRejection } from 'react-dropzone';
+import { useTranslations } from 'next-intl';
 import { apiClient } from '@/lib/api-client';
 import { usePollingStatus, ProcessingStatusResponse } from '@/hooks/usePollingStatus';
+import {
+  useUploadFiles,
+  setUploadFiles,
+  clearUploadFiles,
+  removeUploadFile,
+  type UploadedFile,
+} from '@/stores/uploadStore';
 import { PipelineStepper } from './PipelineStepper';
 import type { PipelineStatus } from './PipelineStepper';
 
-// FR-4.2.1: Supported formats and size limits
 const ACCEPTED_FILE_TYPES = {
   'application/pdf': ['.pdf'],
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -17,21 +25,24 @@ const ACCEPTED_FILE_TYPES = {
   'image/webp': ['.webp'],
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB per file
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_BATCH_FILES = 50;
-const MAX_BATCH_TOTAL_SIZE = 200 * 1024 * 1024; // 200 MB total
+const MAX_BATCH_TOTAL_SIZE = 200 * 1024 * 1024;
 
-// Supported format labels for display
 const SUPPORTED_FORMATS = ['PDF', 'JPEG', 'PNG', 'TIFF', 'BMP', 'WEBP'];
 
-export interface UploadedFile {
-  file: File;
-  preview: string | null;
-  status: 'pending' | 'uploading' | 'uploaded' | 'processing' | 'success' | 'error';
-  progress: number;
-  error?: string;
-  jobId?: string;
-}
+const STAGE_KEYS: Record<string, string> = {
+  downloading: 'stageDownloading',
+  preprocessing: 'stagePreprocessing',
+  ocr: 'stageOcr',
+  ocr_running: 'stageOcr',
+  extraction: 'stageExtracting',
+  extracting_fields: 'stageExtracting',
+  validation: 'stageValidating',
+  saving: 'stageSaving',
+};
+
+export type { UploadedFile };
 
 export interface BatchUploadResult {
   id: string;
@@ -48,10 +59,10 @@ interface FileUploadProps {
   onUploadStart?: () => void;
   onUploadComplete?: (results: BatchUploadResult[]) => void;
   onError?: (error: string) => void;
+  onFileCountChange?: (count: number) => void;
   disabled?: boolean;
 }
 
-// Format file size for display
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -60,7 +71,6 @@ function formatFileSize(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-// Map UploadedFile status → PipelineStepper status
 function toPipelineStatus(fileStatus: UploadedFile['status']): PipelineStatus {
   switch (fileStatus) {
     case 'uploading':
@@ -83,9 +93,12 @@ export function FileUpload({
   onUploadStart,
   onUploadComplete,
   onError,
+  onFileCountChange,
   disabled = false,
 }: FileUploadProps) {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const t = useTranslations('upload');
+  const router = useRouter();
+  const uploadedFiles = useUploadFiles();
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const isUploading = uploadedFiles.some((f) => f.status === 'uploading');
@@ -94,7 +107,21 @@ export function FileUpload({
     uploadedFiles.every((f) => f.status === 'success' || f.status === 'error');
   const hasPending = uploadedFiles.some((f) => f.status === 'pending');
 
-  // Collect job IDs that need polling (uploaded or processing, not yet terminal)
+  // Notify parent of file count changes
+  useEffect(() => {
+    onFileCountChange?.(uploadedFiles.length);
+  }, [uploadedFiles.length, onFileCountChange]);
+
+  // Auto-redirect for single file upload on completion
+  useEffect(() => {
+    if (uploadedFiles.length === 1 && uploadedFiles[0].status === 'success' && uploadedFiles[0].jobId) {
+      const timer = setTimeout(() => {
+        router.push(`/invoices/${uploadedFiles[0].jobId}`);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [uploadedFiles, router]);
+
   const pollableJobIds = useMemo(
     () =>
       uploadedFiles
@@ -103,24 +130,23 @@ export function FileUpload({
     [uploadedFiles],
   );
 
-  // Handle status updates from polling
   const handleStatusUpdate = useCallback(
     (jobId: string, data: ProcessingStatusResponse) => {
-      setUploadedFiles((prev) =>
+      setUploadFiles((prev) =>
         prev.map((f) => {
           if (f.jobId !== jobId) return f;
           switch (data.status) {
             case 'queued':
               return { ...f, status: 'uploaded' as const, progress: data.progress };
             case 'processing':
-              return { ...f, status: 'processing' as const, progress: data.progress };
+              return { ...f, status: 'processing' as const, progress: data.progress, stage: data.stage };
             case 'completed':
-              return { ...f, status: 'success' as const, progress: 100 };
+              return { ...f, status: 'success' as const, progress: 100, stage: null };
             case 'failed':
               return {
                 ...f,
                 status: 'error' as const,
-                error: data.error_message || 'Greška pri obradi fakture.',
+                error: data.error_message || t('errorProcessing'),
               };
             default:
               return f;
@@ -128,12 +154,11 @@ export function FileUpload({
         }),
       );
     },
-    [],
+    [t],
   );
 
   usePollingStatus(pollableJobIds, { onStatusUpdate: handleStatusUpdate });
 
-  // Generate preview URL for images
   const generatePreview = (file: File): string | null => {
     if (file.type.startsWith('image/')) {
       return URL.createObjectURL(file);
@@ -141,29 +166,27 @@ export function FileUpload({
     return null;
   };
 
-  // Handle file drop/selection
   const onDrop = useCallback(
     (acceptedFiles: File[], fileRejections: FileRejection[]) => {
       setValidationError(null);
 
-      // Handle rejections
       if (fileRejections.length > 0) {
         const errors = fileRejections.flatMap((r) => r.errors);
 
         if (errors.some((e) => e.code === 'file-too-large')) {
-          const errorMsg = `Fajl je prevelik. Maksimalna veličina po fajlu je ${formatFileSize(MAX_FILE_SIZE)}.`;
+          const errorMsg = t('fileTooBig', { max: '20' });
           setValidationError(errorMsg);
           onError?.(errorMsg);
         } else if (errors.some((e) => e.code === 'file-invalid-type')) {
-          const errorMsg = `Nepodržan format fajla. Podržani formati: ${SUPPORTED_FORMATS.join(', ')}.`;
+          const errorMsg = t('unsupportedFormat');
           setValidationError(errorMsg);
           onError?.(errorMsg);
         } else if (errors.some((e) => e.code === 'too-many-files')) {
-          const errorMsg = `Maksimalan broj fajlova je ${MAX_BATCH_FILES}.`;
+          const errorMsg = t('tooManyFiles', { max: String(MAX_BATCH_FILES) });
           setValidationError(errorMsg);
           onError?.(errorMsg);
         } else {
-          const errorMsg = 'Greška pri učitavanju fajla.';
+          const errorMsg = t('uploadError');
           setValidationError(errorMsg);
           onError?.(errorMsg);
         }
@@ -175,7 +198,7 @@ export function FileUpload({
         const totalCount = currentPending.length + acceptedFiles.length;
 
         if (totalCount > MAX_BATCH_FILES) {
-          const errorMsg = `Maksimalan broj fajlova je ${MAX_BATCH_FILES}. Već imate ${currentPending.length} odabranih.`;
+          const errorMsg = t('tooManyFiles', { max: String(MAX_BATCH_FILES) });
           setValidationError(errorMsg);
           onError?.(errorMsg);
           return;
@@ -185,7 +208,7 @@ export function FileUpload({
         const newTotalSize = currentTotalSize + acceptedFiles.reduce((sum, f) => sum + f.size, 0);
 
         if (newTotalSize > MAX_BATCH_TOTAL_SIZE) {
-          const errorMsg = `Ukupna veličina prevazilazi ${formatFileSize(MAX_BATCH_TOTAL_SIZE)}.`;
+          const errorMsg = t('totalSizeTooLarge', { max: '200' });
           setValidationError(errorMsg);
           onError?.(errorMsg);
           return;
@@ -199,14 +222,13 @@ export function FileUpload({
         }));
 
         const updated = [...currentPending, ...newFiles];
-        setUploadedFiles(updated);
+        setUploadFiles(updated);
         onFilesAccepted?.(acceptedFiles);
       }
     },
-    [uploadedFiles, onFilesAccepted, onError]
+    [uploadedFiles, onFilesAccepted, onError, t]
   );
 
-  // Configure dropzone
   const dropzoneConfig = {
     onDrop,
     accept: ACCEPTED_FILE_TYPES,
@@ -218,12 +240,11 @@ export function FileUpload({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone(dropzoneConfig as any);
 
-  // Upload files to API via batch endpoint
   const handleUpload = async () => {
     const pendingFiles = uploadedFiles.filter((f) => f.status === 'pending');
     if (pendingFiles.length === 0) return;
 
-    setUploadedFiles((prev) =>
+    setUploadFiles((prev) =>
       prev.map((f) => (f.status === 'pending' ? { ...f, status: 'uploading' as const, progress: 0 } : f))
     );
     onUploadStart?.();
@@ -239,8 +260,7 @@ export function FileUpload({
         body: formData,
       });
 
-      // Map results back to files by index (batch endpoint returns results in same order)
-      setUploadedFiles((prev) => {
+      setUploadFiles((prev) => {
         let resultIdx = 0;
         return prev.map((f) => {
           if (f.status !== 'uploading') return f;
@@ -251,13 +271,13 @@ export function FileUpload({
             return {
               ...f,
               status: 'error' as const,
-              error: result.error_message || 'Greška pri obradi fajla.',
+              error: result.error_message || t('processingError'),
             };
           }
           return {
             ...f,
             status: 'uploaded' as const,
-            progress: 100,
+            progress: 0,
             jobId: result.id,
           };
         });
@@ -268,34 +288,24 @@ export function FileUpload({
       const errorMsg =
         error && typeof error === 'object' && 'message' in error
           ? String((error as { message: string }).message)
-          : 'Greška pri slanju fajlova.';
-      setUploadedFiles((prev) =>
+          : t('uploadError');
+      setUploadFiles((prev) =>
         prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'error' as const, error: errorMsg } : f))
       );
       onError?.(errorMsg);
     }
   };
 
-  // Remove a specific file
   const handleRemoveFile = (index: number) => {
-    setUploadedFiles((prev) => {
-      const file = prev[index];
-      if (file?.preview) URL.revokeObjectURL(file.preview);
-      return prev.filter((_, i) => i !== index);
-    });
+    removeUploadFile(index);
     setValidationError(null);
   };
 
-  // Clear all files and reset
   const handleClearAll = () => {
-    uploadedFiles.forEach((f) => {
-      if (f.preview) URL.revokeObjectURL(f.preview);
-    });
-    setUploadedFiles([]);
+    clearUploadFiles();
     setValidationError(null);
   };
 
-  // Determine dropzone styling based on state
   const getDropzoneClassName = (): string => {
     const baseClasses =
       'relative flex flex-col items-center justify-center w-full p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200';
@@ -306,12 +316,21 @@ export function FileUpload({
     }
     if (isDragReject) return `${baseClasses} ${heightClass} border-red-400 bg-red-50`;
     if (isDragAccept) return `${baseClasses} ${heightClass} border-green-400 bg-green-50`;
-    if (isDragActive) return `${baseClasses} ${heightClass} border-blue-400 bg-blue-50`;
-    return `${baseClasses} ${heightClass} border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50`;
+    if (isDragActive) return `${baseClasses} ${heightClass} border-violet-400 bg-violet-50`;
+    return `${baseClasses} ${heightClass} border-gray-300 bg-white hover:border-violet-400 hover:bg-violet-50`;
   };
 
   const pendingCount = uploadedFiles.filter((f) => f.status === 'pending').length;
   const totalSize = uploadedFiles.filter((f) => f.status === 'pending').reduce((sum, f) => sum + f.file.size, 0);
+
+  const getStageText = (stage: string | null | undefined): string => {
+    if (!stage) return t('ocrInProgress');
+    const key = STAGE_KEYS[stage];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return key ? (t as any)(key) : t('ocrInProgress');
+  };
+
+  const isSingleFileRedirecting = uploadedFiles.length === 1 && uploadedFiles[0].status === 'success';
 
   return (
     <div className="w-full max-w-5xl mx-auto">
@@ -320,11 +339,9 @@ export function FileUpload({
         <input {...(getInputProps() as InputHTMLAttributes<HTMLInputElement>)} />
 
         <div className="flex flex-col items-center text-center">
-          {/* Upload Icon — stacked documents to hint at multi-file */}
           <div className="mb-4 relative">
-            {/* Back document (offset) */}
             <svg
-              className={`w-10 h-10 absolute -top-1 -left-1 ${isDragActive ? 'text-blue-300' : 'text-gray-300'}`}
+              className={`w-10 h-10 absolute -top-1 -left-1 ${isDragActive ? 'text-violet-300' : 'text-gray-300'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -336,9 +353,8 @@ export function FileUpload({
                 d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
               />
             </svg>
-            {/* Front document */}
             <svg
-              className={`w-10 h-10 relative z-10 ${isDragActive ? 'text-blue-500' : 'text-gray-400'}`}
+              className={`w-10 h-10 relative z-10 ${isDragActive ? 'text-violet-500' : 'text-gray-400'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -353,30 +369,25 @@ export function FileUpload({
             </svg>
           </div>
 
-          {/* Instructions */}
           {isDragActive ? (
-            <p className="text-lg font-medium text-blue-600">Pustite fajlove ovde...</p>
+            <p className="text-lg font-medium text-violet-600">{t('dropActive')}</p>
           ) : (
             <>
-              <p className="text-lg font-medium text-gray-700 mb-1">
-                Prevucite fakture ovde ili kliknite za odabir
-              </p>
-              <p className="text-sm font-medium text-blue-600 mb-3">
-                Možete odabrati jednu ili više faktura odjednom
-              </p>
+              <p className="text-lg font-medium text-gray-700 mb-1">{t('dropzone')}</p>
+              <p className="text-sm font-medium text-violet-600 mb-3">{t('multipleHint')}</p>
               <div className="flex items-center gap-4 text-xs text-gray-400">
                 <span>{SUPPORTED_FORMATS.join(', ')}</span>
                 <span className="w-1 h-1 rounded-full bg-gray-300" />
-                <span>do {MAX_BATCH_FILES} fajlova</span>
+                <span>{t('maxFilesNote', { max: String(MAX_BATCH_FILES) })}</span>
                 <span className="w-1 h-1 rounded-full bg-gray-300" />
-                <span>{formatFileSize(MAX_FILE_SIZE)} po fajlu</span>
+                <span>{t('maxSizeNote', { size: formatFileSize(MAX_FILE_SIZE) })}</span>
               </div>
             </>
           )}
         </div>
       </div>
 
-      {/* Validation Error Message */}
+      {/* Validation Error */}
       {validationError && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
           <div className="flex items-start gap-3">
@@ -395,12 +406,15 @@ export function FileUpload({
       {/* File List */}
       {uploadedFiles.length > 0 && (
         <div className="mt-4">
-          {/* Header with count and clear button */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-gray-700">
               {hasPending
-                ? `${pendingCount} ${pendingCount === 1 ? 'fajl odabran' : 'fajlova odabrano'} (${formatFileSize(totalSize)})`
-                : `${uploadedFiles.length} ${uploadedFiles.length === 1 ? 'fajl' : 'fajlova'}`}
+                ? pendingCount === 1
+                  ? t('fileSelected', { size: formatFileSize(totalSize) })
+                  : t('filesSelected', { count: String(pendingCount), size: formatFileSize(totalSize) })
+                : uploadedFiles.length === 1
+                  ? t('fileCount')
+                  : t('filesCount', { count: String(uploadedFiles.length) })}
             </p>
             {!isUploading && (
               <button
@@ -408,23 +422,21 @@ export function FileUpload({
                 onClick={handleClearAll}
                 className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
               >
-                Obriši sve
+                {t('clearAll')}
               </button>
             )}
           </div>
 
-          {/* File items */}
           <div className="space-y-4">
             {uploadedFiles.map((uf, index) =>
               uf.status === 'pending' ? (
-                /* Compact card for pending files */
                 <div
                   key={`${uf.file.name}-${index}`}
-                  className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-200"
+                  className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-gray-200 shadow-sm"
                 >
                   <div className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
                     {uf.preview ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- blob URL preview
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
                     ) : (
                       <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
@@ -440,7 +452,7 @@ export function FileUpload({
                     type="button"
                     onClick={() => handleRemoveFile(index)}
                     className="flex-shrink-0 p-1 rounded-full hover:bg-gray-100 transition-colors"
-                    aria-label="Ukloni fajl"
+                    aria-label={t('removeFile')}
                   >
                     <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -448,17 +460,15 @@ export function FileUpload({
                   </button>
                 </div>
               ) : (
-                /* Wide card: preview left | pipeline right */
                 <div
                   key={`${uf.file.name}-${index}`}
                   className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
                 >
                   <div className="flex">
-                    {/* Left: preview + file info */}
                     <div className="flex-shrink-0 w-48 bg-gray-50 border-r border-gray-100 flex flex-col items-center justify-center p-5 gap-3">
                       <div className="w-28 h-36 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center shadow-inner">
                         {uf.preview ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- blob URL preview
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
                         ) : (
                           <svg className="w-12 h-12 text-red-400" fill="currentColor" viewBox="0 0 24 24">
@@ -473,39 +483,53 @@ export function FileUpload({
                       </div>
                     </div>
 
-                    {/* Right: pipeline stepper + status message */}
                     <div className="flex-1 p-6 flex flex-col justify-center">
                       <PipelineStepper
                         currentStatus={toPipelineStatus(uf.status)}
                         errorMessage={uf.error}
+                        invoiceId={uf.jobId}
                       />
 
-                      {/* Per-card status messages */}
-                      {uf.status === 'uploaded' && (
-                        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                          <div className="flex items-center gap-2">
-                            <svg className="animate-spin h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24">
+                      {/* Progress bar for queued/processing */}
+                      {(uf.status === 'uploaded' || uf.status === 'processing') && (
+                        <div className="mt-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-violet-500 to-violet-600 rounded-full transition-all duration-500 ease-out"
+                                style={{ width: `${Math.max(uf.progress, uf.status === 'processing' ? 5 : 0)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold text-violet-600 tabular-nums w-10 text-right">
+                              {uf.progress}%
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <svg className="animate-spin h-3.5 w-3.5 text-violet-500" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
-                            <p className="text-xs font-medium text-blue-800">Čeka na obradu...</p>
+                            <p className="text-xs text-gray-500">
+                              {uf.status === 'uploaded' ? t('waitingForProcessing') : getStageText(uf.stage)}
+                            </p>
                           </div>
                         </div>
                       )}
 
-                      {uf.status === 'processing' && (
-                        <div className="mt-4 flex items-center justify-center gap-2">
-                          <svg className="animate-spin h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                          <p className="text-sm text-violet-600">OCR obrada u toku — ekstrahujemo podatke...</p>
-                        </div>
-                      )}
-
+                      {/* Success state */}
                       {uf.status === 'success' && (
-                        <div className="mt-4 text-center">
-                          <p className="text-sm text-green-600">Obrada završena! Faktura je spremna za pregled.</p>
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          {isSingleFileRedirecting ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                              <p className="text-sm text-violet-600">{t('redirecting')}</p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-green-600">{t('processingComplete')}</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -523,22 +547,24 @@ export function FileUpload({
           <button
             type="button"
             onClick={handleUpload}
-            className="px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+            className="px-6 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 transition-colors"
           >
-            {pendingCount === 1 ? 'Obradi fakturu' : `Obradi fakture (${pendingCount})`}
+            {pendingCount === 1
+              ? t('processOne')
+              : t('processMultiple', { count: String(pendingCount) })}
           </button>
         </div>
       )}
 
-      {/* Upload More Button */}
-      {allDone && (
+      {/* Upload More Button — hidden during single-file auto-redirect */}
+      {allDone && !isSingleFileRedirecting && (
         <div className="mt-6 flex justify-center">
           <button
             type="button"
             onClick={handleClearAll}
             className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
           >
-            Učitaj nove fakture
+            {t('uploadMore')}
           </button>
         </div>
       )}

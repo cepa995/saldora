@@ -55,6 +55,9 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     # Line items
     line_items: Mapped[list | None] = mapped_column(JSON)
 
+    # Tax breakdown by rate (multi-rate invoices)
+    tax_groups: Mapped[list | None] = mapped_column(JSON)
+
     # Document reference
     document_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     document_path: Mapped[str | None] = mapped_column(String(500))
@@ -67,6 +70,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     ocr_engine: Mapped[str | None] = mapped_column(String(50))
     processing_time_ms: Mapped[int | None] = mapped_column()
     raw_ocr_text: Mapped[str | None] = mapped_column(Text)
+    raw_llm_output: Mapped[str | None] = mapped_column(Text)
 
     # Relationships
     organization: Mapped[Organization] = relationship(back_populates="invoices")
