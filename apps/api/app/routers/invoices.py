@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.schemas.invoice import (
@@ -779,6 +780,28 @@ async def update_invoice(
     # Revert verified → review when fields change
     if invoice.status == "verified":
         invoice.status = "review"
+
+    # Log corrections for each changed field (quality monitoring)
+    confidence_map: dict[str, float | None] = {}
+    if invoice.field_confidence:
+        for item in invoice.field_confidence:
+            if isinstance(item, dict):
+                confidence_map[item["field_name"]] = item.get("confidence")
+
+    for field_name, old_val in old_values.items():
+        new_val = updates.get(field_name)
+        if str(old_val) != str(new_val):
+            db.add(
+                CorrectionLog(
+                    invoice_id=invoice.id,
+                    organization_id=user.organization_id,
+                    user_id=user.id,
+                    field_name=field_name,
+                    original_value=str(old_val) if old_val is not None else None,
+                    corrected_value=str(new_val),
+                    model_confidence=confidence_map.get(field_name),
+                )
+            )
 
     # Audit the update (same transaction)
     await audit.log(
