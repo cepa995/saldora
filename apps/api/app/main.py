@@ -7,7 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import auth, export, invoices, webhooks
+from app.middleware import RequestContextMiddleware
+from app.routers import audit_logs, auth, export, invoices, webhooks
 
 settings = get_settings()
 
@@ -91,11 +92,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Request context middleware (extracts IP + User-Agent for audit logging)
+app.add_middleware(RequestContextMiddleware)
+
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["Invoices"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
+app.include_router(audit_logs.router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 
 
 @app.get("/health")
