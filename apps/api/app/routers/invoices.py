@@ -29,6 +29,8 @@ from app.schemas.invoice import (
     TaxGroup,
 )
 from app.services import audit
+from app.services.invoice_verification import check_duplicates, verify_calculations
+from app.services.pib import validate_pib
 from app.services.storage import (
     delete_document,
     get_presigned_url,
@@ -1017,6 +1019,35 @@ async def verify_invoice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Missing required fields for verification: {', '.join(missing)}",
         )
+
+    # Run verification checks (warnings, non-blocking)
+    verification_warnings: list[dict] = []
+
+    # PIB format validation
+    if invoice.seller and isinstance(invoice.seller, dict) and invoice.seller.get("pib"):
+        valid, err = validate_pib(invoice.seller["pib"])
+        if not valid:
+            verification_warnings.append(
+                {"message": err, "severity": "warning", "field_name": "seller_pib"}
+            )
+    if invoice.buyer and isinstance(invoice.buyer, dict) and invoice.buyer.get("pib"):
+        valid, err = validate_pib(invoice.buyer["pib"])
+        if not valid:
+            verification_warnings.append(
+                {"message": err, "severity": "warning", "field_name": "buyer_pib"}
+            )
+
+    # Mathematical verification
+    verification_warnings.extend(verify_calculations(invoice))
+
+    # Duplicate detection
+    dup_warning = await check_duplicates(db, invoice, user.organization_id)
+    if dup_warning:
+        verification_warnings.append(dup_warning)
+
+    # Append verification warnings to invoice
+    if verification_warnings:
+        invoice.warnings = (invoice.warnings or []) + verification_warnings
 
     old_status = invoice.status
     invoice.status = "verified"
