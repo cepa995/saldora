@@ -27,6 +27,7 @@ from app.schemas.invoice import (
     ProcessingStatus,
     TaxGroup,
 )
+from app.services import audit
 from app.services.storage import (
     delete_document,
     get_presigned_url,
@@ -41,6 +42,7 @@ settings = get_settings()
 @router.post("/upload", response_model=ProcessingStatus, status_code=status.HTTP_202_ACCEPTED)
 async def upload_invoice(
     file: Annotated[UploadFile, File(description="Invoice document (PDF, PNG, JPG)")],
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
@@ -107,8 +109,18 @@ async def upload_invoice(
             detail="Failed to upload document to storage",
         ) from e
 
-    # 4. Save document path and commit
+    # 4. Save document path, audit, and commit
     invoice.document_path = document_key
+    await audit.log(
+        db=db,
+        action="invoice.create",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        new_values={"document_hash": document_hash, "content_type": file.content_type},
+    )
     await db.commit()
     await db.refresh(invoice)
 
@@ -667,6 +679,7 @@ async def list_invoices(
 async def update_invoice(
     invoice_id: UUID,
     update_data: InvoiceUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> InvoiceResponse:
@@ -679,6 +692,7 @@ async def update_invoice(
     Args:
         invoice_id: UUID of the invoice to update.
         update_data: Partial update payload.
+        request: HTTP request for audit context.
         db: Database session.
         user: Authenticated user.
 
@@ -695,6 +709,9 @@ async def update_invoice(
         )
 
     updates = update_data.model_dump(exclude_unset=True)
+
+    # Snapshot old values for audit trail
+    old_values = {k: _json_safe(getattr(invoice, k, None)) for k in updates if hasattr(invoice, k)}
 
     # Generate presigned URL so the document stays visible in the response
     document_url = None
@@ -763,6 +780,19 @@ async def update_invoice(
     if invoice.status == "verified":
         invoice.status = "review"
 
+    # Audit the update (same transaction)
+    await audit.log(
+        db=db,
+        action="invoice.update",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        old_values=_json_safe(old_values),
+        new_values=_json_safe(updates),
+    )
+
     await db.commit()
     await db.refresh(invoice)
 
@@ -772,6 +802,7 @@ async def update_invoice(
 @router.delete("/{invoice_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_invoice(
     invoice_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> None:
@@ -779,10 +810,18 @@ async def delete_invoice(
 
     Args:
         invoice_id: UUID of the invoice to delete.
+        request: HTTP request for audit context.
         db: Database session.
         user: Authenticated user.
     """
     invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Snapshot key fields for audit trail before deletion
+    old_values = {
+        "invoice_number": invoice.invoice_number,
+        "status": invoice.status,
+        "total_amount": _json_safe(invoice.total_amount),
+    }
 
     # Delete document from S3 (fail-silent — don't block DB deletion)
     if invoice.document_path:
@@ -794,6 +833,18 @@ async def delete_invoice(
                 invoice_id,
                 invoice.document_path,
             )
+
+    # Audit the deletion (same transaction as the DELETE)
+    await audit.log(
+        db=db,
+        action="invoice.delete",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        old_values=old_values,
+    )
 
     await db.delete(invoice)
     await db.commit()
@@ -900,6 +951,7 @@ async def get_processing_status(
 @router.post("/{invoice_id}/verify", response_model=InvoiceResponse)
 async def verify_invoice(
     invoice_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> InvoiceResponse:
@@ -910,6 +962,7 @@ async def verify_invoice(
 
     Args:
         invoice_id: UUID of the invoice to verify.
+        request: HTTP request for audit context.
         db: Database session.
         user: Authenticated user.
 
@@ -942,7 +995,22 @@ async def verify_invoice(
             detail=f"Missing required fields for verification: {', '.join(missing)}",
         )
 
+    old_status = invoice.status
     invoice.status = "verified"
+
+    # Audit the verification (same transaction)
+    await audit.log(
+        db=db,
+        action="invoice.verify",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        old_values={"status": old_status},
+        new_values={"status": "verified"},
+    )
+
     await db.commit()
     await db.refresh(invoice)
 

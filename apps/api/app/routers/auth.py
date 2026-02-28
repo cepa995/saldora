@@ -1,6 +1,6 @@
 """Authentication router - login, register, token refresh."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError
 from sqlalchemy import select
@@ -18,6 +18,7 @@ from app.database import get_db
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import RefreshRequest, TokenResponse, UserCreate, UserResponse
+from app.services import audit
 
 router = APIRouter()
 settings = get_settings()
@@ -26,6 +27,7 @@ settings = get_settings()
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
@@ -33,6 +35,7 @@ async def register(
 
     Arguments:
         user_data (UserCreate): registration data inserted by the user
+        request (Request): HTTP request for audit context.
         db (AsyncSession): DB session which is being injected via get_db
         dependency
 
@@ -64,6 +67,20 @@ async def register(
         role="admin",  # First user in org is admin
     )
     db.add(user)
+    await db.flush()
+
+    # 4. Audit log (same transaction)
+    await audit.log(
+        db=db,
+        action="user.register",
+        request=request,
+        organization_id=org.id,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        new_values={"email": user.email},
+    )
+
     await db.commit()
     await db.refresh(user)  # Reload to get server-generated fields (id, created_at)
 
@@ -72,6 +89,7 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -79,6 +97,7 @@ async def login(
     API Endpoint for User Authentication/Login
 
     Arguments:
+        request (Request): HTTP request for audit context.
         form_data (OAuth2PasswordRequestForm): login data inserted by the user
         db (AsyncSession): DB session which is being injected via get_db
         dependency
@@ -92,12 +111,33 @@ async def login(
 
     # 2. Verify password (constant-time comparison to prevent timing attacks)
     if not user or not verify_password(form_data.password, user.password_hash):
+        # Audit failed login before raising (separate commit — the main
+        # transaction has nothing else to persist)
+        await audit.log(
+            db=db,
+            action="login_failure",
+            request=request,
+            new_values={"email": form_data.username},
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
 
-    # 3. Generate tokens
+    # 3. Audit successful login
+    await audit.log(
+        db=db,
+        action="login_success",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+    )
+    await db.commit()
+
+    # 4. Generate tokens
     access_token = create_access_token(
         str(user.id),
         str(user.organization_id),
@@ -118,6 +158,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     body: RefreshRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """
@@ -153,7 +194,19 @@ async def refresh(
             detail="User not found",
         )
 
-    # 4. Issue new token pair (rotation)
+    # 4. Audit token refresh
+    await audit.log(
+        db=db,
+        action="token_refresh",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+    )
+    await db.commit()
+
+    # 5. Issue new token pair (rotation)
     access_token = create_access_token(
         str(user.id),
         str(user.organization_id),
