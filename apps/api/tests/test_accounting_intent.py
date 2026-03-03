@@ -20,6 +20,7 @@ from app.services.accounting_intent import (
     classify_document,
     detect_transaction_type,
     determine_vat_treatment,
+    generate_pdv_book_entries,
     suggest_konta,
 )
 
@@ -527,3 +528,238 @@ async def test_reverify_replaces_intent(client: AsyncClient, test_engine):
 
     # Should be a different intent (old deleted, new created)
     assert intent_id_1 != intent_id_2
+
+
+# ==== PDV Book Mapping Tests (Issue #35) ====
+
+
+def _make_invoice(**overrides) -> Invoice:
+    """Create a minimal Invoice instance for PDV book mapping tests."""
+    defaults = {
+        "id": uuid4(),
+        "organization_id": uuid4(),
+        "status": "verified",
+        "invoice_number": "TEST-001",
+        "invoice_date": date(2026, 3, 1),
+        "seller": {"name": "Prodavac DOO", "pib": "123456789"},
+        "buyer": {"name": "Kupac DOO", "pib": ORG_PIB},
+        "subtotal": Decimal("10000.00"),
+        "tax_rate": Decimal("20"),
+        "tax_amount": Decimal("2000.00"),
+        "total_amount": Decimal("12000.00"),
+        "currency": "RSD",
+    }
+    defaults.update(overrides)
+    return Invoice(**defaults)
+
+
+class TestPdvBookEntries:
+    """Tests for generate_pdv_book_entries()."""
+
+    def test_kpr_input_invoice_20_percent(self):
+        """Input invoice at 20% → KPR with polje_8_1, polje_8_2."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "DEDUCTIBLE_FULL", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KPR"
+        assert result["period"] == "2026-03"
+        assert result["sequence"] == 1
+        assert result["counterparty_pib"] == "123456789"
+        assert result["counterparty_name"] == "Prodavac DOO"
+        assert result["base_20"] == "10000"
+        assert result["vat_20"] == "2000"
+        assert result["pp_pdv_fields"]["polje_8_1"] == "10000"
+        assert result["pp_pdv_fields"]["polje_8_2"] == "2000"
+
+    def test_kpr_input_invoice_10_percent(self):
+        """Input invoice at 10% → KPR with polje_9_1, polje_9_2."""
+        inv = _make_invoice(
+            subtotal=Decimal("5000"),
+            tax_rate=Decimal("10"),
+            tax_amount=Decimal("500"),
+            total_amount=Decimal("5500"),
+        )
+        vat_breakdown = {"rate_10": {"base": "5000", "tax": "500"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "DEDUCTIBLE_FULL", vat_breakdown, 3
+        )
+
+        assert result["book_type"] == "KPR"
+        assert result["sequence"] == 3
+        assert result["base_10"] == "5000"
+        assert result["vat_10"] == "500"
+        assert result["pp_pdv_fields"]["polje_9_1"] == "5000"
+        assert result["pp_pdv_fields"]["polje_9_2"] == "500"
+        assert "polje_8_1" not in result["pp_pdv_fields"]
+
+    def test_kir_output_invoice_20_percent(self):
+        """Output invoice at 20% → KIR with polje_3_1, polje_3_2."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "OUTPUT_INVOICE", "DOMESTIC", "OUTPUT_STANDARD", vat_breakdown, 5
+        )
+
+        assert result["book_type"] == "KIR"
+        assert result["counterparty_pib"] == ORG_PIB
+        assert result["counterparty_name"] == "Kupac DOO"
+        assert result["pp_pdv_fields"]["polje_3_1"] == "10000"
+        assert result["pp_pdv_fields"]["polje_3_2"] == "2000"
+
+    def test_kir_output_invoice_10_percent(self):
+        """Output invoice at 10% → KIR with polje_4_1, polje_4_2."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_10": {"base": "8000", "tax": "800"}}
+
+        result = generate_pdv_book_entries(
+            inv, "OUTPUT_INVOICE", "DOMESTIC", "OUTPUT_REDUCED", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KIR"
+        assert result["pp_pdv_fields"]["polje_4_1"] == "8000"
+        assert result["pp_pdv_fields"]["polje_4_2"] == "800"
+
+    def test_multi_rate_invoice(self):
+        """Invoice with 20% and 10% items → both polje sets populated."""
+        inv = _make_invoice(total_amount=Decimal("16500"))
+        vat_breakdown = {
+            "rate_20": {"base": "10000", "tax": "2000"},
+            "rate_10": {"base": "4000", "tax": "400"},
+        }
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "DEDUCTIBLE_FULL", vat_breakdown, 1
+        )
+
+        assert result["base_20"] == "10000"
+        assert result["vat_20"] == "2000"
+        assert result["base_10"] == "4000"
+        assert result["vat_10"] == "400"
+        assert result["pp_pdv_fields"]["polje_8_1"] == "10000"
+        assert result["pp_pdv_fields"]["polje_8_2"] == "2000"
+        assert result["pp_pdv_fields"]["polje_9_1"] == "4000"
+        assert result["pp_pdv_fields"]["polje_9_2"] == "400"
+
+    def test_exempt_output(self):
+        """Exempt output → polje_6 with base only."""
+        inv = _make_invoice(tax_amount=Decimal("0"), total_amount=Decimal("10000"))
+        vat_breakdown = {"rate_0": {"base": "10000", "tax": "0"}}
+
+        result = generate_pdv_book_entries(
+            inv, "OUTPUT_INVOICE", "DOMESTIC", "OUTPUT_EXEMPT", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KIR"
+        assert result["pp_pdv_fields"]["polje_6"] == "10000"
+        assert "polje_3_1" not in result["pp_pdv_fields"]
+
+    def test_reverse_charge_input(self):
+        """Reverse charge input → polje_8a fields."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "REVERSE_CHARGE", "REVERSE_CHARGE_IN", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KPR"
+        assert result["pp_pdv_fields"]["polje_8a_1"] == "10000"
+        assert result["pp_pdv_fields"]["polje_8a_2"] == "2000"
+        assert "polje_8_1" not in result["pp_pdv_fields"]
+
+    def test_reverse_charge_output(self):
+        """Reverse charge output → polje_6a fields."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "OUTPUT_INVOICE", "REVERSE_CHARGE", "REVERSE_CHARGE_OUT", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KIR"
+        assert result["pp_pdv_fields"]["polje_6a_1"] == "10000"
+        assert result["pp_pdv_fields"]["polje_6a_2"] == "2000"
+
+    def test_partial_deductible(self):
+        """Partial deductible → 50% of amounts in polje_8."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "DEDUCTIBLE_PARTIAL", vat_breakdown, 1
+        )
+
+        assert result["pp_pdv_fields"]["polje_8_1"] == "5000.0"
+        assert result["pp_pdv_fields"]["polje_8_2"] == "1000.0"
+
+    def test_non_deductible_no_pp_pdv(self):
+        """Non-deductible → no pp_pdv_fields entries."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "NON_DEDUCTIBLE", vat_breakdown, 1
+        )
+
+        assert result["pp_pdv_fields"] == {}
+
+    def test_credit_note_in_routes_to_kpr(self):
+        """Credit note (input) → KPR."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "CREDIT_NOTE_IN", "DOMESTIC", "DEDUCTIBLE_FULL", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KPR"
+
+    def test_credit_note_out_routes_to_kir(self):
+        """Credit note (output) → KIR."""
+        inv = _make_invoice()
+        vat_breakdown = {"rate_20": {"base": "10000", "tax": "2000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "CREDIT_NOTE_OUT", "DOMESTIC", "OUTPUT_STANDARD", vat_breakdown, 1
+        )
+
+        assert result["book_type"] == "KIR"
+
+    def test_invoice_number_and_total(self):
+        """Entry includes invoice_number and total from invoice."""
+        inv = _make_invoice(invoice_number="FAK-2026-042", total_amount=Decimal("60000"))
+        vat_breakdown = {"rate_20": {"base": "50000", "tax": "10000"}}
+
+        result = generate_pdv_book_entries(
+            inv, "INPUT_INVOICE", "DOMESTIC", "DEDUCTIBLE_FULL", vat_breakdown, 42
+        )
+
+        assert result["invoice_number"] == "FAK-2026-042"
+        assert result["total"] == "60000"
+        assert result["sequence"] == 42
+
+
+async def test_verify_populates_pdv_book_entries(client: AsyncClient, test_engine):
+    """Verify endpoint creates accounting intent with populated pdv_book_entries."""
+    headers = await _register_and_login(client, email="pdv-test@example.com")
+    org_id = _get_org_id(headers)
+    invoice_id = await _insert_invoice(test_engine, org_id)
+
+    await client.post(f"/api/v1/invoices/{invoice_id}/verify", headers=headers)
+    resp = await client.get(f"/api/v1/invoices/{invoice_id}/accounting-intent", headers=headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    pdv = data["pdv_book_entries"]
+
+    assert pdv["book_type"] in ("KPR", "KIR")
+    assert pdv["period"] == "2026-03"
+    assert pdv["sequence"] >= 1
+    assert "pp_pdv_fields" in pdv
+    assert pdv["invoice_number"] == "AI-001"

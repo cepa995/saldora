@@ -122,6 +122,23 @@ export interface KontoEntry {
   amount: string;
 }
 
+export interface PdvBookEntries {
+  book_type: string;
+  period: string;
+  sequence: number;
+  entry_date: string;
+  invoice_date: string;
+  invoice_number: string;
+  counterparty_pib: string;
+  counterparty_name: string;
+  base_20: string;
+  vat_20: string;
+  base_10: string;
+  vat_10: string;
+  total: string;
+  pp_pdv_fields: Record<string, string>;
+}
+
 export interface AccountingIntentResponse {
   id: string;
   invoice_id: string;
@@ -132,6 +149,7 @@ export interface AccountingIntentResponse {
   is_deductible: boolean;
   vat_breakdown: Record<string, { base: string; tax: string }>;
   suggested_konta: { debit: KontoEntry[]; credit: KontoEntry[] };
+  pdv_book_entries: PdvBookEntries | null;
   confidence: string;
   requires_review: boolean;
   review_reasons: string[];

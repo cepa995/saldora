@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import Integer, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.accounting_intent import AccountingIntent
@@ -559,6 +560,255 @@ def build_vat_breakdown(invoice: Invoice) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# PDV Book Mapping (SRS Section 4.10.4)
+# ---------------------------------------------------------------------------
+
+# Document types → book type
+_KPR_DOC_TYPES = {
+    "INPUT_INVOICE",
+    "CREDIT_NOTE_IN",
+    "DEBIT_NOTE_IN",
+    "ADVANCE_INVOICE",
+}
+_KIR_DOC_TYPES = {
+    "OUTPUT_INVOICE",
+    "CREDIT_NOTE_OUT",
+    "DEBIT_NOTE_OUT",
+    "FINAL_INVOICE",
+    "PROFORMA",
+}
+
+
+def _parse_rate(rate_key: str) -> Decimal:
+    """Extract numeric rate from a vat_breakdown key like 'rate_20'.
+
+    Args:
+        rate_key: Key from vat_breakdown dict (e.g. 'rate_20', 'rate_10').
+
+    Returns:
+        Decimal rate value.
+    """
+    parts = rate_key.split("_", 1)
+    try:
+        return Decimal(parts[1]) if len(parts) > 1 else Decimal("0")
+    except Exception:
+        return Decimal("0")
+
+
+def _build_pp_pdv_kpr(
+    vat_treatment: str,
+    vat_breakdown: dict,
+) -> dict[str, str]:
+    """Map VAT breakdown to PP-PDV fields for KPR (input invoices).
+
+    Args:
+        vat_treatment: VAT treatment classification.
+        vat_breakdown: Dict with rate keys mapping to base/tax amounts.
+
+    Returns:
+        Dict of polje field names to string amounts.
+    """
+    fields: dict[str, str] = {}
+
+    if vat_treatment == "NON_DEDUCTIBLE":
+        return fields
+
+    if vat_treatment == "REVERSE_CHARGE_IN":
+        # Reverse charge: all amounts go to polje_8a
+        total_base = Decimal("0")
+        total_tax = Decimal("0")
+        for _key, val in vat_breakdown.items():
+            total_base += Decimal(val.get("base", "0"))
+            total_tax += Decimal(val.get("tax", "0"))
+        fields["polje_8a_1"] = str(total_base)
+        fields["polje_8a_2"] = str(total_tax)
+        return fields
+
+    # DEDUCTIBLE_FULL or DEDUCTIBLE_PARTIAL
+    deductible_ratio = Decimal("0.5") if vat_treatment == "DEDUCTIBLE_PARTIAL" else Decimal("1")
+
+    for rate_key, val in vat_breakdown.items():
+        rate = _parse_rate(rate_key)
+        base = Decimal(val.get("base", "0")) * deductible_ratio
+        tax = Decimal(val.get("tax", "0")) * deductible_ratio
+
+        if rate >= 20:
+            fields["polje_8_1"] = str(base)
+            fields["polje_8_2"] = str(tax)
+        elif rate >= 10:
+            fields["polje_9_1"] = str(base)
+            fields["polje_9_2"] = str(tax)
+        # 0% rates are not recorded in pp_pdv_fields for KPR
+
+    return fields
+
+
+def _build_pp_pdv_kir(
+    vat_treatment: str,
+    vat_breakdown: dict,
+) -> dict[str, str]:
+    """Map VAT breakdown to PP-PDV fields for KIR (output invoices).
+
+    Args:
+        vat_treatment: VAT treatment classification.
+        vat_breakdown: Dict with rate keys mapping to base/tax amounts.
+
+    Returns:
+        Dict of polje field names to string amounts.
+    """
+    fields: dict[str, str] = {}
+
+    if vat_treatment == "REVERSE_CHARGE_OUT":
+        total_base = Decimal("0")
+        total_tax = Decimal("0")
+        for _key, val in vat_breakdown.items():
+            total_base += Decimal(val.get("base", "0"))
+            total_tax += Decimal(val.get("tax", "0"))
+        fields["polje_6a_1"] = str(total_base)
+        fields["polje_6a_2"] = str(total_tax)
+        return fields
+
+    for rate_key, val in vat_breakdown.items():
+        rate = _parse_rate(rate_key)
+        base = val.get("base", "0")
+        tax = val.get("tax", "0")
+
+        if rate >= 20:
+            fields["polje_3_1"] = str(base)
+            fields["polje_3_2"] = str(tax)
+        elif rate >= 10:
+            fields["polje_4_1"] = str(base)
+            fields["polje_4_2"] = str(tax)
+        else:
+            # Exempt — base only, no tax
+            fields["polje_6"] = str(base)
+
+    return fields
+
+
+def generate_pdv_book_entries(
+    invoice: Invoice,
+    document_type: str,
+    transaction_type: str,
+    vat_treatment: str,
+    vat_breakdown: dict,
+    sequence: int,
+) -> dict:
+    """Generate PDV book entry for an invoice (SRS 4.10.4).
+
+    Maps invoice data to KPR (received) or KIR (issued) book entries
+    with PP-PDV field mappings for the Serbian VAT return form.
+
+    Args:
+        invoice: Invoice model instance.
+        document_type: Classification from step 1.
+        transaction_type: Transaction type from step 2.
+        vat_treatment: VAT treatment from step 3.
+        vat_breakdown: VAT breakdown by rate.
+        sequence: Sequential entry number for this org/period.
+
+    Returns:
+        Dict with book_type, period, sequence, entry details, and pp_pdv_fields.
+    """
+    # Determine book type
+    if document_type in _KPR_DOC_TYPES:
+        book_type = "KPR"
+    elif document_type in _KIR_DOC_TYPES:
+        book_type = "KIR"
+    else:
+        book_type = "KPR"  # Default to received
+
+    # Derive period from invoice date
+    if invoice.invoice_date:
+        period = invoice.invoice_date.strftime("%Y-%m")
+    else:
+        period = datetime.now(UTC).strftime("%Y-%m")
+
+    # Extract counterparty info based on book type
+    if book_type == "KPR":
+        counterparty = invoice.seller or {}
+        counterparty_pib = counterparty.get("pib", "") if isinstance(counterparty, dict) else ""
+        counterparty_name = counterparty.get("name", "") if isinstance(counterparty, dict) else ""
+    else:
+        counterparty = invoice.buyer or {}
+        counterparty_pib = counterparty.get("pib", "") if isinstance(counterparty, dict) else ""
+        counterparty_name = counterparty.get("name", "") if isinstance(counterparty, dict) else ""
+
+    # Extract per-rate amounts for the book entry
+    base_20 = "0"
+    vat_20 = "0"
+    base_10 = "0"
+    vat_10 = "0"
+
+    for rate_key, val in vat_breakdown.items():
+        rate = _parse_rate(rate_key)
+        if rate >= 20:
+            base_20 = val.get("base", "0")
+            vat_20 = val.get("tax", "0")
+        elif rate >= 10:
+            base_10 = val.get("base", "0")
+            vat_10 = val.get("tax", "0")
+
+    # Build PP-PDV fields
+    if book_type == "KPR":
+        pp_pdv_fields = _build_pp_pdv_kpr(vat_treatment, vat_breakdown)
+    else:
+        pp_pdv_fields = _build_pp_pdv_kir(vat_treatment, vat_breakdown)
+
+    entry_date = str(invoice.created_at.date()) if invoice.created_at else ""
+    invoice_date_str = str(invoice.invoice_date) if invoice.invoice_date else ""
+
+    return {
+        "book_type": book_type,
+        "period": period,
+        "sequence": sequence,
+        "entry_date": entry_date,
+        "invoice_date": invoice_date_str,
+        "invoice_number": invoice.invoice_number or "",
+        "counterparty_pib": counterparty_pib or "",
+        "counterparty_name": counterparty_name or "",
+        "base_20": str(base_20),
+        "vat_20": str(vat_20),
+        "base_10": str(base_10),
+        "vat_10": str(vat_10),
+        "total": str(invoice.total_amount or "0"),
+        "pp_pdv_fields": pp_pdv_fields,
+    }
+
+
+async def get_next_sequence(
+    db: AsyncSession,
+    organization_id: UUID,
+    period: str,
+) -> int:
+    """Get the next sequential entry number for a PDV book period.
+
+    Args:
+        db: Database session.
+        organization_id: Organization UUID.
+        period: Period string (YYYY-MM).
+
+    Returns:
+        Next sequence number (1-based).
+    """
+    result = await db.execute(
+        select(
+            func.max(
+                cast(
+                    AccountingIntent.pdv_book_entries["sequence"].as_string(),
+                    Integer,
+                )
+            )
+        ).where(
+            AccountingIntent.organization_id == organization_id,
+            AccountingIntent.pdv_book_entries["period"].as_string() == period,
+        )
+    )
+    max_seq = result.scalar()
+    return (max_seq or 0) + 1
+
+
+# ---------------------------------------------------------------------------
 # Step 5: Review Flags
 # ---------------------------------------------------------------------------
 
@@ -699,6 +949,16 @@ async def generate_accounting_intent(
     # Build VAT breakdown
     vat_breakdown = build_vat_breakdown(invoice)
 
+    # Build PDV book entries (KPR/KIR)
+    if invoice.invoice_date:
+        period = invoice.invoice_date.strftime("%Y-%m")
+    else:
+        period = datetime.now(UTC).strftime("%Y-%m")
+    sequence = await get_next_sequence(db, organization_id, period)
+    pdv_book_entries = generate_pdv_book_entries(
+        invoice, document_type, transaction_type, vat_treatment, vat_breakdown, sequence
+    )
+
     # Calculate overall confidence (average of steps)
     overall_confidence = (doc_confidence + txn_confidence + vat_confidence + konta_confidence) / 4
 
@@ -733,7 +993,7 @@ async def generate_accounting_intent(
         is_deductible=is_deductible,
         vat_breakdown=vat_breakdown,
         suggested_konta=suggested_konta_dict,
-        pdv_book_entries={},
+        pdv_book_entries=pdv_book_entries,
         applied_rules=[],
         confidence=overall_confidence,
         requires_review=requires_review,
