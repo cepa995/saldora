@@ -89,6 +89,7 @@ export interface InvoiceResponse {
   warnings: string[];
   blocked: boolean;
   field_warnings: Record<string, 'error' | 'warning'>;
+  accounting_review_needed: boolean | null;
   document_url: string | null;
   raw_ocr_text: string | null;
   raw_llm_output: string | null;
@@ -115,6 +116,32 @@ export type SortColumn =
   | 'status'
   | 'confidence_score';
 
+export interface KontoEntry {
+  konto: string;
+  name: string;
+  amount: string;
+}
+
+export interface AccountingIntentResponse {
+  id: string;
+  invoice_id: string;
+  organization_id: string;
+  document_type: string;
+  transaction_type: string;
+  vat_treatment: string;
+  is_deductible: boolean;
+  vat_breakdown: Record<string, { base: string; tax: string }>;
+  suggested_konta: { debit: KontoEntry[]; credit: KontoEntry[] };
+  confidence: string;
+  requires_review: boolean;
+  review_reasons: string[];
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type SortOrder = 'asc' | 'desc';
 
 export interface InvoiceFilters {
@@ -126,4 +153,5 @@ export interface InvoiceFilters {
   search?: string;
   sort: SortColumn;
   order: SortOrder;
+  accounting_review?: boolean;
 }

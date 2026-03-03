@@ -7,6 +7,7 @@ import pytest
 
 from fakturaai_ml.extraction.fields import FieldExtractor
 from fakturaai_ml.ocr.base import OCRResult
+from fakturaai_ml.pipeline import InvoicePipeline
 from fakturaai_ml.postprocessing.confidence import ConfidenceCalculator
 from fakturaai_ml.types import (
     CompanyData,
@@ -629,3 +630,80 @@ class TestConfidenceOverall:
         needs_review = calculator.get_fields_needing_review(fields)
         assert len(needs_review) == 1
         assert needs_review[0].field_name == "buyer_name"
+
+
+# ===========================================================================
+# Amount derivation tests (InvoicePipeline._derive_amounts)
+# ===========================================================================
+
+
+class TestDeriveAmounts:
+    """Tests for _derive_amounts() — filling missing amount fields."""
+
+    def _derive(self, invoice: ExtractedInvoice) -> None:
+        """Call _derive_amounts on a pipeline instance."""
+        pipeline = InvoicePipeline.__new__(InvoicePipeline)
+        pipeline._derive_amounts(invoice)
+
+    def test_subtotal_only_no_tax_fields(self):
+        """subtotal=900000, no tax fields → total_amount = subtotal."""
+        inv = ExtractedInvoice(subtotal=Decimal("900000"))
+        self._derive(inv)
+        assert inv.total_amount == Decimal("900000")
+
+    def test_subtotal_with_zero_tax_rate(self):
+        """subtotal=50000, tax_rate=0 → total_amount = subtotal."""
+        inv = ExtractedInvoice(subtotal=Decimal("50000"), tax_rate=Decimal("0"))
+        self._derive(inv)
+        assert inv.total_amount == Decimal("50000")
+        assert inv.tax_amount == Decimal("0")
+
+    def test_subtotal_with_zero_tax_amount(self):
+        """subtotal=50000, tax_amount=0 → total_amount = subtotal."""
+        inv = ExtractedInvoice(subtotal=Decimal("50000"), tax_amount=Decimal("0"))
+        self._derive(inv)
+        assert inv.total_amount == Decimal("50000")
+
+    def test_subtotal_plus_tax_amount(self):
+        """subtotal=10000, tax_amount=2000 → total_amount = 12000."""
+        inv = ExtractedInvoice(subtotal=Decimal("10000"), tax_amount=Decimal("2000"))
+        self._derive(inv)
+        assert inv.total_amount == Decimal("12000")
+
+    def test_subtotal_plus_tax_rate(self):
+        """subtotal=10000, tax_rate=20 → tax_amount=2000, total=12000."""
+        inv = ExtractedInvoice(subtotal=Decimal("10000"), tax_rate=Decimal("20"))
+        self._derive(inv)
+        assert inv.tax_amount == Decimal("2000.00")
+        assert inv.total_amount == Decimal("12000.00")
+
+    def test_total_minus_tax_gives_subtotal(self):
+        """total=12000, tax_amount=2000 → subtotal = 10000."""
+        inv = ExtractedInvoice(total_amount=Decimal("12000"), tax_amount=Decimal("2000"))
+        self._derive(inv)
+        assert inv.subtotal == Decimal("10000")
+
+    def test_total_with_zero_tax_gives_subtotal(self):
+        """total=50000, tax_rate=0 → subtotal = 50000."""
+        inv = ExtractedInvoice(total_amount=Decimal("50000"), tax_rate=Decimal("0"))
+        self._derive(inv)
+        assert inv.subtotal == Decimal("50000")
+
+    def test_all_present_no_change(self):
+        """All fields present → no modification."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            tax_rate=Decimal("20"),
+            tax_amount=Decimal("2000"),
+            total_amount=Decimal("12000"),
+        )
+        self._derive(inv)
+        assert inv.subtotal == Decimal("10000")
+        assert inv.total_amount == Decimal("12000")
+
+    def test_nothing_present_no_change(self):
+        """All fields None → no modification."""
+        inv = ExtractedInvoice()
+        self._derive(inv)
+        assert inv.subtotal is None
+        assert inv.total_amount is None

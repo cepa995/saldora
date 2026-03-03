@@ -28,6 +28,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "organizations"
 
     name: Mapped[str] = mapped_column(String(255))
+    pib: Mapped[str | None] = mapped_column(String(20))
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255))
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255))
     plan: Mapped[str] = mapped_column(String(50), default="free")
