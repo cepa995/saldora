@@ -2,6 +2,7 @@
 
 import logging
 import time
+from decimal import Decimal
 from pathlib import Path
 from typing import BinaryIO
 
@@ -19,6 +20,34 @@ from fakturaai_ml.validation.math_check import MathValidator
 from fakturaai_ml.validation.pib import PIBValidator
 
 logger = logging.getLogger(__name__)
+
+# Valid Serbian VAT rates (Zakon o PDV-u)
+_SERBIAN_VAT_RATES = [Decimal("0"), Decimal("10"), Decimal("20")]
+
+
+def _snap_to_serbian_rate(raw_rate: Decimal) -> Decimal | None:
+    """Snap a computed VAT rate to a valid Serbian rate if close enough.
+
+    Serbian invoices have three legal VAT rates: 0%, 10%, and 20%.
+    OCR/extraction may produce slightly off rates due to rounding.
+    This snaps to the nearest valid rate if within 1 percentage point.
+
+    Args:
+        raw_rate: Computed rate (e.g. 19.98 or 20.05).
+
+    Returns:
+        Snapped Decimal rate, or None if no valid rate is close.
+    """
+    best_rate = None
+    best_diff = Decimal("999")
+    for valid_rate in _SERBIAN_VAT_RATES:
+        diff = abs(raw_rate - valid_rate)
+        if diff < best_diff:
+            best_diff = diff
+            best_rate = valid_rate
+    if best_diff <= Decimal("1"):
+        return best_rate
+    return None
 
 
 class InvoicePipeline:
@@ -322,6 +351,40 @@ class InvoicePipeline:
             elif no_tax:
                 invoice.subtotal = invoice.total_amount
                 logger.info("Derived subtotal = total_amount (zero tax)")
+
+        # Case 3: Infer tax_rate from subtotal + tax_amount
+        if (
+            invoice.tax_rate is None
+            and invoice.subtotal is not None
+            and invoice.subtotal > 0
+            and invoice.tax_amount is not None
+            and invoice.tax_amount > 0
+        ):
+            raw_rate = (invoice.tax_amount / invoice.subtotal * Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            # Snap to valid Serbian VAT rates if close (within 1%)
+            snapped = _snap_to_serbian_rate(raw_rate)
+            if snapped is not None:
+                invoice.tax_rate = snapped
+                logger.info("Inferred tax_rate = %s%% from subtotal + tax_amount", snapped)
+
+        # Case 4: Infer tax_groups when empty but we have subtotal + tax_amount + rate
+        if (
+            not invoice.tax_groups
+            and invoice.subtotal is not None
+            and invoice.tax_amount is not None
+            and invoice.tax_rate is not None
+            and invoice.tax_rate > 0
+        ):
+            invoice.tax_groups = [
+                {
+                    "rate": str(invoice.tax_rate),
+                    "base_amount": str(invoice.subtotal),
+                    "tax_amount": str(invoice.tax_amount),
+                }
+            ]
+            logger.info("Inferred single tax_group from rate=%s%%", invoice.tax_rate)
 
     def _validate_invoice(self, invoice: ExtractedInvoice) -> None:
         """Run validation checks on extracted invoice."""

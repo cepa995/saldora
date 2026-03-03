@@ -56,7 +56,7 @@ def verify_calculations(invoice: Invoice) -> list[dict]:
     ref_amount = invoice.total_amount or Decimal("0")
     tolerance = get_tolerance(ref_amount)
 
-    # Check 1: Line items sum = subtotal
+    # Check 1: Line items sum = subtotal (or total if VAT-inclusive pricing)
     if invoice.line_items and invoice.subtotal is not None:
         calculated_subtotal = Decimal("0")
         for item in invoice.line_items:
@@ -66,13 +66,22 @@ def verify_calculations(invoice: Invoice) -> list[dict]:
 
         diff = abs(calculated_subtotal - Decimal(str(invoice.subtotal)))
         if diff > tolerance:
-            warnings.append(
-                {
-                    "message": f"Stavke se ne slažu sa međuzbirom (razlika: {diff} RSD)",
-                    "severity": "warning",
-                    "field_name": "subtotal",
-                }
-            )
+            # Serbian invoices may list "Cena sa PDV" (VAT-inclusive prices).
+            # In that case line items sum to total_amount, not subtotal.
+            vat_inclusive = False
+            if invoice.total_amount is not None:
+                diff_to_total = abs(calculated_subtotal - Decimal(str(invoice.total_amount)))
+                if diff_to_total <= tolerance:
+                    vat_inclusive = True
+
+            if not vat_inclusive:
+                warnings.append(
+                    {
+                        "message": f"Stavke se ne slažu sa međuzbirom (razlika: {diff} RSD)",
+                        "severity": "warning",
+                        "field_name": "subtotal",
+                    }
+                )
 
     # Check 2: Subtotal + tax_amount = total_amount
     if (

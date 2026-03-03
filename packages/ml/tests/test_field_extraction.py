@@ -7,7 +7,7 @@ import pytest
 
 from fakturaai_ml.extraction.fields import FieldExtractor
 from fakturaai_ml.ocr.base import OCRResult
-from fakturaai_ml.pipeline import InvoicePipeline
+from fakturaai_ml.pipeline import InvoicePipeline, _snap_to_serbian_rate
 from fakturaai_ml.postprocessing.confidence import ConfidenceCalculator
 from fakturaai_ml.types import (
     CompanyData,
@@ -707,3 +707,92 @@ class TestDeriveAmounts:
         self._derive(inv)
         assert inv.subtotal is None
         assert inv.total_amount is None
+
+    def test_infer_tax_rate_from_subtotal_and_tax_amount(self):
+        """subtotal=10482.58, tax_amount=2096.52 → tax_rate=20 (snapped)."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10482.58"),
+            tax_amount=Decimal("2096.52"),
+            total_amount=Decimal("12579.10"),
+        )
+        self._derive(inv)
+        assert inv.tax_rate == Decimal("20")
+
+    def test_infer_tax_rate_10_percent(self):
+        """subtotal=10000, tax_amount=1000 → tax_rate=10."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            tax_amount=Decimal("1000"),
+            total_amount=Decimal("11000"),
+        )
+        self._derive(inv)
+        assert inv.tax_rate == Decimal("10")
+
+    def test_infer_tax_rate_no_snap_for_invalid(self):
+        """subtotal=10000, tax_amount=1500 (15%) → no valid Serbian rate."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            tax_amount=Decimal("1500"),
+            total_amount=Decimal("11500"),
+        )
+        self._derive(inv)
+        assert inv.tax_rate is None
+
+    def test_infer_tax_groups_when_empty(self):
+        """Empty tax_groups + known amounts → single group inferred."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            tax_amount=Decimal("2000"),
+            total_amount=Decimal("12000"),
+            tax_rate=Decimal("20"),
+        )
+        self._derive(inv)
+        assert len(inv.tax_groups) == 1
+        assert inv.tax_groups[0]["rate"] == "20"
+        assert inv.tax_groups[0]["base_amount"] == "10000"
+        assert inv.tax_groups[0]["tax_amount"] == "2000"
+
+    def test_infer_tax_rate_then_groups(self):
+        """Both tax_rate and tax_groups inferred in one pass."""
+        inv = ExtractedInvoice(
+            subtotal=Decimal("10000"),
+            tax_amount=Decimal("2000"),
+            total_amount=Decimal("12000"),
+        )
+        self._derive(inv)
+        assert inv.tax_rate == Decimal("20")
+        assert len(inv.tax_groups) == 1
+
+
+# ===========================================================================
+# _snap_to_serbian_rate tests
+# ===========================================================================
+
+
+class TestSnapToSerbianRate:
+    """Tests for the _snap_to_serbian_rate helper."""
+
+    def test_exact_20(self):
+        assert _snap_to_serbian_rate(Decimal("20")) == Decimal("20")
+
+    def test_exact_10(self):
+        assert _snap_to_serbian_rate(Decimal("10")) == Decimal("10")
+
+    def test_exact_0(self):
+        assert _snap_to_serbian_rate(Decimal("0")) == Decimal("0")
+
+    def test_close_to_20(self):
+        assert _snap_to_serbian_rate(Decimal("19.98")) == Decimal("20")
+        assert _snap_to_serbian_rate(Decimal("20.05")) == Decimal("20")
+
+    def test_close_to_10(self):
+        assert _snap_to_serbian_rate(Decimal("10.50")) == Decimal("10")
+
+    def test_too_far_from_any_rate(self):
+        assert _snap_to_serbian_rate(Decimal("15")) is None
+
+    def test_boundary_within_1(self):
+        assert _snap_to_serbian_rate(Decimal("21")) == Decimal("20")
+
+    def test_boundary_beyond_1(self):
+        assert _snap_to_serbian_rate(Decimal("21.01")) is None
