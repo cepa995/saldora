@@ -23,6 +23,8 @@ const mockInvoice = (overrides: Partial<InvoiceResponse> = {}): InvoiceResponse 
   warnings: [],
   blocked: false,
   field_warnings: {},
+  accounting_review_needed: null,
+  pdv_book_type: null,
   document_url: null,
   raw_ocr_text: null,
   raw_llm_output: null,

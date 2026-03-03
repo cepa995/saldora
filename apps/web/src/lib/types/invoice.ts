@@ -90,6 +90,7 @@ export interface InvoiceResponse {
   blocked: boolean;
   field_warnings: Record<string, 'error' | 'warning'>;
   accounting_review_needed: boolean | null;
+  pdv_book_type: string | null;
   document_url: string | null;
   raw_ocr_text: string | null;
   raw_llm_output: string | null;
@@ -172,4 +173,5 @@ export interface InvoiceFilters {
   sort: SortColumn;
   order: SortOrder;
   accounting_review?: boolean;
+  book_type?: 'KPR' | 'KIR';
 }
