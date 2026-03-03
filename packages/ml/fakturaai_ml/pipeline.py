@@ -276,9 +276,9 @@ class InvoicePipeline:
         """Run validation checks on extracted invoice."""
         # PIB validation
         if invoice.seller.pib:
-            self.pib_validator.validate(invoice.seller.pib)
+            self.pib_validator.validate(invoice.seller.pib, entity="seller_pib")
         if invoice.buyer.pib:
-            self.pib_validator.validate(invoice.buyer.pib)
+            self.pib_validator.validate(invoice.buyer.pib, entity="buyer_pib")
 
         # Math validation
         self.math_validator.validate(invoice)

@@ -1028,13 +1028,21 @@ async def verify_invoice(
         valid, err = validate_pib(invoice.seller["pib"])
         if not valid:
             verification_warnings.append(
-                {"message": err, "severity": "warning", "field_name": "seller_pib"}
+                {
+                    "message": f"PIB prodavca: {err}",
+                    "severity": "warning",
+                    "field_name": "seller_pib",
+                }
             )
     if invoice.buyer and isinstance(invoice.buyer, dict) and invoice.buyer.get("pib"):
         valid, err = validate_pib(invoice.buyer["pib"])
         if not valid:
             verification_warnings.append(
-                {"message": err, "severity": "warning", "field_name": "buyer_pib"}
+                {
+                    "message": f"PIB kupca: {err}",
+                    "severity": "warning",
+                    "field_name": "buyer_pib",
+                }
             )
 
     # Mathematical verification

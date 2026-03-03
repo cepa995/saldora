@@ -18,9 +18,9 @@ from fakturaai_ml.types import (
 from fakturaai_ml.validation.math_check import MathValidator, VATRateValidator
 from fakturaai_ml.validation.pib import PIBValidator
 
-# Valid PIBs with correct mod-11 checksums (pre-computed)
-VALID_PIB_1 = "103867028"
-VALID_PIB_2 = "205149832"
+# Valid PIBs with correct ISO 7064 Mod 11,10 checksums (pre-computed)
+VALID_PIB_1 = "103867022"
+VALID_PIB_2 = "205149838"
 INVALID_PIB_CHECKSUM = "103867029"  # correct format, wrong check digit
 
 
