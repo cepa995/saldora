@@ -31,6 +31,7 @@ export default function InvoicesPage() {
   const t = useTranslations('invoices');
   const tCommon = useTranslations('common');
   const tStatus = useTranslations('status');
+  const tDetail = useTranslations('detail');
   const {
     invoices,
     pagination,
@@ -40,6 +41,7 @@ export default function InvoicesPage() {
     selectedIds,
     setStatus,
     setAccountingReview,
+    setBookType,
     setSearch,
     setDateRange,
     setSort,
@@ -172,6 +174,30 @@ export default function InvoicesPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {t('needsAccountingReview')}
+          </button>
+
+          {/* PDV book type filters */}
+          <button
+            onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
+            title={tDetail('bookTypeKPR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KPR'
+                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KPR
+          </button>
+          <button
+            onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
+            title={tDetail('bookTypeKIR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KIR'
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KIR
           </button>
 
           {/* Date range */}
@@ -322,8 +348,21 @@ export default function InvoicesPage() {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={invoice.status} />
+                          {invoice.pdv_book_type && (
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${
+                                invoice.pdv_book_type === 'KPR'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : 'bg-emerald-50 text-emerald-700'
+                              }`}
+                            >
+                              {invoice.pdv_book_type}
+                            </span>
+                          )}
                           {invoice.accounting_review_needed && (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title={t('needsAccountingReview')} />
+                            <svg className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20" role="img" aria-label={t('needsAccountingReview')}>
+                              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                            </svg>
                           )}
                         </div>
                       </td>
@@ -387,8 +426,21 @@ export default function InvoicesPage() {
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={invoice.status} />
+                        {invoice.pdv_book_type && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${
+                              invoice.pdv_book_type === 'KPR'
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                            }`}
+                          >
+                            {invoice.pdv_book_type}
+                          </span>
+                        )}
                         {invoice.accounting_review_needed && (
-                          <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title={t('needsAccountingReview')} />
+                          <svg className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20" role="img" aria-label={t('needsAccountingReview')}>
+                            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                          </svg>
                         )}
                       </div>
                       <span className="text-sm font-semibold text-gray-900">

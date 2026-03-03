@@ -25,6 +25,8 @@ const mockInvoice: InvoiceResponse = {
   warnings: [],
   blocked: false,
   field_warnings: {},
+  accounting_review_needed: null,
+  pdv_book_type: null,
   document_url: 'https://example.com/doc.pdf',
   raw_ocr_text: null,
   raw_llm_output: null,

@@ -140,6 +140,12 @@ class InvoiceResponse(BaseModel):
         description="True if accounting intent requires review, None if no intent exists",
     )
 
+    # PDV book type (populated in list view from accounting_intents)
+    pdv_book_type: str | None = Field(
+        default=None,
+        description="PDV book type: KPR (received) or KIR (issued), None if no intent exists",
+    )
+
     # Document
     document_url: str | None = None
 

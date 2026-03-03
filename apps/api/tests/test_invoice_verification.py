@@ -269,6 +269,40 @@ def test_line_items_correct_math():
     assert len(warnings) == 0
 
 
+def test_vat_inclusive_line_items_no_warning():
+    """Line items with VAT-inclusive prices sum to total_amount — no warning."""
+    inv = _make_invoice(
+        subtotal=Decimal("10482.58"),
+        tax_amount=Decimal("2096.52"),
+        total_amount=Decimal("12579.10"),
+        line_items=[
+            {"description": "FILTER KABINE", "total": "1639.50"},
+            {"description": "FILTER ULJA", "total": "1111.50"},
+            {"description": "Usluga servisa", "total": "9828.10"},
+            # Sum = 12579.10 = total_amount (VAT-inclusive pricing)
+        ],
+    )
+    warnings = verify_calculations(inv)
+    subtotal_warnings = [w for w in warnings if w["field_name"] == "subtotal"]
+    assert len(subtotal_warnings) == 0
+
+
+def test_vat_inclusive_line_items_neither_match():
+    """Line items that match neither subtotal nor total still produce a warning."""
+    inv = _make_invoice(
+        subtotal=Decimal("10000.00"),
+        tax_amount=Decimal("2000.00"),
+        total_amount=Decimal("12000.00"),
+        line_items=[
+            {"description": "Item", "total": "5000.00"},
+            # Sum = 5000, doesn't match subtotal (10000) or total (12000)
+        ],
+    )
+    warnings = verify_calculations(inv)
+    subtotal_warnings = [w for w in warnings if w["field_name"] == "subtotal"]
+    assert len(subtotal_warnings) == 1
+
+
 # ---- Duplicate detection tests (API) ----
 
 

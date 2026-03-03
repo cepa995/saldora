@@ -495,6 +495,53 @@ export default function InvoiceDetailPage({
                   </div>
                 )}
 
+                {/* PDV Book Entry */}
+                {accountingIntent.pdv_book_entries && accountingIntent.pdv_book_entries.book_type && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('pdvBookTitle')}</div>
+                    <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${
+                          accountingIntent.pdv_book_entries.book_type === 'KPR'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {accountingIntent.pdv_book_entries.book_type === 'KPR' ? t('bookTypeKPR') : t('bookTypeKIR')}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {t('pdvPeriod')}: {accountingIntent.pdv_book_entries.period} · #{accountingIntent.pdv_book_entries.sequence}
+                        </span>
+                      </div>
+                      {accountingIntent.pdv_book_entries.counterparty_name && (
+                        <div className="text-sm text-gray-700">
+                          {accountingIntent.pdv_book_entries.counterparty_name}
+                          {accountingIntent.pdv_book_entries.counterparty_pib && (
+                            <span className="text-gray-400 ml-1.5 font-mono text-xs">
+                              PIB: {accountingIntent.pdv_book_entries.counterparty_pib}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* PP-PDV Fields */}
+                      {accountingIntent.pdv_book_entries.pp_pdv_fields && Object.keys(accountingIntent.pdv_book_entries.pp_pdv_fields).length > 0 && (
+                        <div className="bg-white rounded-lg overflow-hidden border border-gray-100">
+                          <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                            <span className="text-xs font-medium text-gray-500">{t('ppPdvFields')}</span>
+                          </div>
+                          <div className="divide-y divide-gray-50">
+                            {Object.entries(accountingIntent.pdv_book_entries.pp_pdv_fields).map(([field, amount]) => (
+                              <div key={field} className="flex items-center justify-between px-3 py-1.5">
+                                <span className="text-xs font-mono text-gray-600">{field.replace(/_/g, ' ').replace('polje', 'Polje')}</span>
+                                <span className="text-sm font-medium text-gray-900 tabular-nums">{formatAmountSr(String(amount))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Confidence + review status */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${

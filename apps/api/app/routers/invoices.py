@@ -410,6 +410,7 @@ def _build_invoice_response(
     invoice: Invoice,
     document_url: str | None = None,
     accounting_review_needed: bool | None = None,
+    pdv_book_type: str | None = None,
 ) -> InvoiceResponse:
     """Convert an Invoice model to an InvoiceResponse schema.
 
@@ -420,6 +421,7 @@ def _build_invoice_response(
         invoice: SQLAlchemy Invoice model instance.
         document_url: Optional presigned S3 URL for the document.
         accounting_review_needed: Whether the accounting intent needs review.
+        pdv_book_type: PDV book type (KPR/KIR) from accounting intent.
 
     Returns:
         InvoiceResponse ready for serialization.
@@ -499,6 +501,7 @@ def _build_invoice_response(
         blocked=blocked,
         field_warnings=field_warnings,
         accounting_review_needed=accounting_review_needed,
+        pdv_book_type=pdv_book_type,
         document_url=document_url,
         raw_ocr_text=invoice.raw_ocr_text,
         raw_llm_output=invoice.raw_llm_output,
@@ -586,6 +589,7 @@ async def list_invoices(
     sort: str = "created_at",
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
     accounting_review: bool | None = Query(default=None),
+    book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -603,6 +607,7 @@ async def list_invoices(
         sort: Sort column (created_at, invoice_date, total_amount, status, confidence_score).
         order: Sort direction (asc or desc).
         accounting_review: Filter by accounting review status (true = needs review).
+        book_type: Filter by PDV book type (KPR or KIR).
 
     Returns:
         Paginated list of invoices with metadata.
@@ -671,6 +676,16 @@ async def list_invoices(
             )
         )
 
+    # PDV book type filter (subquery on accounting_intents JSONB)
+    if book_type:
+        conditions.append(
+            Invoice.id.in_(
+                select(AccountingIntent.invoice_id).where(
+                    AccountingIntent.pdv_book_entries["book_type"].as_string() == book_type
+                )
+            )
+        )
+
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)
 
@@ -693,24 +708,29 @@ async def list_invoices(
     result = await db.execute(paginated_query)
     invoices = result.scalars().all()
 
-    # Batch-load accounting review flags for the returned invoices
+    # Batch-load accounting review flags and book types for the returned invoices
     review_map: dict[str, bool] = {}
+    book_type_map: dict[str, str | None] = {}
     if invoices:
         invoice_ids = [inv.id for inv in invoices]
-        review_result = await db.execute(
+        intent_result = await db.execute(
             select(
                 AccountingIntent.invoice_id,
                 AccountingIntent.requires_review,
+                AccountingIntent.pdv_book_entries["book_type"].as_string().label("book_type"),
             ).where(AccountingIntent.invoice_id.in_(invoice_ids))
         )
-        for row in review_result:
-            review_map[str(row.invoice_id)] = row.requires_review
+        for row in intent_result:
+            inv_id = str(row.invoice_id)
+            review_map[inv_id] = row.requires_review
+            book_type_map[inv_id] = row.book_type
 
     # Build responses (no presigned URLs in list view — too expensive)
     data = [
         _build_invoice_response(
             inv,
             accounting_review_needed=review_map.get(str(inv.id)),
+            pdv_book_type=book_type_map.get(str(inv.id)),
         )
         for inv in invoices
     ]
