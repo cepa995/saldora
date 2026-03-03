@@ -962,6 +962,27 @@ async def generate_accounting_intent(
     # Calculate overall confidence (average of steps)
     overall_confidence = (doc_confidence + txn_confidence + vat_confidence + konta_confidence) / 4
 
+    # Step 4.5: Apply automation rules
+    from app.services.rules_engine import evaluate_rules
+
+    rule_modifications, applied_rules = await evaluate_rules(
+        db,
+        invoice,
+        organization_id,
+        document_type,
+        suggested_konta_dict,
+        vat_treatment,
+        overall_confidence,
+    )
+
+    # Merge rule modifications into pipeline state
+    if rule_modifications.get("suggested_konta"):
+        suggested_konta_dict = rule_modifications["suggested_konta"]
+    if rule_modifications.get("vat_treatment"):
+        vat_treatment = rule_modifications["vat_treatment"]
+    if rule_modifications.get("is_deductible") is not None:
+        is_deductible = rule_modifications["is_deductible"]
+
     # Step 5: Review flags (async — queries DB)
     requires_review, review_reasons = await decide_review_flags(
         db,
@@ -972,12 +993,20 @@ async def generate_accounting_intent(
         suggested_konta_dict,
     )
 
+    # Merge rule-based review overrides
+    if rule_modifications.get("requires_review"):
+        requires_review = True
+        review_reasons.extend(rule_modifications.get("review_reasons", []))
+    if rule_modifications.get("auto_approve") and not rule_modifications.get("requires_review"):
+        requires_review = False
+
     logger.info(
-        "Invoice %s: confidence=%.2f, requires_review=%s, reasons=%s",
+        "Invoice %s: confidence=%.2f, requires_review=%s, reasons=%s, rules_applied=%d",
         invoice.id,
         overall_confidence,
         requires_review,
         review_reasons,
+        len(applied_rules),
     )
 
     # Delete existing intent for this invoice (re-verification case)
@@ -994,7 +1023,7 @@ async def generate_accounting_intent(
         vat_breakdown=vat_breakdown,
         suggested_konta=suggested_konta_dict,
         pdv_book_entries=pdv_book_entries,
-        applied_rules=[],
+        applied_rules=applied_rules,
         confidence=overall_confidence,
         requires_review=requires_review,
         review_reasons=review_reasons,
