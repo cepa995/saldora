@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.accounting_intent import AccountingIntent
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
 from app.models.user import User
+from app.schemas.accounting_intent import AccountingIntentResponse, AccountingIntentReviewRequest
 from app.schemas.invoice import (
     CompanyInfo,
     FieldConfidence,
@@ -29,6 +31,7 @@ from app.schemas.invoice import (
     TaxGroup,
 )
 from app.services import audit
+from app.services.accounting_intent import generate_accounting_intent
 from app.services.invoice_verification import check_duplicates, verify_calculations
 from app.services.pib import validate_pib
 from app.services.storage import (
@@ -403,7 +406,11 @@ def _json_safe(obj):
     return obj
 
 
-def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -> InvoiceResponse:
+def _build_invoice_response(
+    invoice: Invoice,
+    document_url: str | None = None,
+    accounting_review_needed: bool | None = None,
+) -> InvoiceResponse:
     """Convert an Invoice model to an InvoiceResponse schema.
 
     Handles JSON → Pydantic conversion for nested fields, confidence
@@ -412,6 +419,7 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
     Args:
         invoice: SQLAlchemy Invoice model instance.
         document_url: Optional presigned S3 URL for the document.
+        accounting_review_needed: Whether the accounting intent needs review.
 
     Returns:
         InvoiceResponse ready for serialization.
@@ -490,6 +498,7 @@ def _build_invoice_response(invoice: Invoice, document_url: str | None = None) -
         warnings=warnings,
         blocked=blocked,
         field_warnings=field_warnings,
+        accounting_review_needed=accounting_review_needed,
         document_url=document_url,
         raw_ocr_text=invoice.raw_ocr_text,
         raw_llm_output=invoice.raw_llm_output,
@@ -576,6 +585,7 @@ async def list_invoices(
     search: str | None = None,
     sort: str = "created_at",
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    accounting_review: bool | None = Query(default=None),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -592,6 +602,7 @@ async def list_invoices(
         search: Search invoice number, seller name, or buyer name.
         sort: Sort column (created_at, invoice_date, total_amount, status, confidence_score).
         order: Sort direction (asc or desc).
+        accounting_review: Filter by accounting review status (true = needs review).
 
     Returns:
         Paginated list of invoices with metadata.
@@ -642,6 +653,24 @@ async def list_invoices(
             | (Invoice.buyer["name"].as_string().ilike(like_pattern))
         )
 
+    # Accounting review filter (subquery on accounting_intents)
+    if accounting_review is True:
+        conditions.append(
+            Invoice.id.in_(
+                select(AccountingIntent.invoice_id).where(
+                    AccountingIntent.requires_review.is_(True)
+                )
+            )
+        )
+    elif accounting_review is False:
+        conditions.append(
+            ~Invoice.id.in_(
+                select(AccountingIntent.invoice_id).where(
+                    AccountingIntent.requires_review.is_(True)
+                )
+            )
+        )
+
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)
 
@@ -664,8 +693,27 @@ async def list_invoices(
     result = await db.execute(paginated_query)
     invoices = result.scalars().all()
 
+    # Batch-load accounting review flags for the returned invoices
+    review_map: dict[str, bool] = {}
+    if invoices:
+        invoice_ids = [inv.id for inv in invoices]
+        review_result = await db.execute(
+            select(
+                AccountingIntent.invoice_id,
+                AccountingIntent.requires_review,
+            ).where(AccountingIntent.invoice_id.in_(invoice_ids))
+        )
+        for row in review_result:
+            review_map[str(row.invoice_id)] = row.requires_review
+
     # Build responses (no presigned URLs in list view — too expensive)
-    data = [_build_invoice_response(inv) for inv in invoices]
+    data = [
+        _build_invoice_response(
+            inv,
+            accounting_review_needed=review_map.get(str(inv.id)),
+        )
+        for inv in invoices
+    ]
 
     return InvoiceListResponse(
         data=data,
@@ -1057,6 +1105,14 @@ async def verify_invoice(
     if verification_warnings:
         invoice.warnings = (invoice.warnings or []) + verification_warnings
 
+    # Generate accounting intent (non-blocking).
+    # Uses a savepoint so a failure here does not poison the parent transaction.
+    try:
+        async with db.begin_nested():
+            await generate_accounting_intent(db, invoice, user.organization_id)
+    except Exception:
+        logger.exception("Failed to generate AccountingIntent for invoice %s", invoice.id)
+
     old_status = invoice.status
     invoice.status = "verified"
 
@@ -1085,3 +1141,91 @@ async def verify_invoice(
             logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
 
     return _build_invoice_response(invoice, document_url)
+
+
+@router.get("/{invoice_id}/accounting-intent", response_model=AccountingIntentResponse)
+async def get_accounting_intent(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AccountingIntentResponse:
+    """Get the accounting intent for an invoice.
+
+    Returns the accounting classification, VAT treatment, suggested konta,
+    and review flags generated during verification.
+
+    Args:
+        invoice_id: UUID of the invoice.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        AccountingIntentResponse with classification details.
+    """
+    # Verify invoice belongs to user's organization
+    await _get_invoice_or_404(invoice_id, db, user)
+
+    result = await db.execute(
+        select(AccountingIntent).where(
+            AccountingIntent.invoice_id == invoice_id,
+            AccountingIntent.organization_id == user.organization_id,
+        )
+    )
+    intent = result.scalar_one_or_none()
+
+    if not intent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accounting intent not found. Invoice must be verified first.",
+        )
+
+    return AccountingIntentResponse.model_validate(intent)
+
+
+@router.post("/{invoice_id}/accounting-intent/review", response_model=AccountingIntentResponse)
+async def review_accounting_intent(
+    invoice_id: UUID,
+    body: AccountingIntentReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AccountingIntentResponse:
+    """Mark an accounting intent as reviewed.
+
+    Sets reviewed_by to the current user and reviewed_at to now.
+    Clears the requires_review flag.
+
+    Args:
+        invoice_id: UUID of the invoice.
+        body: Optional notes from the reviewer.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Updated AccountingIntentResponse.
+    """
+    await _get_invoice_or_404(invoice_id, db, user)
+
+    result = await db.execute(
+        select(AccountingIntent).where(
+            AccountingIntent.invoice_id == invoice_id,
+            AccountingIntent.organization_id == user.organization_id,
+        )
+    )
+    intent = result.scalar_one_or_none()
+
+    if not intent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accounting intent not found. Invoice must be verified first.",
+        )
+
+    intent.requires_review = False
+    intent.reviewed_by = user.id
+    intent.reviewed_at = datetime.now(UTC)
+    if body.notes is not None:
+        intent.notes = body.notes
+
+    await db.commit()
+    await db.refresh(intent)
+
+    return AccountingIntentResponse.model_validate(intent)

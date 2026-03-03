@@ -6,6 +6,7 @@
 
 import { apiClient } from '@/lib/api-client';
 import type {
+  AccountingIntentResponse,
   InvoiceFilters,
   InvoiceListResponse,
   InvoiceResponse,
@@ -33,6 +34,8 @@ export async function fetchInvoices(
   if (filters.search) params.set('search', filters.search);
   if (filters.sort) params.set('sort', filters.sort);
   if (filters.order) params.set('order', filters.order);
+  if (filters.accounting_review !== undefined)
+    params.set('accounting_review', String(filters.accounting_review));
 
   const query = params.toString();
   const endpoint = query ? `/api/v1/invoices?${query}` : '/api/v1/invoices';
@@ -93,4 +96,46 @@ export async function updateInvoice(
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+}
+
+/**
+ * Fetch accounting intent for a verified invoice.
+ *
+ * Args:
+ *   invoiceId - UUID of the invoice.
+ * Returns:
+ *   Accounting intent or null if not yet generated.
+ */
+export async function fetchAccountingIntent(
+  invoiceId: string,
+): Promise<AccountingIntentResponse | null> {
+  try {
+    return await apiClient<AccountingIntentResponse>(
+      `/api/v1/invoices/${invoiceId}/accounting-intent`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mark an accounting intent as reviewed.
+ *
+ * Args:
+ *   invoiceId - UUID of the invoice.
+ *   notes - Optional reviewer notes.
+ * Returns:
+ *   Updated accounting intent.
+ */
+export async function reviewAccountingIntent(
+  invoiceId: string,
+  notes?: string,
+): Promise<AccountingIntentResponse> {
+  return apiClient<AccountingIntentResponse>(
+    `/api/v1/invoices/${invoiceId}/accounting-intent/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ notes: notes ?? null }),
+    },
+  );
 }

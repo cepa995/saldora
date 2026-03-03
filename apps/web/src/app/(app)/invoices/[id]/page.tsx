@@ -11,7 +11,8 @@ import { DocumentViewer } from '@/components/DocumentViewer';
 import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { formatAmountSr } from '@/lib/formatters';
-import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup } from '@/lib/types/invoice';
+import { fetchAccountingIntent, reviewAccountingIntent } from '@/lib/api/invoices';
+import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
 
@@ -43,10 +44,19 @@ export default function InvoiceDetailPage({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [accountingIntent, setAccountingIntent] = useState<AccountingIntentResponse | null>(null);
+  const [isReviewingIntent, setIsReviewingIntent] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const isProcessing = invoice?.status === 'processing';
   const canVerify = invoice?.status === 'review';
+
+  // Load accounting intent for verified invoices
+  useEffect(() => {
+    if (invoice?.status === 'verified' || invoice?.status === 'exported') {
+      fetchAccountingIntent(id).then(setAccountingIntent);
+    }
+  }, [id, invoice?.status]);
 
   // Close more menu on outside click
   useEffect(() => {
@@ -120,8 +130,24 @@ export default function InvoiceDetailPage({
 
   const handleVerify = useCallback(async () => {
     const ok = await verify();
-    if (ok) setToast({ message: t('verifySuccess'), type: 'success' });
-  }, [verify, t]);
+    if (ok) {
+      setToast({ message: t('verifySuccess'), type: 'success' });
+      fetchAccountingIntent(id).then(setAccountingIntent);
+    }
+  }, [verify, t, id]);
+
+  const handleReviewIntent = useCallback(async () => {
+    setIsReviewingIntent(true);
+    try {
+      const updated = await reviewAccountingIntent(id);
+      setAccountingIntent(updated);
+      setToast({ message: t('intentReviewSuccess'), type: 'success' });
+    } catch {
+      setToast({ message: t('intentReviewError'), type: 'error' });
+    } finally {
+      setIsReviewingIntent(false);
+    }
+  }, [id, t]);
 
   const handleDelete = useCallback(async () => {
     setShowDeleteConfirm(false);
@@ -348,6 +374,187 @@ export default function InvoiceDetailPage({
 
         {/* Data form */}
         <div className="lg:w-1/2 space-y-4 lg:overflow-y-auto lg:pb-16">
+          {/* Accounting intent (shown after verification) */}
+          {accountingIntent && (
+            <FieldGroup
+              title={t('accountingIntent')}
+              icon={
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              }
+              collapsed={collapsedSections.has('accountingIntent')}
+              onToggle={() => toggleSection('accountingIntent')}
+            >
+              <div className="space-y-4">
+                {/* Classification badges */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('documentType')}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {t(`doctype_${accountingIntent.document_type}` as Parameters<typeof t>[0])}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('transactionType')}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {t(`txntype_${accountingIntent.transaction_type}` as Parameters<typeof t>[0])}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('vatTreatment')}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {t(`vat_${accountingIntent.vat_treatment}` as Parameters<typeof t>[0])}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-xs text-gray-500 mb-1">{t('deductible')}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {accountingIntent.is_deductible ? (
+                        <span className="inline-flex items-center gap-1 text-green-700">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          {t('deductibleYes')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-red-700">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          {t('deductibleNo')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suggested konta */}
+                {accountingIntent.suggested_konta && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('suggestedKonta')}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Debit */}
+                      <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3">
+                        <div className="text-xs font-medium text-blue-600 mb-2">{t('debitSide')}</div>
+                        <div className="space-y-2">
+                          {(accountingIntent.suggested_konta.debit || []).map((entry, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-mono text-sm font-semibold text-gray-900">{entry.konto}</div>
+                                <div className="text-xs text-gray-500 truncate">{entry.name}</div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-700 tabular-nums whitespace-nowrap">{formatAmountSr(entry.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Credit */}
+                      <div className="border border-emerald-100 bg-emerald-50/50 rounded-xl p-3">
+                        <div className="text-xs font-medium text-emerald-600 mb-2">{t('creditSide')}</div>
+                        <div className="space-y-2">
+                          {(accountingIntent.suggested_konta.credit || []).map((entry, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="font-mono text-sm font-semibold text-gray-900">{entry.konto}</div>
+                                <div className="text-xs text-gray-500 truncate">{entry.name}</div>
+                              </div>
+                              <span className="text-sm font-medium text-gray-700 tabular-nums whitespace-nowrap">{formatAmountSr(entry.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* VAT breakdown */}
+                {accountingIntent.vat_breakdown && Object.keys(accountingIntent.vat_breakdown).length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('vatBreakdown')}</div>
+                    <div className="bg-gray-50 rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-gray-500 border-b border-gray-200">
+                            <th className="text-left px-3 py-2 font-medium">{t('rate')}</th>
+                            <th className="text-right px-3 py-2 font-medium">{t('base')}</th>
+                            <th className="text-right px-3 py-2 font-medium">{t('tax')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(accountingIntent.vat_breakdown).map(([key, val]) => (
+                            <tr key={key} className="border-b border-gray-100 last:border-0">
+                              <td className="px-3 py-2 text-gray-900 font-medium">{key.replace('rate_', '')}%</td>
+                              <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{formatAmountSr(val.base)}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{formatAmountSr(val.tax)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confidence + review status */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                    parseFloat(accountingIntent.confidence) >= 0.85
+                      ? 'bg-green-100 text-green-700'
+                      : parseFloat(accountingIntent.confidence) >= 0.70
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
+                  }`}>
+                    {t('intentConfidence')}: {(parseFloat(accountingIntent.confidence) * 100).toFixed(0)}%
+                  </span>
+                  {accountingIntent.requires_review && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-100 text-amber-700">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {t('requiresReview')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Review reasons */}
+                {accountingIntent.review_reasons.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <div className="text-xs font-medium text-amber-700 mb-1.5">{t('reviewReasons')}</div>
+                    <ul className="space-y-1">
+                      {accountingIntent.review_reasons.map((reason, i) => (
+                        <li key={i} className="text-sm text-amber-800 flex items-start gap-1.5">
+                          <span className="mt-1.5 w-1 h-1 bg-amber-400 rounded-full shrink-0" />
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Approve / Reviewed state */}
+                {accountingIntent.requires_review ? (
+                  <button
+                    onClick={handleReviewIntent}
+                    disabled={isReviewingIntent}
+                    className="w-full px-4 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {isReviewingIntent ? t('approving') : t('approveIntent')}
+                  </button>
+                ) : accountingIntent.reviewed_at && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {t('intentApproved')}
+                  </div>
+                )}
+              </div>
+            </FieldGroup>
+          )}
+
           {/* Invoice info */}
           <FieldGroup
             title={t('invoiceInfo')}

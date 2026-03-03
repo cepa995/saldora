@@ -39,6 +39,7 @@ export default function InvoicesPage() {
     error,
     selectedIds,
     setStatus,
+    setAccountingReview,
     setSearch,
     setDateRange,
     setSort,
@@ -157,6 +158,21 @@ export default function InvoicesPage() {
               );
             })}
           </div>
+
+          {/* Accounting review filter */}
+          <button
+            onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+              filters.accounting_review === true
+                ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {t('needsAccountingReview')}
+          </button>
 
           {/* Date range */}
           <div className="flex items-center gap-2 sm:ml-auto">
@@ -304,7 +320,12 @@ export default function InvoicesPage() {
                         />
                       </td>
                       <td className="px-4 py-3.5">
-                        <StatusBadge status={invoice.status} />
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={invoice.status} />
+                          {invoice.accounting_review_needed && (
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title={t('needsAccountingReview')} />
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-sm text-gray-700">
                         {formatDateSr(invoice.invoice_date)}
@@ -364,7 +385,12 @@ export default function InvoicesPage() {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <StatusBadge status={invoice.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={invoice.status} />
+                        {invoice.accounting_review_needed && (
+                          <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title={t('needsAccountingReview')} />
+                        )}
+                      </div>
                       <span className="text-sm font-semibold text-gray-900">
                         {formatAmountSr(invoice.total_amount, invoice.currency)}
                       </span>

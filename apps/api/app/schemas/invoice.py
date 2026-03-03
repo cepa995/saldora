@@ -134,6 +134,12 @@ class InvoiceResponse(BaseModel):
         description="field_name → severity ('error'|'warning')",
     )
 
+    # Accounting review flag (populated in list view)
+    accounting_review_needed: bool | None = Field(
+        default=None,
+        description="True if accounting intent requires review, None if no intent exists",
+    )
+
     # Document
     document_url: str | None = None
 

@@ -33,7 +33,13 @@ export function DocumentViewer({ url }: DocumentViewerProps) {
     );
   }
 
-  const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('/pdf');
+  const isPdf = (() => {
+    try {
+      return new URL(url).pathname.toLowerCase().endsWith('.pdf');
+    } catch {
+      return url.toLowerCase().includes('.pdf');
+    }
+  })();
 
   function zoomIn() {
     setZoom((z) => Math.min(z + 0.25, 4));

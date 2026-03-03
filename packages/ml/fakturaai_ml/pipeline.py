@@ -198,6 +198,9 @@ class InvoicePipeline:
             invoice.raw_text = combined_text
             invoice.raw_structured = all_structured
 
+            # Derive missing amount fields
+            self._derive_amounts(invoice)
+
             # Validate extracted data
             self._validate_invoice(invoice)
 
@@ -271,6 +274,54 @@ class InvoicePipeline:
         if data[:4] == b"%PDF":
             return "pdf"
         return "image"
+
+    def _derive_amounts(self, invoice: ExtractedInvoice) -> None:
+        """Fill in missing amount fields from available data.
+
+        Handles common cases where OCR extracts some but not all amounts:
+        - No tax fields → total_amount = subtotal (PDV-exempt invoice)
+        - subtotal + tax_amount but no total → total = subtotal + tax
+        - total + tax_amount but no subtotal → subtotal = total - tax
+        - subtotal + tax_rate but no tax_amount → compute tax from rate
+
+        Args:
+            invoice: Extracted invoice to patch in-place.
+        """
+        from decimal import Decimal
+
+        s = invoice.subtotal
+        r = invoice.tax_rate
+        ta = invoice.tax_amount
+        t = invoice.total_amount
+
+        # If tax_rate is 0 or tax_amount is 0, treat as no-tax invoice
+        no_tax = (r is not None and r == 0) or (ta is not None and ta == 0)
+
+        # Case 1: subtotal present, no total, and no tax (or zero tax)
+        if t is None and s is not None:
+            if ta is None and r is None:
+                invoice.total_amount = s
+                logger.info("Derived total_amount = subtotal (no tax fields)")
+            elif no_tax:
+                invoice.total_amount = s
+                invoice.tax_amount = invoice.tax_amount or Decimal("0")
+                logger.info("Derived total_amount = subtotal (zero tax)")
+            elif ta is not None:
+                invoice.total_amount = s + ta
+                logger.info("Derived total_amount = subtotal + tax_amount")
+            elif r is not None and r > 0:
+                invoice.tax_amount = (s * r / Decimal("100")).quantize(Decimal("0.01"))
+                invoice.total_amount = s + invoice.tax_amount
+                logger.info("Derived tax_amount and total_amount from subtotal + rate")
+
+        # Case 2: total present, no subtotal
+        if invoice.subtotal is None and invoice.total_amount is not None:
+            if invoice.tax_amount is not None:
+                invoice.subtotal = invoice.total_amount - invoice.tax_amount
+                logger.info("Derived subtotal = total_amount - tax_amount")
+            elif no_tax:
+                invoice.subtotal = invoice.total_amount
+                logger.info("Derived subtotal = total_amount (zero tax)")
 
     def _validate_invoice(self, invoice: ExtractedInvoice) -> None:
         """Run validation checks on extracted invoice."""

@@ -26,6 +26,7 @@ interface UseInvoiceListReturn {
   error: string | null;
   selectedIds: Set<string>;
   setStatus: (status: InvoiceStatus | undefined) => void;
+  setAccountingReview: (value: boolean | undefined) => void;
   setSearch: (search: string) => void;
   setDateRange: (from?: string, to?: string) => void;
   setSort: (column: SortColumn) => void;
@@ -75,6 +76,11 @@ export function useInvoiceList(): UseInvoiceListReturn {
 
   const setStatus = useCallback((status: InvoiceStatus | undefined) => {
     setFilters((prev) => ({ ...prev, status, page: 1 }));
+    setSelectedIds(new Set());
+  }, []);
+
+  const setAccountingReview = useCallback((value: boolean | undefined) => {
+    setFilters((prev) => ({ ...prev, accounting_review: value, page: 1 }));
     setSelectedIds(new Set());
   }, []);
 
@@ -162,6 +168,7 @@ export function useInvoiceList(): UseInvoiceListReturn {
     error,
     selectedIds,
     setStatus,
+    setAccountingReview,
     setSearch,
     setDateRange,
     setSort,
