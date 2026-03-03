@@ -99,13 +99,7 @@ export default function InvoiceDetailPage({
 
   function getFieldWarning(field: string): 'error' | 'warning' | undefined {
     if (!invoice?.field_warnings) return undefined;
-    // Direct match (subtotal, tax_amount, total_amount)
-    if (invoice.field_warnings[field]) return invoice.field_warnings[field];
-    // PIB warning applies to both seller and buyer
-    if ((field === 'seller_pib' || field === 'buyer_pib') && invoice.field_warnings['pib']) {
-      return invoice.field_warnings['pib'];
-    }
-    return undefined;
+    return invoice.field_warnings[field];
   }
 
   function resetField(field: keyof InvoiceUpdate) {

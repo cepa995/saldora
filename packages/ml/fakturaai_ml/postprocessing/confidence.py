@@ -226,16 +226,17 @@ class ConfidenceCalculator:
         return confidence
 
     def _validate_pib_checksum(self, pib: str) -> bool:
-        """Quick PIB checksum validation."""
+        """Quick PIB checksum validation (ISO 7064 Mod 11,10)."""
         try:
-            digits = [int(d) for d in pib]
-            weights = [2, 3, 4, 5, 6, 7, 8, 9]
-            weighted_sum = sum(d * w for d, w in zip(digits[:8], weights))
-            remainder = weighted_sum % 11
-            check_digit = 11 - remainder
-            if check_digit >= 10:
-                check_digit = 0
-            return digits[8] == check_digit
+            product = 10
+            for i in range(8):
+                digit = int(pib[i])
+                s = (product + digit) % 10
+                if s == 0:
+                    s = 10
+                product = (s * 2) % 11
+            check_digit = (11 - product) % 10
+            return int(pib[8]) == check_digit
         except (ValueError, IndexError):
             return False
 

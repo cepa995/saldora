@@ -21,28 +21,37 @@ class PIBValidator:
         """Initialize PIB validator."""
         self._warnings: list[ValidationWarning] = []
 
-    def validate(self, pib: str) -> bool:
+    def validate(self, pib: str, entity: str = "pib") -> bool:
         """
-        Validate PIB format using mod-11 algorithm.
+        Validate PIB format using ISO 7064 Mod 11,10 algorithm.
 
         Args:
-            pib: PIB string to validate
+            pib: PIB string to validate.
+            entity: Field name for warnings — "seller_pib" or "buyer_pib".
 
         Returns:
-            True if valid, False otherwise
+            True if valid, False otherwise.
         """
         self._warnings = []
 
         # Sanitize: strip whitespace and common OCR separators
         pib = re.sub(r"[\s\-./]", "", pib.strip()) if pib else ""
 
+        entity_label = (
+            "PIB prodavca"
+            if entity == "seller_pib"
+            else "PIB kupca"
+            if entity == "buyer_pib"
+            else "PIB"
+        )
+
         # Basic format check
         if not pib or not pib.isdigit():
             self._warnings.append(
                 ValidationWarning(
                     warning_type=WarningType.PIB_INVALID_FORMAT,
-                    message="PIB mora sadržati samo cifre",
-                    field_name="pib",
+                    message=f"{entity_label} mora sadržati samo cifre",
+                    field_name=entity,
                     severity="error",
                     blocking=True,
                 )
@@ -53,8 +62,8 @@ class PIBValidator:
             self._warnings.append(
                 ValidationWarning(
                     warning_type=WarningType.PIB_INVALID_FORMAT,
-                    message="PIB mora imati tačno 9 cifara",
-                    field_name="pib",
+                    message=f"{entity_label} mora imati tačno 9 cifara",
+                    field_name=entity,
                     severity="error",
                     blocking=True,
                 )
@@ -66,21 +75,21 @@ class PIBValidator:
             self._warnings.append(
                 ValidationWarning(
                     warning_type=WarningType.PIB_INVALID_FORMAT,
-                    message="PIB ne može počinjati sa 0",
-                    field_name="pib",
+                    message=f"{entity_label} ne može počinjati sa 0",
+                    field_name=entity,
                     severity="error",
                     blocking=True,
                 )
             )
             return False
 
-        # Mod-11 checksum validation
+        # ISO 7064 Mod 11,10 checksum validation
         if not self._validate_checksum(pib):
             self._warnings.append(
                 ValidationWarning(
                     warning_type=WarningType.PIB_INVALID_FORMAT,
-                    message="PIB nije validan (kontrolna cifra)",
-                    field_name="pib",
+                    message=f"{entity_label} nije validan (kontrolna cifra)",
+                    field_name=entity,
                     severity="warning",
                     blocking=False,  # Allow with warning - OCR might have misread
                 )
@@ -91,31 +100,33 @@ class PIBValidator:
 
     def _validate_checksum(self, pib: str) -> bool:
         """
-        Validate PIB using Serbian mod-11 checksum algorithm.
+        Validate PIB using ISO 7064 Mod 11,10 checksum algorithm.
 
-        The algorithm:
-        1. Take first 8 digits
-        2. Multiply each by weight (starting from 2)
-        3. Sum all products
-        4. Calculate 11 - (sum mod 11)
-        5. If result is 10, use 0; if 11, use 0
-        6. Compare with 9th digit
+        Algorithm:
+            1. Set product = 10.
+            2. For each of the first 8 digits:
+               a. sum = (product + digit) % 10; if sum == 0: sum = 10
+               b. product = (sum * 2) % 11
+            3. check_digit = (11 - product) % 10
+            4. Compare with the 9th digit.
+
+        Args:
+            pib: 9-digit string (caller ensures length and digit-only).
+
+        Returns:
+            True if the check digit matches.
         """
         try:
-            digits = [int(d) for d in pib]
+            product = 10
+            for i in range(8):
+                digit = int(pib[i])
+                s = (product + digit) % 10
+                if s == 0:
+                    s = 10
+                product = (s * 2) % 11
 
-            # Calculate weighted sum
-            weights = [2, 3, 4, 5, 6, 7, 8, 9]
-            weighted_sum = sum(d * w for d, w in zip(digits[:8], weights))
-
-            # Calculate check digit
-            remainder = weighted_sum % 11
-            check_digit = 11 - remainder
-
-            if check_digit >= 10:
-                check_digit = 0
-
-            return digits[8] == check_digit
+            check_digit = (11 - product) % 10
+            return int(pib[8]) == check_digit
 
         except (ValueError, IndexError):
             return False
