@@ -1,0 +1,60 @@
+% Page geometry — generous vertical space
+\usepackage[top=2cm, bottom=2cm, left=2.5cm, right=2.5cm]{geometry}
+
+% Prevent section/paragraph widows and orphans
+\widowpenalty=10000
+\clubpenalty=10000
+
+% Keep sections with their content
+\usepackage{needspace}
+
+% Better font for code blocks
+\usepackage{fontspec}
+\setmonofont{DejaVu Sans Mono}[Scale=0.72]
+
+% Tighter line spacing in code blocks
+\usepackage{fancyvrb}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+  commandchars=\\\{\},
+  fontsize=\footnotesize,
+  baselinestretch=0.82
+}
+
+% Keep code blocks together — wrap in minipage
+\usepackage{float}
+\floatplacement{figure}{H}
+
+\usepackage{etoolbox}
+\BeforeBeginEnvironment{Shaded}{\par\needspace{6\baselineskip}\vspace{0.3em}\begin{minipage}{\linewidth}}
+\AfterEndEnvironment{Shaded}{\end{minipage}\par\vspace{0.3em}}
+
+% Page break before each major section
+\usepackage{titlesec}
+\newcommand{\sectionbreak}{\clearpage}
+
+% Compact section spacing
+\titlespacing*{\section}{0pt}{1ex plus 0.5ex}{0.8ex plus 0.3ex}
+\titlespacing*{\subsection}{0pt}{0.8ex plus 0.3ex}{0.5ex plus 0.2ex}
+\titlespacing*{\subsubsection}{0pt}{0.6ex plus 0.2ex}{0.4ex plus 0.1ex}
+
+% Nicer tables
+\usepackage{booktabs}
+\usepackage{longtable}
+\renewcommand{\arraystretch}{1.2}
+
+% Color for links
+\usepackage{xcolor}
+\definecolor{linkblue}{HTML}{2563EB}
+
+% Header/footer
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{FakturaAI — Application Workflow}}
+\fancyhead[R]{\small\textcolor{gray}{March 2026}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Title page styling
+\usepackage{tikz}

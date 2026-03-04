@@ -15,7 +15,12 @@ from fakturaai_ml.ocr.easyocr_fallback import EasyOCREngine
 from fakturaai_ml.postprocessing.confidence import ConfidenceCalculator
 from fakturaai_ml.preprocessing.image import ImagePreprocessor
 from fakturaai_ml.preprocessing.pdf import PDFProcessor
-from fakturaai_ml.types import ExtractedInvoice, ExtractionResult, ExtractionStatus
+from fakturaai_ml.types import (
+    ExtractedInvoice,
+    ExtractionResult,
+    ExtractionStatus,
+    TaxGroupData,
+)
 from fakturaai_ml.validation.math_check import MathValidator
 from fakturaai_ml.validation.pib import PIBValidator
 
@@ -378,11 +383,11 @@ class InvoicePipeline:
             and invoice.tax_rate > 0
         ):
             invoice.tax_groups = [
-                {
-                    "rate": str(invoice.tax_rate),
-                    "base_amount": str(invoice.subtotal),
-                    "tax_amount": str(invoice.tax_amount),
-                }
+                TaxGroupData(
+                    rate=invoice.tax_rate,
+                    base_amount=invoice.subtotal,
+                    tax_amount=invoice.tax_amount,
+                )
             ]
             logger.info("Inferred single tax_group from rate=%s%%", invoice.tax_rate)
 

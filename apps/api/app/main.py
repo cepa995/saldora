@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.middleware import RequestContextMiddleware
-from app.routers import analytics, audit_logs, auth, export, invoices, webhooks
+from app.routers import analytics, audit_logs, auth, export, invoices, rules, webhooks
 
 settings = get_settings()
 
@@ -102,6 +102,7 @@ app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 app.include_router(audit_logs.router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(rules.router, prefix="/api/v1/rules", tags=["Automation Rules"])
 
 
 @app.get("/health")
