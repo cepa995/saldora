@@ -748,9 +748,9 @@ class TestDeriveAmounts:
         )
         self._derive(inv)
         assert len(inv.tax_groups) == 1
-        assert inv.tax_groups[0]["rate"] == "20"
-        assert inv.tax_groups[0]["base_amount"] == "10000"
-        assert inv.tax_groups[0]["tax_amount"] == "2000"
+        assert inv.tax_groups[0].rate == Decimal("20")
+        assert inv.tax_groups[0].base_amount == Decimal("10000")
+        assert inv.tax_groups[0].tax_amount == Decimal("2000")
 
     def test_infer_tax_rate_then_groups(self):
         """Both tax_rate and tax_groups inferred in one pass."""
