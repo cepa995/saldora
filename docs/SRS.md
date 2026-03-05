@@ -524,6 +524,30 @@ FakturaAI operates as a standalone web application with the following integratio
 | **Description** | System SHOULD support custom export field mapping |
 | **Features** | Field selection, ordering, renaming, formatting |
 
+#### FR-4.6.5 MiniMax XML Export
+| ID | FR-4.6.5 |
+|----|----------|
+| **Description** | System MUST export data to MiniMax-compatible XML format |
+| **Format** | XML per MiniMax import schema (Stranke + Temeljnice) |
+| **Content** | Deduplicated partners by PIB, journal entries from accounting_intent |
+| **Use Case** | Import into MiniMax accounting software (minimax.rs) |
+
+#### FR-4.6.6 MiniMax REST API Push
+| ID | FR-4.6.6 |
+|----|----------|
+| **Description** | System SHOULD support direct push of invoices to MiniMax via REST API |
+| **Authentication** | OAuth 2.0 (client_id, client_secret, username, password) |
+| **Features** | Push received invoices, find/create customers by PIB, currency lookup |
+| **Configuration** | Per-organization MiniMax credentials and org ID |
+
+#### FR-4.6.7 Export UI
+| ID | FR-4.6.7 |
+|----|----------|
+| **Description** | System MUST provide a frontend dialog for selecting export format and options |
+| **Trigger** | Batch export from invoice list (multiple selection) or single export from invoice detail |
+| **Formats** | XLSX, CSV, JSON, MiniMax XML — each with format-specific options |
+| **Error Handling** | Display blocked invoices with reasons when export is rejected (422) |
+
 ### 4.7 Dashboard & Analytics
 
 #### FR-4.7.1 Processing Statistics
@@ -2134,11 +2158,88 @@ Export invoices to specified format.
 ```
 
 **Response (200 OK):**
+Streams the file directly as `StreamingResponse` (XLSX, CSV, JSON, or MiniMax XML).
+Headers: `Content-Disposition: attachment; filename="fakture_izvoz.{ext}"`
+
+**Response (422 Unprocessable Entity):**
 ```json
 {
-  "download_url": "https://storage.fakturaai.rs/exports/...",
-  "expires_at": "2025-01-15T11:30:00Z",
-  "file_size": 15420
+  "detail": {
+    "blocked_invoices": [
+      {
+        "invoice_id": "uuid",
+        "invoice_number": "FAK-001",
+        "reasons": ["Nedostaje: PIB prodavca", "Confidence < 60% bez verifikacije"]
+      }
+    ],
+    "message": "2 faktura blokirano za izvoz"
+  }
+}
+```
+
+#### POST /export/minimax/push
+Push invoices to MiniMax accounting software via REST API.
+
+**Request:**
+```json
+{
+  "invoice_ids": ["id1", "id2"],
+  "create_customers": true
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "results": [
+    {"invoice_id": "id1", "invoice_number": "FAK-001", "minimax_id": 456, "status": "success"},
+    {"invoice_id": "id2", "invoice_number": "FAK-002", "status": "error", "error": "Nedostaje PIB prodavca"}
+  ],
+  "total": 2,
+  "success_count": 1,
+  "error_count": 1
+}
+```
+
+#### GET /export/minimax/config
+Get MiniMax configuration for the current organization.
+
+#### PUT /export/minimax/config
+Create or update MiniMax configuration.
+
+**Request:**
+```json
+{
+  "client_id": "minimax-client-id",
+  "client_secret": "minimax-secret",
+  "username": "user@example.com",
+  "password": "password",
+  "minimax_org_id": 12345
+}
+```
+
+#### POST /export/audit
+Generate audit export for tax inspection (ZIP with invoice register, PDFs, audit trail, VAT summary).
+
+**Request:**
+```json
+{
+  "date_from": "2025-01-01",
+  "date_to": "2025-12-31",
+  "include_documents": true,
+  "include_audit_trail": true,
+  "include_vat_summary": true
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "download_url": "https://storage.fakturaai.rs/exports/audit/...",
+  "expires_at": "2025-02-14T11:30:00Z",
+  "file_size": 5242880,
+  "invoice_count": 150,
+  "contents": ["registar_faktura.csv", "pdv_pregled.xlsx", "revizijski_trag.csv", "dokumenti/"]
 }
 ```
 
@@ -3081,11 +3182,43 @@ organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
 - Exports: 30 days auto-delete
 - Backups: 90 days retention
 
-### 12.5 SEF Integration (eFaktura)
+### 12.5 MiniMax Integration
+
+MiniMax (minimax.rs) is the most widely used cloud accounting software in Serbia. FakturaAI integrates with MiniMax via both XML file export and direct REST API push.
+
+#### 12.5.1 MiniMax XML Export
+
+Generates an XML file compatible with MiniMax's import tool:
+- **Stranke** (Partners): Deduplicated sellers by PIB — Sifra (PIB), Naziv, DavcnaStevilka, Naslov, Posta
+- **Temeljnice** (Journal Entries): Generated from `accounting_intent.suggested_konta` — GlavaTemeljnice (date, partner, reference), VrsticeTemeljnice (konto + debit/credit amounts), DDV (VAT entries)
+
+Available as `minimax_xml` format option in POST `/api/v1/export`.
+
+#### 12.5.2 MiniMax REST API Integration
+
+Direct push of invoices to MiniMax via their REST API:
+- **Authentication:** OAuth 2.0 — POST `https://moj.minimax.rs/RS/AUT/OAuth20/Token`
+- **Push received invoices:** POST `/api/orgs/{orgId}/receivedinvoices`
+- **Customer management:** Find by PIB, create if not found
+- **Currency lookup:** Get currency ID by ISO code
+- Token caching with automatic refresh on 401
+
+#### 12.5.3 Configuration
+
+Per-organization credentials stored in `minimax_configs` table:
+- `client_id`, `client_secret` — OAuth application credentials
+- `username`, `password` — MiniMax user credentials
+- `minimax_org_id` — MiniMax organization ID (integer)
+- `is_active` — Enable/disable integration
+- `last_sync_at` — Timestamp of last successful push
+
+**API endpoints:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+### 12.6 SEF Integration (eFaktura)
 
 The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory for B2G and B2B transactions in Serbia. FakturaAI MUST integrate with SEF as a **first-class input source**, not just an export format.
 
-#### 12.5.1 Overview
+#### 12.7.1 Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -3109,7 +3242,7 @@ The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory fo
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 12.5.2 SEF Connection Setup
+#### 12.6.2 SEF Connection Setup
 
 **Authentication:**
 
@@ -3168,7 +3301,7 @@ CREATE TABLE sef_connections (
 );
 ```
 
-#### 12.5.3 Inbound Invoice Sync (SEF → FakturaAI)
+#### 12.6.3 Inbound Invoice Sync (SEF → FakturaAI)
 
 The system MUST pull invoices from SEF and process them through the FakturaAI pipeline.
 
@@ -3343,7 +3476,7 @@ CREATE INDEX idx_sef_invoices_invoice ON sef_invoices(invoice_id);
 CREATE INDEX idx_sef_invoices_synced ON sef_invoices(synced_at);
 ```
 
-#### 12.5.4 Outbound Invoice Push (FakturaAI → SEF)
+#### 12.6.4 Outbound Invoice Push (FakturaAI → SEF)
 
 The system SHOULD support sending invoices to SEF (for organizations that issue invoices).
 
@@ -3394,7 +3527,7 @@ The system SHOULD support sending invoices to SEF (for organizations that issue 
 | `LegalMonetaryTotal` | invoice.* | All totals |
 | `InvoiceLine` | line_items[] | Description, quantity, price, VAT |
 
-#### 12.5.5 SEF Status Polling
+#### 12.6.5 SEF Status Polling
 
 SEF does not support native webhooks. The system MUST poll the SEF API to detect invoice status changes.
 
@@ -3467,7 +3600,7 @@ async def poll_sef_status_changes(org_id: UUID):
     await db.save(connection)
 ```
 
-#### 12.5.6 SEF-OCR Hybrid Processing
+#### 12.6.6 SEF-OCR Hybrid Processing
 
 When receiving invoices from SEF, the system uses both structured UBL data AND OCR for maximum accuracy:
 
@@ -3519,7 +3652,7 @@ When receiving invoices from SEF, the system uses both structured UBL data AND O
 | line_items | 3 items | 5 items | ⚠️ OCR found more detail - review |
 | seller_pib | 123456789 | 123456780 | ✅ Use SEF (authoritative) |
 
-#### 12.5.7 SEF Inbox UI
+#### 12.6.7 SEF Inbox UI
 
 The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFaktura invoices:
 
@@ -3557,7 +3690,7 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 | Odbij | Reject invoice | Sends rejection to SEF with reason |
 | Arhiviraj | Archive without processing | Stores but doesn't create invoice |
 
-#### 12.5.8 SEF Error Handling
+#### 12.6.8 SEF Error Handling
 
 | Error | Cause | Recovery |
 |-------|-------|----------|
@@ -3568,11 +3701,11 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 | `SEF_DUPLICATE_INVOICE` | Already processed | Skip, update status only |
 | `UBL_PARSE_ERROR` | Malformed XML | Log, attempt PDF-only processing |
 
-### 12.6 NBS Integration (National Bank of Serbia)
+### 12.7 NBS Integration (National Bank of Serbia)
 
 The system SHOULD integrate the NBS exchange rate list for foreign currency conversion to RSD.
 
-#### 12.6.1 Overview
+#### 12.7.1 Overview
 
 NBS publishes a daily middle exchange rate for all currencies traded on the foreign exchange market. The rate list is updated every business day and is available via a public API.
 
@@ -3582,7 +3715,7 @@ NBS publishes a daily middle exchange rate for all currencies traded on the fore
 - Use the NBS middle rate on the invoice date
 - Archive the rate used for conversion for audit purposes
 
-#### 12.6.2 API Access
+#### 12.7.2 API Access
 
 **API endpoint:** `https://nbs.rs/kursnaListaMod498/kursnaLista`
 
@@ -3602,14 +3735,14 @@ NBS publishes a daily middle exchange rate for all currencies traded on the fore
 }
 ```
 
-#### 12.6.3 Caching Strategy
+#### 12.7.3 Caching Strategy
 
 - Exchange rate list is cached for 24 hours
 - For non-business days (weekends, holidays), the last available rate list is used
 - Cache is refreshed every business day at 08:30 (NBS publishes the rate list by 08:00)
 - In case of NBS API unavailability, the last cached rate list is used
 
-#### 12.6.4 Implementation
+#### 12.7.4 Implementation
 
 **Foreign currency invoice conversion:**
 
@@ -3666,7 +3799,7 @@ async def convert_to_rsd(amount: Decimal, currency: str, invoice_date: date) -> 
     }
 ```
 
-#### 12.6.5 Database Schema
+#### 12.7.5 Database Schema
 
 ```sql
 CREATE TABLE exchange_rates (

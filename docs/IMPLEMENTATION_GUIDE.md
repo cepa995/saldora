@@ -652,17 +652,88 @@ This milestone is complete. It established the database module, core models (Use
 
 ---
 
-#### 6.5 — Write tests for exports
+#### 6.5 — Implement MiniMax XML export
 
-**Description:** Tests for all export formats, templates, and audit export.
+**Description:** Generate MiniMax-compatible XML files for import into MiniMax accounting software (minimax.rs).
+
+**Requirements covered:** FR-4.6.5, Section 12.5
+
+**Tasks:**
+- Create `apps/api/app/services/export/minimax_xml.py`:
+  - `generate_minimax_xml(invoices)` — produce XML with Stranke + Temeljnice structure
+  - Stranke: deduplicated sellers by PIB (Sifra, Naziv, DavcnaStevilka, Naslov, Posta)
+  - Temeljnice: journal entries from accounting_intent (konto codes, debit/credit amounts, VAT entries)
+  - Uses `xml.etree.ElementTree` (stdlib)
+- Add `minimax_xml` format option to POST `/api/v1/export` endpoint
+- Add validation: require verified invoices (with accounting_intent) for MiniMax XML export
+
+**Acceptance:** Export 5 verified invoices → valid MiniMax XML with Stranke + Temeljnice. Unverified invoices show clear error.
+
+---
+
+#### 6.6 — Implement MiniMax REST API integration
+
+**Description:** Direct push of invoices to MiniMax via REST API. Includes OAuth2 authentication, customer management, and per-organization configuration.
+
+**Requirements covered:** FR-4.6.6, Section 12.5
+
+**Tasks:**
+- Create `apps/api/app/services/minimax/client.py`:
+  - OAuth2 token management with auto-refresh
+  - `push_received_invoice(data)` — create received invoice in MiniMax
+  - `find_or_create_customer(pib, name, address, city)` — customer lookup/creation by PIB
+  - `get_currency(code)` — currency ID lookup
+- Create `apps/api/app/services/minimax/mapper.py`:
+  - `map_invoice_to_received(invoice, customer_id, currency_id)` — map FakturaAI fields to MiniMax schema
+- Create `apps/api/app/schemas/minimax.py` — Pydantic schemas for push request/response/config
+- Create `apps/api/app/models/minimax_config.py` — per-org credentials (client_id, client_secret, username, password, minimax_org_id)
+- Create Alembic migration for `minimax_configs` table
+- Add API endpoints to export router:
+  - POST `/api/v1/export/minimax/push` — push invoices to MiniMax
+  - GET/PUT/PATCH `/api/v1/export/minimax/config` — manage credentials
+
+**Acceptance:** Configure MiniMax credentials → push verified invoice → appears in MiniMax as received invoice. Customer created if not found.
+
+---
+
+#### 6.7 — Implement frontend export UI
+
+**Description:** Build the frontend export dialog with format selection, options, and file download. Integrate into invoice list (batch export) and invoice detail (single export).
+
+**Requirements covered:** FR-4.6.7
+
+**Tasks:**
+- Create `apps/web/src/lib/types/export.ts` — TypeScript types
+- Add `apiDownload()` to `apps/web/src/lib/api-client.ts` — binary file download with auth
+- Create `apps/web/src/lib/api/export.ts` — export API service + browser download trigger
+- Create `apps/web/src/components/ExportDialog.tsx`:
+  - Format selection cards (XLSX, CSV, JSON, MiniMax XML) in 2x2 grid
+  - Format-specific options (include line items, delimiter, nested JSON)
+  - Error handling: blocked invoices display with reasons (422)
+  - MiniMax XML validation: warn if invoices not verified
+  - Loading state with spinner during export
+- Integrate into invoice list page: export button in batch action bar
+- Integrate into invoice detail page: export option in more actions menu
+- Activate dashboard "Export Report" button (remove "Coming Soon" badge)
+- Add translation keys to all 3 locale files (sr-Latn, sr-Cyrl, en)
+
+**Acceptance:** Select invoices → click Izvezi → choose format → file downloads. Single export from invoice detail works. MiniMax XML shows warning for unverified invoices.
+
+---
+
+#### 6.8 — Write tests for exports
+
+**Description:** Tests for all export formats, templates, audit export, and MiniMax integration.
 
 **Tasks:**
 - Test XLSX generation: correct sheets, Serbian number/date formatting, column headers
 - Test CSV generation: UTF-8 BOM, configurable delimiter, correct encoding of Serbian characters
 - Test JSON generation: flat and nested modes validate against schema
+- Test MiniMax XML: valid structure, Stranke + Temeljnice content
 - Test custom template applies field selection and ordering
 - Test export blocking: rejected when critical warnings unresolved
-- Test audit export generates valid XML, includes all requested content types
+- Test audit export generates valid content, includes all requested types
+- Test MiniMax push: mock API, verify mapping, customer creation
 - Test export requires authentication and proper roles
 
 **Acceptance:** All tests pass. Exported files contain correctly formatted data.

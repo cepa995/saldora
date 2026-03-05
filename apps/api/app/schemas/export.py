@@ -1,6 +1,5 @@
 """Export schemas."""
 
-from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -11,29 +10,30 @@ class ExportOptions(BaseModel):
     """Options for export generation."""
 
     include_line_items: bool = True
+    nested_json: bool = False
     date_format: str = "DD.MM.YYYY"
     decimal_separator: str = ","
+    delimiter: str = Field(
+        default="semicolon",
+        description="CSV delimiter: 'semicolon', 'comma', or 'tab'",
+    )
     encoding: str = "utf-8"
 
 
 class ExportRequest(BaseModel):
     """Request to export invoices."""
 
-    format: Literal["xlsx", "csv", "json"] = "xlsx"
+    format: Literal["xlsx", "csv", "json", "minimax_xml"] = "xlsx"
     invoice_ids: list[UUID] = Field(min_length=1)
     template_id: str = "default"
     options: ExportOptions = Field(default_factory=ExportOptions)
 
 
-class ExportResponse(BaseModel):
-    """Export generation response."""
+class ExportBlockedResponse(BaseModel):
+    """Response when invoices are blocked from export."""
 
-    id: UUID
-    download_url: str
-    expires_at: datetime
-    file_size: int = Field(description="File size in bytes")
-    invoice_count: int
-    format: str
+    blocked_invoices: list[dict]
+    message: str
 
 
 class AuditExportRequest(BaseModel):

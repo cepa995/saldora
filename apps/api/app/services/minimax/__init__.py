@@ -1,0 +1,1 @@
+"""MiniMax accounting software integration."""

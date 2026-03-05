@@ -493,6 +493,30 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | **Opis** | Sistem TREBALO BI da podržava prilagođeno mapiranje polja izvoza |
 | **Funkcije** | Selekcija polja, redosled, preimenovanje, formatiranje |
 
+#### FZ-4.6.5 MiniMax XML izvoz
+| ID | FZ-4.6.5 |
+|----|----------|
+| **Opis** | Sistem MORA da izveze podatke u MiniMax-kompatibilan XML format |
+| **Format** | XML po MiniMax import šemi (Stranke + Temeljnice) |
+| **Sadržaj** | Deduplicirani partneri po PIB-u, nalozi za knjiženje iz accounting_intent |
+| **Slučaj korišćenja** | Uvoz u MiniMax računovodstveni softver (minimax.rs) |
+
+#### FZ-4.6.6 MiniMax REST API slanje
+| ID | FZ-4.6.6 |
+|----|----------|
+| **Opis** | Sistem TREBALO BI da podrži direktno slanje faktura u MiniMax putem REST API-ja |
+| **Autentifikacija** | OAuth 2.0 (client_id, client_secret, korisničko ime, lozinka) |
+| **Funkcije** | Slanje primljenih faktura, pronalaženje/kreiranje kupaca po PIB-u, pretraga valuta |
+| **Konfiguracija** | Kredencijali po organizaciji i MiniMax org ID |
+
+#### FZ-4.6.7 Korisnički interfejs za izvoz
+| ID | FZ-4.6.7 |
+|----|----------|
+| **Opis** | Sistem MORA da obezbedi dijalog za izbor formata i opcija izvoza |
+| **Pokretanje** | Grupni izvoz sa liste faktura (višestruki izbor) ili pojedinačni izvoz sa detalja fakture |
+| **Formati** | XLSX, CSV, JSON, MiniMax XML — svaki sa specifičnim opcijama |
+| **Obrada grešaka** | Prikaz blokiranih faktura sa razlozima kada je izvoz odbijen (422) |
+
 ### 4.7 Kontrolna tabla i analitika
 
 #### FZ-4.7.1 Statistike obrade
@@ -2865,11 +2889,43 @@ organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
 - Izvozi: automatsko brisanje posle 30 dana
 - Rezervne kopije: čuvanje 90 dana
 
-### 12.5 SEF integracija (eFaktura)
+### 12.5 MiniMax integracija
+
+MiniMax (minimax.rs) je najkorišćeniji cloud računovodstveni softver u Srbiji. FakturaAI se integriše sa MiniMax-om putem XML izvoza i direktnog REST API slanja.
+
+#### 12.5.1 MiniMax XML izvoz
+
+Generiše XML fajl kompatibilan sa MiniMax-ovim alatom za uvoz:
+- **Stranke** (Partneri): Deduplicirani prodavci po PIB-u — Sifra (PIB), Naziv, DavcnaStevilka, Naslov, Posta
+- **Temeljnice** (Nalozi za knjiženje): Generisani iz `accounting_intent.suggested_konta` — GlavaTemeljnice (datum, partner, referenca), VrsticeTemeljnice (konto + duguje/potražuje iznosi), DDV (stavke PDV-a)
+
+Dostupno kao `minimax_xml` format u POST `/api/v1/export`.
+
+#### 12.5.2 MiniMax REST API integracija
+
+Direktno slanje faktura u MiniMax putem REST API-ja:
+- **Autentifikacija:** OAuth 2.0 — POST `https://moj.minimax.rs/RS/AUT/OAuth20/Token`
+- **Slanje primljenih faktura:** POST `/api/orgs/{orgId}/receivedinvoices`
+- **Upravljanje kupcima:** Pretraga po PIB-u, kreiranje ako ne postoji
+- **Pretraga valuta:** Dobijanje ID valute po ISO kodu
+- Keširanje tokena sa automatskim osvežavanjem na 401
+
+#### 12.5.3 Konfiguracija
+
+Kredencijali po organizaciji čuvani u tabeli `minimax_configs`:
+- `client_id`, `client_secret` — OAuth kredencijali aplikacije
+- `username`, `password` — MiniMax korisnički kredencijali
+- `minimax_org_id` — MiniMax ID organizacije (integer)
+- `is_active` — Aktiviranje/deaktiviranje integracije
+- `last_sync_at` — Vreme poslednjeg uspešnog slanja
+
+**API endpointi:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+### 12.6 SEF integracija (eFaktura)
 
 Sistem elektronskih faktura (SEF) je obavezan za B2G i B2B transakcije u Srbiji. FakturaAI MORA da se integriše sa SEF-om kao **prvoklasnim izvorom podataka**, ne samo kao format izvoza.
 
-#### 12.5.1 Pregled
+#### 12.6.1 Pregled
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -2895,7 +2951,7 @@ Sistem elektronskih faktura (SEF) je obavezan za B2G i B2B transakcije u Srbiji.
 
 **Napomena:** SEF ne podržava nativne webhook obaveštenja. Sistem MORA koristiti periodično povlačenje (polling) za praćenje promena statusa faktura. Preporučeni interval: svakih 15 minuta.
 
-#### 12.5.2 Podešavanje SEF konekcije
+#### 12.6.2 Podešavanje SEF konekcije
 
 **Autentifikacija:**
 
@@ -2953,7 +3009,7 @@ CREATE TABLE sef_connections (
 );
 ```
 
-#### 12.5.3 Sinhronizacija ulaznih faktura (SEF → FakturaAI)
+#### 12.6.3 Sinhronizacija ulaznih faktura (SEF → FakturaAI)
 
 Sistem MORA da povlači fakture iz SEF-a i obrađuje ih kroz FakturaAI pipeline.
 
@@ -3122,7 +3178,7 @@ CREATE INDEX idx_sef_invoices_invoice ON sef_invoices(invoice_id);
 CREATE INDEX idx_sef_invoices_synced ON sef_invoices(synced_at);
 ```
 
-#### 12.5.4 Slanje izlaznih faktura (FakturaAI → SEF)
+#### 12.6.4 Slanje izlaznih faktura (FakturaAI → SEF)
 
 Sistem TREBALO BI da podržava slanje faktura na SEF (za organizacije koje izdaju fakture).
 
@@ -3167,7 +3223,7 @@ Sistem TREBALO BI da podržava slanje faktura na SEF (za organizacije koje izdaj
 | `LegalMonetaryTotal` | invoice.* | Svi ukupni iznosi |
 | `InvoiceLine` | line_items[] | Opis, količina, cena, PDV |
 
-#### 12.5.5 Sinhronizacija statusa (Polling)
+#### 12.6.5 Sinhronizacija statusa (Polling)
 
 SEF ne podržava nativne webhook obaveštenja za promene statusa faktura. Sistem MORA koristiti periodično povlačenje (polling) za praćenje promena statusa.
 
@@ -3280,7 +3336,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 ```
 
-#### 12.5.6 SEF-OCR hibridna obrada
+#### 12.6.6 SEF-OCR hibridna obrada
 
 Kada se fakture primaju iz SEF-a, sistem koristi i strukturirane UBL podatke I OCR za maksimalnu tačnost:
 
@@ -3302,7 +3358,7 @@ Kada se fakture primaju iz SEF-a, sistem koristi i strukturirane UBL podatke I O
 | line_items | 3 stavke | 5 stavki | OCR pronašao više detalja - pregled |
 | seller_pib | 123456789 | 123456780 | Koristi SEF (autoritativno) |
 
-#### 12.5.7 SEF inbox korisnički interfejs
+#### 12.6.7 SEF inbox korisnički interfejs
 
 Sistem MORA da pruži dedicirani "SEF Inbox" prikaz za upravljanje dolaznim eFaktura fakturama:
 
@@ -3340,7 +3396,7 @@ Sistem MORA da pruži dedicirani "SEF Inbox" prikaz za upravljanje dolaznim eFak
 | Odbij | Odbij fakturu | Šalje odbijanje na SEF sa razlogom |
 | Arhiviraj | Arhiviraj bez obrade | Čuva ali ne kreira fakturu |
 
-#### 12.5.8 Obrada grešaka SEF-a
+#### 12.6.8 Obrada grešaka SEF-a
 
 | Greška | Uzrok | Oporavak |
 |--------|-------|----------|
@@ -3351,11 +3407,11 @@ Sistem MORA da pruži dedicirani "SEF Inbox" prikaz za upravljanje dolaznim eFak
 | `SEF_DUPLICATE_INVOICE` | Već obrađeno | Preskoči, ažuriraj samo status |
 | `UBL_PARSE_ERROR` | Neispravan XML | Zapiši, pokušaj obradu samo PDF-om |
 
-### 12.6 NBS integracija (Narodna banka Srbije)
+### 12.7 NBS integracija (Narodna banka Srbije)
 
 Sistem TREBALO BI da integriše kursnu listu Narodne banke Srbije za konverziju stranih valuta u RSD.
 
-#### 12.6.1 Pregled
+#### 12.7.1 Pregled
 
 NBS objavljuje dnevni srednji kurs za sve valute koje se trguju na deviznom tržištu. Kursna lista se ažurira svakog radnog dana i dostupna je putem javnog API-ja.
 
@@ -3365,7 +3421,7 @@ NBS objavljuje dnevni srednji kurs za sve valute koje se trguju na deviznom trž
 - Korišćenje srednjeg kursa NBS na dan fakture
 - Arhiviranje kursa korišćenog pri konverziji za revizorske svrhe
 
-#### 12.6.2 API pristup
+#### 12.7.2 API pristup
 
 **API endpoint:** `https://nbs.rs/kursnaListaMod498/kursnaLista`
 
@@ -3385,14 +3441,14 @@ NBS objavljuje dnevni srednji kurs za sve valute koje se trguju na deviznom trž
 }
 ```
 
-#### 12.6.3 Strategija keširanja
+#### 12.7.3 Strategija keširanja
 
 - Kursna lista se kešira na 24 sata
 - Za neradne dane (vikendi, praznici) koristi se poslednja dostupna kursna lista
 - Keš se osvežava svakog radnog dana u 08:30 (NBS objavljuje kursnu listu do 08:00)
 - U slučaju nedostupnosti NBS API-ja, koristi se poslednja keširana kursna lista
 
-#### 12.6.4 Primena
+#### 12.7.4 Primena
 
 **Konverzija za fakture u stranoj valuti:**
 
@@ -3449,7 +3505,7 @@ async def convert_to_rsd(amount: Decimal, currency: str, invoice_date: date) -> 
     }
 ```
 
-#### 12.6.5 Šema baze podataka
+#### 12.7.5 Šema baze podataka
 
 ```sql
 CREATE TABLE exchange_rates (

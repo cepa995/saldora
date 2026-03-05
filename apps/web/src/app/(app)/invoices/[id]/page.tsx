@@ -10,6 +10,7 @@ import { ConfidenceBadge } from '@/components/ConfidenceBadge';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
+import { ExportDialog } from '@/components/ExportDialog';
 import { formatAmountSr } from '@/lib/formatters';
 import { fetchAccountingIntent, reviewAccountingIntent } from '@/lib/api/invoices';
 import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse } from '@/lib/types/invoice';
@@ -41,6 +42,7 @@ export default function InvoiceDetailPage({
   } = useInvoiceDetail(id);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
@@ -313,6 +315,15 @@ export default function InvoiceDetailPage({
             </button>
             {showMoreMenu && (
               <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20">
+                <button
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    setShowExportDialog(true);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {tCommon('export')}
+                </button>
                 <button
                   onClick={() => {
                     setShowMoreMenu(false);
@@ -1177,6 +1188,13 @@ export default function InvoiceDetailPage({
             </div>
           </div>
         </div>
+      )}
+
+      {showExportDialog && (
+        <ExportDialog
+          invoiceIds={[id]}
+          onClose={() => setShowExportDialog(false)}
+        />
       )}
     </div>
   );
