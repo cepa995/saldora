@@ -128,6 +128,7 @@ async def generate_audit_export(
         "file_size": len(zip_bytes),
         "invoice_count": len(invoices),
         "period": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+        "s3_key": key,
     }
 
 

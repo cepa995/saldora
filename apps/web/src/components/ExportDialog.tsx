@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { exportInvoices, pushToMinimax, triggerBrowserDownload } from '@/lib/api/export';
+import { exportInvoices, fetchTemplates, pushToMinimax, triggerBrowserDownload } from '@/lib/api/export';
 import { Toast, type ToastType } from '@/components/Toast';
-import type { ExportFormat, ExportOptions, BlockedInvoice, MiniMaxPushResult } from '@/lib/types/export';
+import type { ExportFormat, ExportOptions, ExportTemplate, BlockedInvoice, MiniMaxPushResult } from '@/lib/types/export';
 
 interface ExportDialogProps {
   invoiceIds: string[];
@@ -45,6 +45,15 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [createCustomers, setCreateCustomers] = useState(true);
   const [pushResults, setPushResults] = useState<MiniMaxPushResult[] | null>(null);
+  const [templates, setTemplates] = useState<ExportTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default');
+
+  // Load templates on mount
+  useEffect(() => {
+    fetchTemplates()
+      .then(setTemplates)
+      .catch(() => {});
+  }, []);
 
   // Close on Escape
   useEffect(() => {
@@ -70,14 +79,15 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
     setPushResults(null);
   }
 
-  async function handleExport() {
+  async function handleExport(skipValidation = false) {
     setIsExporting(true);
     setError(null);
-    setBlockedInvoices(null);
+    if (!skipValidation) setBlockedInvoices(null);
 
     try {
-      const { blob, filename } = await exportInvoices(format, invoiceIds, options);
+      const { blob, filename } = await exportInvoices(format, invoiceIds, options, selectedTemplateId, skipValidation);
       triggerBrowserDownload(blob, filename);
+      setBlockedInvoices(null);
       onSuccess?.();
       onClose();
     } catch (err: unknown) {
@@ -112,6 +122,7 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
           }),
           type: 'error',
         });
+        onSuccess?.();
       } else {
         setToast({ message: t('pushFailed'), type: 'error' });
       }
@@ -208,6 +219,33 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
           ))}
         </div>
 
+        {/* Template selection (hidden for MiniMax XML — fixed schema) */}
+        {format !== 'minimax_xml' && templates.length > 0 && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {t('template')}
+            </label>
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => setSelectedTemplateId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+            >
+              <option value="default">{t('templateDefault')}</option>
+              {templates
+                .filter(
+                  (tmpl) =>
+                    !tmpl.supported_formats || tmpl.supported_formats.includes(format),
+                )
+                .map((tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id}>
+                    {tmpl.name}
+                    {tmpl.description ? ` — ${tmpl.description}` : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
+
         {/* Format-specific options */}
         <div className="space-y-3 mb-6">
           <h3 className="text-sm font-medium text-gray-700">{t('options')}</h3>
@@ -293,13 +331,18 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
           </div>
         )}
 
-        {/* Blocked invoices display */}
+        {/* Blocked invoices display with force export option */}
         {blockedInvoices && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl space-y-2">
-            <p className="text-sm font-medium text-red-700">{t('blockedTitle')}</p>
+          <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+            <div className="flex items-start gap-2">
+              <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <p className="text-sm font-medium text-amber-800">{t('blockedTitle')}</p>
+            </div>
             {blockedInvoices.map((inv) => (
-              <div key={inv.invoice_id} className="text-sm text-red-600">
-                <span className="font-mono text-xs">{inv.invoice_number || inv.invoice_id.slice(0, 8)}</span>
+              <div key={inv.invoice_id} className="text-sm text-amber-700">
+                <span className="font-mono text-xs font-medium">{inv.invoice_number || inv.invoice_id.slice(0, 8)}</span>
                 <ul className="ml-4 list-disc">
                   {inv.reasons.map((reason, i) => (
                     <li key={i} className="text-xs">{reason}</li>
@@ -307,6 +350,19 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
                 </ul>
               </div>
             ))}
+            <div className="pt-2 border-t border-amber-200">
+              <p className="text-xs text-amber-600 mb-2">{t('forceExportWarning')}</p>
+              <button
+                onClick={() => handleExport(true)}
+                disabled={isBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {t('forceExport')}
+              </button>
+            </div>
           </div>
         )}
 

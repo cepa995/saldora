@@ -45,7 +45,11 @@
     "collapse": "Скупи мени",
     "expand": "Прошири мени",
     "sefInbox": "SEF пријемно",
-    "rules": "Правила"
+    "rules": "Правила",
+    "templates": "Шаблони",
+    "groupOverview": "Преглед",
+    "groupDocuments": "Документи",
+    "groupTools": "Алати"
   },
   "script": {
     "latin": "Lat",
@@ -600,7 +604,9 @@
     "exporting": "Извоз у току...",
     "exportError": "Грешка при извозу фактура",
     "blockedTitle": "Извоз блокиран за следеће фактуре",
-    "blockedToast": "Извоз није могућ — фактуре морају бити верификоване за MiniMax XML формат",
+    "blockedToast": "Неке фактуре не задовољавају услове за извоз",
+    "forceExport": "Извези свејedno",
+    "forceExportWarning": "Подаци могу бити непотпуни. Наставите на сопствену одговорност.",
     "exportSuccess": "Фактуре су успешно извезене",
     "formatMinimaxDesc": "MiniMax XML формат за увоз у рачуноводствени софтвер",
     "pushToMinimaxTitle": "Директан увоз у MiniMax",
@@ -612,6 +618,38 @@
     "pushSuccess": "{count} фактура успешно послато у MiniMax",
     "pushPartial": "{success} успешно, {errors} са грешком",
     "pushFailed": "Слање у MiniMax није успело",
-    "pushError": "Грешка при слању у MiniMax"
+    "pushError": "Грешка при слању у MiniMax",
+    "template": "Шаблон извоза",
+    "templateDefault": "Подразумевани (сва поља)"
+  },
+  "templates": {
+    "title": "Шаблони извоза",
+    "subtitle": "Креирајте прилагођене шаблоне за извоз фактура",
+    "newTemplate": "Нови шаблон",
+    "emptyState": "Нема прилагођених шаблона",
+    "emptyStateSubtitle": "Креирајте први шаблон или користите подразумеване",
+    "systemBadge": "Системски",
+    "customBadge": "Прилагођени",
+    "fieldCount": "{count} поља",
+    "formats": "Формати",
+    "editTemplate": "Измени",
+    "deleteTemplate": "Избриши",
+    "deleteConfirmTitle": "Брисање шаблона",
+    "deleteConfirmMessage": "Да ли сте сигурни да желите да избришете шаблон \"{name}\"?",
+    "createTemplate": "Креирај шаблон",
+    "updateTemplate": "Сачувај измене",
+    "templateName": "Назив шаблона",
+    "templateNamePlaceholder": "нпр. Месечни извештај",
+    "templateDescription": "Опис (опционо)",
+    "fieldsSection": "Поља за извоз",
+    "fieldsHelp": "Одаберите и поређајте поља која ће се појавити у извезеној датотеци",
+    "customLabel": "Прилагођени назив колоне",
+    "supportedFormats": "Подржани формати",
+    "moveUp": "Помери горе",
+    "moveDown": "Помери доле",
+    "noFieldsSelected": "Одаберите барем једно поље",
+    "fieldsList": "Доступна поља",
+    "selectedFields": "Одабрана поља ({count})",
+    "allFormats": "Сви формати"
   }
 }

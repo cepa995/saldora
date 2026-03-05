@@ -146,8 +146,15 @@ export function useInvoiceList(): UseInvoiceListReturn {
       await Promise.all(ids.map((id) => verifyInvoice(id)));
       setSelectedIds(new Set());
       load(filters);
-    } catch {
-      setError('Greška pri verifikaciji faktura');
+    } catch (err: unknown) {
+      const apiErr = err as { message?: string; status?: number };
+      if (apiErr?.status === 400 && apiErr.message?.includes("'verified'")) {
+        setError('Odabrane fakture su već verifikovane');
+      } else if (apiErr?.status === 400 && apiErr.message?.includes('status')) {
+        setError('Odabrane fakture nisu u statusu za verifikaciju');
+      } else {
+        setError(apiErr?.message || 'Greška pri verifikaciji faktura');
+      }
     }
   }, [selectedIds, filters, load]);
 

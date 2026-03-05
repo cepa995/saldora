@@ -55,10 +55,10 @@ This diagram shows the complete user journey from first registration to exported
      │               │               │               │               │
      ▼               ▼               ▼               ▼               ▼
  Create org      Manual upload   OCR reads text   View extracted   XLSX, CSV,
- Invite team     SEF inbox       AI extracts      data with        JSON export
- Set up rules    Batch upload    fields           confidence       SEF filing
-                 (up to 50)     Validates PIB     Edit mistakes    Audit report
-                                Checks math       Accept/reject
+ Invite team     SEF inbox       AI extracts      data with        JSON, XML export
+ Set up rules    Batch upload    fields           confidence       MiniMax push
+                 (up to 50)     Validates PIB     Edit mistakes    Custom templates
+                                Checks math       Accept/reject    Audit package
                                 Suggests konta    Corrections
                                 Runs rules        logged
 ```
@@ -438,27 +438,127 @@ This correction log serves two purposes:
 
 | Format | Use Case |
 |--------|----------|
-| **XLSX** | Import into Excel or accounting software |
-| **CSV** | Universal data exchange |
-| **JSON** | Programmatic integration with other systems |
-| **XML** | Tax authority reporting format |
+| **XLSX** | Multi-sheet workbook — Invoices, Line Items, and Accounting sheets |
+| **CSV** | UTF-8 with BOM for Serbian character support; configurable delimiter (semicolon, comma, tab) |
+| **JSON** | Flat (array of records) or nested (full invoice objects with line items) |
+| **MiniMax XML** | Direct import format for MiniMax accounting software; requires verified invoices with valid PIB |
+
+### Serbian Formatting
+
+All exports use Serbian locale conventions by default:
+
+- **Decimal separator:** comma (59.000,00)
+- **Date format:** DD.MM.YYYY (15.06.2025.)
+- **Serbian headers:** "Broj fakture", "Datum fakture", "Ukupan iznos", etc.
+- **UTF-8 BOM** in CSV files for correct display in Excel
+
+### Export Safety Rules
+
+The system blocks export of invoices that are not ready:
+
+- **Missing required fields** (invoice number, date, seller info, amounts) — blocked
+- **Low confidence** (below 70%) — blocked with warning
+- **MiniMax XML** additionally requires verified status and valid 9-digit PIB
 
 ### Export Templates
 
-1. **Standard** — All fields in standard order
-2. **Accounting** — Optimized for accounting software import (includes konto, VAT treatment)
-3. **VAT Registry** — Formatted for PDV return submission (KPR/KIR format)
+FakturaAI provides four system templates and supports custom user-defined templates:
+
+**System Templates (built-in):**
+
+| Template | Fields | Formats |
+|----------|--------|---------|
+| **Standardni izvoz** | All 16 fields in standard order | XLSX, CSV, JSON |
+| **Racunovodstveni izvoz** | Invoice number, seller, PIB, date, amounts, currency | XLSX, CSV, JSON |
+| **MiniMax izvoz** | Fixed XML schema (not customizable) | MiniMax XML |
+| **PDV evidencija** | Tax-relevant fields for VAT return | XLSX, CSV |
+
+**Custom Templates:**
+
+Users can create their own templates with:
+- **Field selection** — choose which of the 16 available fields to include
+- **Field ordering** — arrange columns in any order
+- **Custom labels** — rename column headers (e.g., "Broj fakture" → "Br. fakt.")
+- **Format overrides** — set date format and decimal separator per template
+
+```
+Custom Template Example:
+  Name: "Mesečni izveštaj"
+  Fields:
+    1. invoice_number  → "Br. fakture"
+    2. seller_name     → "Dobavljač"
+    3. total_amount    → "Iznos"
+    4. tax_amount      → "PDV"
+  Formats: XLSX, CSV
+```
+
+Templates are scoped per organization — each organization manages its own custom templates while system defaults are always available to all.
+
+### MiniMax Integration
+
+For organizations using MiniMax accounting software, FakturaAI supports direct data push:
+
+```
+┌───────────────┐     ┌────────────────┐     ┌──────────────────┐
+│  FakturaAI    │────►│ MiniMax REST   │────►│ MiniMax Software │
+│  (Verified    │     │ API            │     │ (Accounting)     │
+│   invoices)   │     │ Basic Auth     │     │                  │
+└───────────────┘     └────────────────┘     └──────────────────┘
+```
+
+**Setup:** Organization configures MiniMax credentials (URL, username, password) in Settings. The system stores encrypted credentials and validates the connection.
+
+**Push flow:** Select verified invoices → "Push to MiniMax" → System converts to MiniMax XML → Sends via REST API → Reports success/failure per invoice.
 
 ### Audit Export
 
-For tax inspections, FakturaAI generates a comprehensive export package:
+For tax inspections (Poreska Uprava), administrators generate a comprehensive export package:
 
 ```
-Audit Export Package:
-  ├── invoice_register.xml      (structured register of all invoices)
-  ├── original_documents/       (original PDFs and images)
-  ├── audit_trail.csv           (who did what and when)
-  └── vat_summary.csv           (VAT breakdown by rate)
+Audit Export Package (ZIP):
+  ├── invoice_register.xlsx     (structured register of all invoices in period)
+  ├── vat_summary.xlsx          (VAT breakdown by rate and period)
+  ├── audit_trail.csv           (who did what and when — all actions logged)
+  └── original_documents/       (original PDFs and images)
+```
+
+**Access control:** Only users with admin role can generate audit exports.
+
+**Tracking:** Every audit export is recorded in the database with:
+- Date range and reason (e.g., "Poreska kontrola br. 123/2025")
+- Invoice count and file size
+- Presigned download URL (expires after 30 days)
+- Lifecycle status: processing → ready → expired
+
+Administrators can view the full audit export history for their organization.
+
+### Export Flow
+
+```
+User selects invoices ──► Choose format + template
+                              │
+                    ┌─────────┴──────────┐
+                    │                    │
+               Direct export       MiniMax push
+                    │                    │
+                    ▼                    ▼
+            Safety checks          Verify status
+            (required fields,      (must be verified,
+             confidence ≥ 70%)      valid PIB)
+                    │                    │
+                    ▼                    ▼
+            Apply template         Convert to XML
+            (field selection,      and POST to
+             ordering, labels)     MiniMax API
+                    │                    │
+                    ▼                    ▼
+            Generate file          Return success
+            (XLSX/CSV/JSON)        per invoice
+                    │
+                    ▼
+            Download with
+            Serbian filename
+            (fakture_2025-06-15.xlsx)
 ```
 
 ---
@@ -473,13 +573,12 @@ This diagram traces a single invoice through the entire system, from upload to e
  User uploads    1. Store in S3                   7. User reviews data
  PDF / image     2. Prepare document              8. Correct errors if needed
       │          3. OCR — dots.ocr VLM            9. Approve invoice
- SEF inbox  ───► 4. AI extraction — Claude LLM   10. Export (XLSX/CSV/XML)
- import          5. Validate (PIB, math, dupes)
-      │          6. Accounting intelligence             AUDIT LOG
- API call           (type, VAT, konta, rules)        (every step recorded)
-                    │
-                    ▼
-                 Status: "Review"
+ SEF inbox  ───► 4. AI extraction — Claude LLM   10. Export (XLSX/CSV/JSON/XML)
+ import          5. Validate (PIB, math, dupes)   11. MiniMax push (optional)
+      │          6. Accounting intelligence        12. Audit export (admin)
+ API call           (type, VAT, konta, rules)
+                                                         AUDIT LOG
+                                                      (every step recorded)
 ```
 
 ### Invoice Status Lifecycle
@@ -556,4 +655,4 @@ Each log entry records: who (user), what (action), when (timestamp), where (IP a
 
 ---
 
-*This document describes FakturaAI application version 1.0. For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+*This document describes FakturaAI through Milestone 6 (Data Export). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*

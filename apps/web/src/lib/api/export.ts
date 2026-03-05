@@ -6,7 +6,14 @@
  */
 
 import { apiClient, apiDownload } from '@/lib/api-client';
-import type { ExportFormat, ExportOptions, MiniMaxPushResponse } from '@/lib/types/export';
+import type {
+  ExportFormat,
+  ExportOptions,
+  ExportTemplate,
+  ExportTemplateCreate,
+  ExportTemplateUpdate,
+  MiniMaxPushResponse,
+} from '@/lib/types/export';
 
 /**
  * Export invoices to the specified format.
@@ -23,18 +30,74 @@ const FORMAT_EXTENSIONS: Record<ExportFormat, string> = {
   minimax_xml: 'xml',
 };
 
+/**
+ * Fetch available export templates for the current organization.
+ *
+ * @returns Array of export templates (system defaults + custom).
+ */
+export async function fetchTemplates(): Promise<ExportTemplate[]> {
+  return apiClient<ExportTemplate[]>('/api/v1/export/templates');
+}
+
+/**
+ * Create a custom export template.
+ *
+ * @param data - Template definition with name, fields, and formats.
+ * @returns The created template.
+ */
+export async function createTemplate(data: ExportTemplateCreate): Promise<ExportTemplate> {
+  return apiClient<ExportTemplate>('/api/v1/export/templates', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Update a custom export template.
+ *
+ * @param id - Template UUID.
+ * @param data - Fields to update.
+ * @returns The updated template.
+ */
+export async function updateTemplate(id: string, data: ExportTemplateUpdate): Promise<ExportTemplate> {
+  return apiClient<ExportTemplate>(`/api/v1/export/templates/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Delete a custom export template.
+ *
+ * @param id - Template UUID.
+ */
+export async function deleteTemplate(id: string): Promise<void> {
+  return apiClient<void>(`/api/v1/export/templates/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function exportInvoices(
   format: ExportFormat,
   invoiceIds: string[],
   options?: ExportOptions,
+  templateId?: string,
+  skipValidation?: boolean,
 ): Promise<{ blob: Blob; filename: string }> {
+  const body: Record<string, unknown> = {
+    format,
+    invoice_ids: invoiceIds,
+    options: options ?? {},
+  };
+  if (templateId && templateId !== 'default') {
+    body.template_id = templateId;
+  }
+  if (skipValidation) {
+    body.skip_validation = true;
+  }
   const result = await apiDownload('/api/v1/export', {
     method: 'POST',
-    body: JSON.stringify({
-      format,
-      invoice_ids: invoiceIds,
-      options: options ?? {},
-    }),
+    body: JSON.stringify(body),
   });
   // If Content-Disposition was not exposed by CORS, ensure correct extension
   if (!result.filename.includes('.')) {

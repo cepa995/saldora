@@ -41,3 +41,28 @@ export interface MiniMaxPushResponse {
   success_count: number;
   error_count: number;
 }
+
+export interface ExportTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  fields: { key: string; label: string; order: number }[];
+  supported_formats: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExportTemplateCreate {
+  name: string;
+  description?: string;
+  fields: { key: string; label: string; order: number }[];
+  supported_formats?: string[];
+}
+
+export interface ExportTemplateUpdate {
+  name?: string;
+  description?: string;
+  fields?: { key: string; label: string; order: number }[];
+  supported_formats?: string[];
+}
