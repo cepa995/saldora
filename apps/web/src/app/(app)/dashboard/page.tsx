@@ -298,16 +298,13 @@ export default function DashboardPage() {
               {t('viewAllInvoices')}
             </Link>
 
-            <div
-              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-400 cursor-not-allowed relative group"
-              title={tCommon('comingSoon')}
+            <Link
+              href="/invoices"
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             >
-              <DownloadIcon className="w-5 h-5" />
+              <DownloadIcon className="w-5 h-5 text-gray-500" />
               {t('exportReport')}
-              <span className="ml-auto text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">
-                {t('comingSoonBadge')}
-              </span>
-            </div>
+            </Link>
           </div>
 
           {/* Quick tip */}

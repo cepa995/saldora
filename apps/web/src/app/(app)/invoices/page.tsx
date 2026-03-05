@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
+import { ExportDialog } from '@/components/ExportDialog';
 import { formatDateSr, formatAmountSr } from '@/lib/formatters';
 import type { InvoiceStatus, SortColumn } from '@/lib/types/invoice';
 
@@ -56,6 +57,7 @@ export default function InvoicesPage() {
 
   const [searchValue, setSearchValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -235,6 +237,12 @@ export default function InvoicesPage() {
               className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
             >
               {t('batchVerify')}
+            </button>
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors"
+            >
+              {t('batchExport')}
             </button>
             <button
               onClick={handleBatchDelete}
@@ -549,6 +557,18 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Export dialog */}
+      {showExportDialog && (
+        <ExportDialog
+          invoiceIds={Array.from(selectedIds)}
+          onClose={() => setShowExportDialog(false)}
+          onSuccess={() => {
+            clearSelection();
+            refresh();
+          }}
+        />
       )}
     </div>
   );

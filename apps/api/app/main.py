@@ -90,6 +90,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Request context middleware (extracts IP + User-Agent for audit logging)

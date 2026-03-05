@@ -90,3 +90,68 @@ export async function apiFormPost<T>(
     true,
   );
 }
+
+/**
+ * Download a binary file from the API (e.g. export endpoints).
+ *
+ * Uses the same auth/401-retry logic as apiClient but returns a Blob
+ * instead of parsed JSON. Error responses are still parsed as JSON.
+ *
+ * @param endpoint - API endpoint path.
+ * @param options - Fetch options (method, body, etc.).
+ * @returns Object with blob data and extracted filename.
+ */
+export async function apiDownload(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const headers = new Headers(options.headers);
+
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const token = getAccessTokenFn?.();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401 && refreshTokensFn) {
+    const newToken = await refreshTokensFn().catch(() => null);
+    if (newToken) {
+      headers.set("Authorization", `Bearer ${newToken}`);
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } else {
+      onAuthFailedFn?.();
+    }
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const error: ApiError & { blockedInvoices?: unknown[] } = {
+      status: response.status,
+      message: body?.detail?.message || body?.detail || response.statusText,
+      detail: typeof body?.detail === "string" ? body.detail : undefined,
+    };
+    if (response.status === 422 && body?.detail?.blocked_invoices) {
+      error.blockedInvoices = body.detail.blocked_invoices;
+    }
+    throw error;
+  }
+
+  const blob = await response.blob();
+
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const filenameMatch = disposition.match(/filename="?([^";\n]+)"?/);
+  const filename = filenameMatch?.[1] || "fakture_izvoz";
+
+  return { blob, filename };
+}

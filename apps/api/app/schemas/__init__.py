@@ -1,7 +1,7 @@
 """Pydantic schemas for request/response validation."""
 
 from app.schemas.auth import TokenResponse, UserCreate, UserResponse
-from app.schemas.export import ExportRequest, ExportResponse
+from app.schemas.export import ExportBlockedResponse, ExportRequest
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceListResponse,
@@ -14,8 +14,8 @@ __all__ = [
     "TokenResponse",
     "UserCreate",
     "UserResponse",
+    "ExportBlockedResponse",
     "ExportRequest",
-    "ExportResponse",
     "InvoiceCreate",
     "InvoiceListResponse",
     "InvoiceResponse",
