@@ -30,7 +30,9 @@ M1: Foundation & Authentication [COMPLETED]
  │
  ├──► M8: Frontend Application (can start after M1, iterates with backend milestones)
  │
- └──► M9: CI/CD, Security & Production
+ ├──► M9: CI/CD, Security & Production
+ │
+ └──► M10: Multi-Country Tax ID Validation (after M3+M4, before production launch)
 ```
 
 ### Requirement Coverage
@@ -1384,6 +1386,94 @@ This milestone is complete. It established the database module, core models (Use
 
 ---
 
+## Milestone 10: Multi-Country Tax ID Validation
+
+**Goal:** Extend tax ID validation beyond Serbian PIB to support invoices from the broader Balkan region and EU. Auto-detect country from tax ID format, validate with country-specific checksum algorithms, and provide appropriate user feedback.
+
+**Dependencies:** M3 (PIB validation pipeline), M4 (APR verification pattern)
+
+### Issues
+
+#### 10.1 — Implement country-specific tax ID validators
+
+**Description:** Create validators for Croatian OIB, Bosnian JIB, Montenegrin PIB, and EU VAT IDs alongside the existing Serbian PIB validator.
+
+**Requirements covered:** SRS 4.9.2b
+
+**Tasks:**
+- Create `packages/ml/fakturaai_ml/validation/tax_id.py` with `TaxIDValidator` dispatcher
+- Implement `OIBValidator` — Croatian 11-digit OIB (ISO 7064 Mod 11,10 checksum)
+- Implement `JIBValidator` — Bosnian 13-digit JIB (Mod 10 checksum)
+- Implement `MontenegroValidator` — Montenegrin 8-digit PIB (Mod 11 checksum)
+- Implement `EUVATValidator` — EU VAT ID format validation (country prefix + country-specific pattern)
+- `TaxIDValidator.detect_and_validate(tax_id, country_hint=None)` auto-detects country from:
+  1. Tax ID length (9=Serbia, 11=Croatia, 13=BiH, 8=Montenegro)
+  2. Optional country hint from invoice language/currency
+- Each validator returns `ValidationResult` with `is_valid`, `country`, `warnings[]`
+- Update pipeline `_sanitize_pibs` to call `TaxIDValidator` instead of hardcoded PIB logic
+- Preserve backward compatibility: Serbian PIB validation unchanged
+
+**Acceptance:** Given tax IDs from Serbia (9-digit), Croatia (11-digit), BiH (13-digit), and Montenegro (8-digit), the system correctly identifies the country and validates format + checksum. Invalid IDs produce appropriate warnings.
+
+---
+
+#### 10.2 — Extend LLM extraction prompt for multi-country invoices
+
+**Description:** Update the Claude extraction prompt to recognize tax ID formats from Croatia, Bosnia, Montenegro, and EU countries.
+
+**Requirements covered:** SRS 4.9.2b
+
+**Tasks:**
+- Add country-specific PIB/OIB/JIB extraction rules to `_SYSTEM_PROMPT` in `llm_extractor.py`:
+  - Croatian invoices: OIB (11 digits), typically labeled "OIB:"
+  - Bosnian invoices: JIB (13 digits), labeled "JIB:" or "ID broj:"
+  - Montenegrin invoices: PIB (8 digits), labeled "PIB:"
+  - EU invoices: VAT ID with country prefix (e.g., "DE123456789", "AT U12345678")
+- Add `country` field to JSON extraction schema (auto-detected from invoice language/format)
+- Update `CompanyData` type with optional `country` field
+- Test with sample invoices from each country
+
+**Acceptance:** LLM correctly extracts OIB from Croatian invoices, JIB from Bosnian invoices, and EU VAT IDs from EU invoices without breaking Serbian PIB extraction.
+
+---
+
+#### 10.3 — Add country-aware confidence scoring and validation warnings
+
+**Description:** Extend confidence scoring and validation warnings to account for multi-country tax IDs.
+
+**Requirements covered:** SRS 4.9.2b
+
+**Tasks:**
+- Update `ConfidenceCalculator._calculate_pib_confidence()` to boost confidence for valid OIB/JIB/Montenegro PIB checksums
+- Update `_validate_invoice()` to use country-aware validation:
+  - Serbian invoices: validate against Serbian VAT rates (0%, 10%, 20%)
+  - Croatian invoices: validate against Croatian VAT rates (0%, 5%, 13%, 25%)
+  - Bosnian invoices: validate against BiH VAT rate (17%)
+  - Montenegrin invoices: validate against Montenegrin VAT rates (0%, 7%, 21%)
+- Add country-specific validation warning messages (localized)
+- Update frontend validation warning display if needed
+
+**Acceptance:** Croatian invoice with OIB and 25% VAT rate validates correctly. Serbian invoice with 25% rate is flagged for review. Confidence scores reflect checksum validation per country.
+
+---
+
+#### 10.4 — Write tests for multi-country tax ID validation
+
+**Description:** Comprehensive test coverage for all country-specific validators.
+
+**Tasks:**
+- Unit tests for OIBValidator: valid/invalid OIB, checksum validation, edge cases
+- Unit tests for JIBValidator: valid/invalid JIB, checksum validation
+- Unit tests for MontenegroValidator: valid/invalid 8-digit PIB
+- Unit tests for EUVATValidator: common EU formats (DE, AT, FR, IT, NL)
+- Unit tests for TaxIDValidator dispatcher: auto-detection from length, country hint override
+- Integration tests: multi-country invoices through full pipeline
+- Regression tests: Serbian PIB extraction unchanged by new validators
+
+**Acceptance:** All tests pass. Coverage includes happy paths, invalid formats, checksum failures, and ambiguous cases.
+
+---
+
 ## Summary
 
 | Milestone | Issues | Key Deliverable |
@@ -1397,8 +1487,9 @@ This milestone is complete. It established the database module, core models (Use
 | **M7: External Integrations** | 7.1–7.8 | SEF eFaktura sync, NBS exchange rates, Paddle billing, email, webhooks, usage tracking |
 | **M8: Frontend Application** | 8.1–8.11 | Dashboard, upload, invoice list, review, settings, SEF inbox, billing, i18n, responsive, landing page |
 | **M9: CI/CD & Production** | 9.1–9.10 | CI pipeline, E2E tests, security, monitoring, K8s deployment, ZZPL compliance, API keys, OAuth, data retention |
+| **M10: Multi-Country Tax ID** | 10.1–10.4 | OIB/JIB/EU VAT validators, LLM prompt for multi-country, country-aware confidence scoring, tests |
 
-**Total: 57 issues across 9 milestones.**
+**Total: 61 issues across 10 milestones.**
 
 ### Parallelization Opportunities
 
@@ -1410,11 +1501,12 @@ This milestone is complete. It established the database module, core models (Use
 - **M8.8** (i18n) can start any time and be applied incrementally to new pages
 - **M8.11** (landing page) is independent and can be built any time
 - **M9.8** (API keys) and **M9.9** (OAuth) can be built in parallel
+- **M10** can start after M3 (PIB validation exists). **10.1** (validators) and **10.2** (LLM prompt) can be built in parallel. **10.3** (confidence scoring) depends on 10.1. **10.4** (tests) can start with 10.1
 
 ### Estimated Issue Sizing
 
 | Size | Description | Issues |
 |------|-------------|--------|
-| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10 |
-| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9 |
-| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7 |
+| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4 |
+| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3 |
+| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1 |

@@ -24,7 +24,7 @@ def get_pipeline():
 
         use_llm = os.getenv("LLM_EXTRACTION_ENABLED", "false").lower() == "true"
         llm_api_key = os.getenv("ANTHROPIC_API_KEY")
-        llm_model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+        llm_model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
         logger.info(
             "Initializing InvoicePipeline (LLM extraction: %s, model: %s)...",

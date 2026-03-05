@@ -8,13 +8,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_, select
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.audit_export import AuditExport
 from app.models.export_template import ExportTemplate
+from app.models.invoice import Invoice
 from app.models.minimax_config import MiniMaxConfig
 from app.schemas.export import (
     AuditExportRequest,
@@ -33,7 +34,7 @@ from app.schemas.minimax import (
     MiniMaxPushResponse,
     MiniMaxPushResult,
 )
-from app.services.export.audit import generate_audit_export
+from app.services.export.audit import AUDIT_URL_EXPIRY, generate_audit_export
 from app.services.export.core import (
     VALID_FIELD_KEYS,
     check_export_blocking,
@@ -45,6 +46,7 @@ from app.services.export.minimax_xml import generate_minimax_xml
 from app.services.export.xlsx import generate_xlsx
 from app.services.minimax.client import MiniMaxClient, MiniMaxError
 from app.services.minimax.mapper import map_invoice_to_received
+from app.services.storage import get_presigned_url
 
 logger = logging.getLogger(__name__)
 
@@ -514,7 +516,8 @@ async def create_audit_export(
     - Audit trail (CSV)
     - VAT summary (XLSX)
 
-    Uploads ZIP to S3 and returns presigned URL (30-day expiry).
+    Uploads ZIP to S3 and returns presigned URL. Files are retained for 30 days;
+    presigned URLs are regenerated on-demand via the history endpoint.
     Records the export in the audit_exports table for tracking.
     """
     # Admin-only access
@@ -597,6 +600,42 @@ async def create_audit_export(
     )
 
 
+@router.get("/audit/preview")
+async def preview_audit_export(
+    date_from: str,
+    date_to: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> dict:
+    """Preview invoice count for a date range before generating audit export.
+
+    Args:
+        date_from: Start date (YYYY-MM-DD).
+        date_to: End date (YYYY-MM-DD).
+
+    Returns:
+        Dict with invoice_count for the selected period.
+    """
+    try:
+        d_from = date.fromisoformat(date_from)
+        d_to = date.fromisoformat(date_to)
+    except ValueError:
+        return {"invoice_count": 0}
+
+    effective_date = func.coalesce(Invoice.invoice_date, cast(Invoice.created_at, Date))
+    result = await db.execute(
+        select(func.count())
+        .select_from(Invoice)
+        .where(
+            Invoice.organization_id == current_user.organization_id,
+            effective_date >= d_from,
+            effective_date <= d_to,
+        )
+    )
+    count = result.scalar() or 0
+    return {"invoice_count": count}
+
+
 @router.get("/audit/history", response_model=list[AuditExportResponse])
 async def list_audit_exports(
     db: AsyncSession = Depends(get_db),
@@ -619,20 +658,38 @@ async def list_audit_exports(
     )
     exports = result.scalars().all()
 
-    return [
-        AuditExportResponse(
-            id=e.id,
-            download_url=e.download_url,
-            file_size=e.file_size_bytes,
-            invoice_count=e.invoice_count,
-            period={"from": e.date_from.isoformat(), "to": e.date_to.isoformat()},
-            status=e.status,
-            reason=e.reason,
-            expires_at=e.expires_at,
-            created_at=e.created_at,
+    responses = []
+    now = datetime.now(UTC)
+    for e in exports:
+        # Auto-expire if past expiration date
+        export_status = e.status
+        if export_status == "ready" and e.expires_at and e.expires_at < now:
+            export_status = "expired"
+
+        # Generate fresh presigned URL for ready exports with a stored S3 key
+        download_url = None
+        if export_status == "ready" and e.file_path:
+            try:
+                download_url = get_presigned_url(e.file_path, AUDIT_URL_EXPIRY)
+            except Exception:
+                logger.warning("Failed to generate presigned URL for export %s", e.id)
+                download_url = None
+
+        responses.append(
+            AuditExportResponse(
+                id=e.id,
+                download_url=download_url,
+                file_size=e.file_size_bytes,
+                invoice_count=e.invoice_count,
+                period={"from": e.date_from.isoformat(), "to": e.date_to.isoformat()},
+                status=export_status,
+                reason=e.reason,
+                expires_at=e.expires_at,
+                created_at=e.created_at,
+            )
         )
-        for e in exports
-    ]
+
+    return responses
 
 
 # ---------------------------------------------------------------------------

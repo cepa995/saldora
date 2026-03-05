@@ -115,8 +115,10 @@ export function FileUpload({
   // Auto-redirect for single file upload on completion
   useEffect(() => {
     if (uploadedFiles.length === 1 && uploadedFiles[0].status === 'success' && uploadedFiles[0].jobId) {
+      const jobId = uploadedFiles[0].jobId;
       const timer = setTimeout(() => {
-        router.push(`/invoices/${uploadedFiles[0].jobId}`);
+        clearUploadFiles();
+        router.push(`/invoices/${jobId}`);
       }, 1500);
       return () => clearTimeout(timer);
     }

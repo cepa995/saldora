@@ -70,3 +70,26 @@ export function formatRelativeTime(dateStr: string): string {
 
   return formatDateSr(dateStr);
 }
+
+/**
+ * Format a byte count to human-readable size string in Serbian locale.
+ *
+ * Args:
+ *   bytes - File size in bytes, or null.
+ * Returns:
+ *   Formatted string (e.g. "2,3 MB") or em-dash for null values.
+ */
+export function formatFileSize(bytes: number | null): string {
+  if (bytes === null || bytes === undefined) return '—';
+  if (bytes === 0) return '0 B';
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const k = 1024;
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
+  const value = bytes / Math.pow(k, i);
+
+  return `${value.toLocaleString('sr-Latn-RS', {
+    minimumFractionDigits: i > 1 ? 1 : 0,
+    maximumFractionDigits: 1,
+  })} ${units[i]}`;
+}

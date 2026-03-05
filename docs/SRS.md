@@ -636,6 +636,61 @@ SAME_PARTY_CHECK(seller, buyer):
     FLAG_FOR_REVIEW("Slična imena, različiti PIB-ovi")
 ```
 
+#### 4.9.2a Fiscal Receipt PIB Extraction Rules
+
+Serbian fiscal receipts (FISKALNI RAČUN / ФИСКАЛНИ РАЧУН) have a distinct layout that requires special extraction rules:
+
+| Element | Location | Rule |
+|---------|----------|------|
+| Seller PIB | Standalone 9-digit number near top, before company name | Extract as `seller_pib` |
+| Store/branch number | Part of location line (e.g. `1036918-БС Нови Сад 16`) | Do NOT extract as PIB |
+| Buyer ID | `ИД купца: XX:NNNNNNNNN` | Extract only digits AFTER the colon |
+
+**Buyer ID Type Codes (ИД купца):**
+
+| Code | Type | Description |
+|------|------|-------------|
+| 10 | PIB | Tax identification number (9 digits) |
+| 11 | JMBG | Personal identification number (13 digits) |
+| 12 | PIB + JBKJS | Tax ID + budget user code |
+| 20 | Broj pasoša | Passport number (foreign buyer) |
+
+**Sanitization Rules (post-extraction):**
+```
+SANITIZE_PIB(raw_value):
+  # Strip OCR noise: spaces, dashes, dots, slashes
+  cleaned = STRIP_CHARS(raw_value, " -./ ")
+
+  # Handle fiscal receipt prefix: "XX:NNNNNNNNN"
+  IF ":" IN cleaned:
+    candidate = PART_AFTER_LAST_COLON(cleaned)
+    IF candidate.is_digits AND LEN(candidate) == 9:
+      RETURN candidate
+
+  RETURN cleaned
+```
+
+#### 4.9.2b Multi-Country Tax ID Validation (Future)
+
+The system is designed Serbia-first, but the PIB field (`VARCHAR(20)`) and validation architecture support expansion to other Balkan and EU tax ID formats.
+
+| Country | Tax ID | Format | Checksum Algorithm |
+|---------|--------|--------|--------------------|
+| **Serbia** | PIB | 9 digits | ISO 7064 Mod 11,10 |
+| **Croatia** | OIB | 11 digits | ISO 7064 Mod 11,10 |
+| **Bosnia & Herzegovina** | JIB | 13 digits | Mod 10 |
+| **Montenegro** | PIB | 8 digits | Mod 11 |
+| **North Macedonia** | EDB | 13 digits | Varies |
+| **Slovenia** | Davčna | 8 digits | Mod 11 |
+| **EU (generic)** | VAT ID | CC + 2-12 chars | Country-specific |
+
+**Implementation approach:**
+- Country auto-detected from tax ID length, invoice language, and currency
+- `TaxIDValidator` dispatches to country-specific validator (PIBValidator, OIBValidator, etc.)
+- LLM prompt extended with per-country extraction rules
+- Existing PIB sanitization pipeline handles prefix stripping for all formats
+- APR verification extended with country-specific registry lookups (Croatia: FINA, BiH: APIF)
+
 #### 4.9.3 VAT Rate Validation
 
 | Extracted Rate | Valid Rates | Action |
@@ -4002,7 +4057,9 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | Term | Definition |
 |------|------------|
 | APR | Agencija za Privredne Registre - Serbian Business Registers Agency |
-| PIB | Poreski Identifikacioni Broj - Tax Identification Number |
+| PIB | Poreski Identifikacioni Broj - Tax Identification Number (Serbia: 9 digits, Montenegro: 8 digits) |
+| OIB | Osobni Identifikacijski Broj - Personal Identification Number (Croatia: 11 digits) |
+| JIB | Jedinstveni Identifikacioni Broj - Unique Identification Number (Bosnia & Herzegovina: 13 digits) |
 | PDV | Porez na Dodatu Vrednost - Value Added Tax |
 | OCR | Optical Character Recognition |
 | NER | Named Entity Recognition |
@@ -4082,6 +4139,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.0 | February 2026 | FakturaAI Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
 | 2.1 | February 2026 | FakturaAI Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
 | 2.2 | February 2026 | FakturaAI Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
+| 2.3 | March 2026 | FakturaAI Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
 
 ---
 

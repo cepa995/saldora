@@ -148,7 +148,7 @@ services:
       DOTS_OCR_SERVER_URL: http://dots-ocr-server:8000/v1
       DOTS_OCR_MODEL_NAME: model
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       LLM_EXTRACTION_ENABLED: "true"
     depends_on:
       redis:

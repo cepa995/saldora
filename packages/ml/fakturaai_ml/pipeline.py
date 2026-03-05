@@ -76,7 +76,7 @@ class InvoicePipeline:
         model_path: str | None = None,
         use_llm: bool = False,
         llm_api_key: str | None = None,
-        llm_model: str = "claude-sonnet-4-20250514",
+        llm_model: str = "claude-haiku-4-5-20251001",
     ):
         """
         Initialize the invoice processing pipeline.
@@ -232,6 +232,9 @@ class InvoicePipeline:
             invoice.raw_text = combined_text
             invoice.raw_structured = all_structured
 
+            # Sanitize PIBs (fix common LLM extraction errors)
+            self._sanitize_pibs(invoice)
+
             # Derive missing amount fields
             self._derive_amounts(invoice)
 
@@ -308,6 +311,57 @@ class InvoicePipeline:
         if data[:4] == b"%PDF":
             return "pdf"
         return "image"
+
+    def _sanitize_pibs(self, invoice: ExtractedInvoice) -> None:
+        """Sanitize PIB fields to fix common LLM extraction errors.
+
+        Handles:
+        - Buyer ID prefix on fiscal receipts: "10:111859782" → "111859782"
+          (the prefix is a type code, not part of the PIB)
+        - Strips whitespace, dashes, and dots that OCR may introduce
+
+        Args:
+            invoice: Extracted invoice to patch in-place.
+        """
+        import re
+
+        for entity, label in [
+            (invoice.seller, "seller"),
+            (invoice.buyer, "buyer"),
+        ]:
+            if not entity.pib:
+                continue
+
+            original = entity.pib
+
+            # Strip common OCR noise (spaces, dashes, dots, slashes)
+            cleaned = re.sub(r"[\s\-./]", "", original)
+
+            # Handle fiscal receipt buyer ID format: "XX:NNNNNNNNN"
+            # The XX is a type code (10=PIB, 11=JMBG), not part of the PIB
+            if ":" in cleaned:
+                parts = cleaned.split(":")
+                # Take the last part (the actual ID)
+                candidate = parts[-1]
+                if candidate.isdigit() and len(candidate) == 9:
+                    logger.info(
+                        "Sanitized %s PIB: '%s' → '%s' (stripped type-code prefix)",
+                        label,
+                        original,
+                        candidate,
+                    )
+                    entity.pib = candidate
+                    continue
+
+            # If cleaned differs from original, update
+            if cleaned != original:
+                logger.info(
+                    "Sanitized %s PIB: '%s' → '%s'",
+                    label,
+                    original,
+                    cleaned,
+                )
+                entity.pib = cleaned
 
     def _derive_amounts(self, invoice: ExtractedInvoice) -> None:
         """Fill in missing amount fields from available data.
