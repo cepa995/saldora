@@ -7,6 +7,7 @@ from io import BytesIO
 
 from app.models.invoice import Invoice
 from app.services.export.core import (
+    apply_template,
     extract_invoice_row,
 )
 
@@ -27,6 +28,7 @@ def generate_json(
     nested: bool = False,
     date_format: str = "DD.MM.YYYY",
     decimal_separator: str = ".",
+    template_fields: list[dict] | None = None,
 ) -> BytesIO:
     """Generate JSON export.
 
@@ -35,6 +37,8 @@ def generate_json(
         nested: If True, include line_items and accounting_intent.
         date_format: Date format string.
         decimal_separator: Decimal separator (always '.' for JSON).
+        template_fields: Optional list of {key, label, order} dicts for
+            custom field selection (flat mode only; ignored in nested mode).
 
     Returns:
         BytesIO buffer containing the JSON file.
@@ -44,7 +48,11 @@ def generate_json(
 
     for inv in invoices:
         if nested:
+            # Nested mode ignores templates (returns full object structure)
             record = _build_nested_record(inv)
+        elif template_fields:
+            row_data = extract_invoice_row(inv, date_format, ".")
+            record = dict(apply_template(row_data, template_fields))
         else:
             record = extract_invoice_row(inv, date_format, ".")
 

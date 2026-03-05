@@ -13,6 +13,7 @@ from app.services.export.core import (
     ACCOUNTING_HEADERS_SR,
     INVOICE_HEADERS_SR,
     LINE_ITEM_HEADERS_SR,
+    apply_template,
     extract_accounting_row,
     extract_invoice_row,
     format_serbian_number,
@@ -37,6 +38,7 @@ def generate_xlsx(
     include_line_items: bool = True,
     date_format: str = "DD.MM.YYYY",
     decimal_separator: str = ",",
+    template_fields: list[dict] | None = None,
 ) -> BytesIO:
     """Generate multi-sheet XLSX workbook.
 
@@ -45,6 +47,9 @@ def generate_xlsx(
         include_line_items: Whether to include line items sheet.
         date_format: Date format string.
         decimal_separator: Decimal separator for numbers.
+        template_fields: Optional list of {key, label, order} dicts for
+            custom field selection and ordering. When provided, the Fakture
+            sheet uses only the specified fields with custom labels.
 
     Returns:
         BytesIO buffer containing the XLSX file.
@@ -52,9 +57,9 @@ def generate_xlsx(
     wb = Workbook()
 
     # Sheet 1: Invoices
-    _build_invoices_sheet(wb.active, invoices, date_format, decimal_separator)
+    _build_invoices_sheet(wb.active, invoices, date_format, decimal_separator, template_fields)
 
-    # Sheet 2: Line Items (optional)
+    # Sheet 2: Line Items (optional, not affected by templates)
     if include_line_items:
         ws_items = wb.create_sheet("Stavke")
         _build_line_items_sheet(ws_items, invoices, decimal_separator)
@@ -92,17 +97,38 @@ def _auto_width(ws) -> None:
         ws.column_dimensions[col_letter].width = min(max_length + 4, 50)
 
 
-def _build_invoices_sheet(ws, invoices, date_format, decimal_separator):
-    """Build the main Invoices sheet."""
-    ws.title = "Fakture"
-    headers = list(INVOICE_HEADERS_SR.values())
-    _style_header_row(ws, headers)
+def _build_invoices_sheet(ws, invoices, date_format, decimal_separator, template_fields=None):
+    """Build the main Invoices sheet.
 
-    for row_idx, inv in enumerate(invoices, 2):
-        row_data = extract_invoice_row(inv, date_format, decimal_separator)
-        for col_idx, key in enumerate(INVOICE_HEADERS_SR.keys(), 1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=row_data[key])
-            cell.border = THIN_BORDER
+    Args:
+        ws: Worksheet to populate.
+        invoices: List of Invoice instances.
+        date_format: Date format string.
+        decimal_separator: Decimal separator.
+        template_fields: Optional template field config for custom columns.
+    """
+    ws.title = "Fakture"
+
+    if template_fields:
+        sorted_fields = sorted(template_fields, key=lambda f: f["order"])
+        headers = [f["label"] for f in sorted_fields]
+        _style_header_row(ws, headers)
+
+        for row_idx, inv in enumerate(invoices, 2):
+            row_data = extract_invoice_row(inv, date_format, decimal_separator)
+            templated = apply_template(row_data, template_fields)
+            for col_idx, value in enumerate(templated.values(), 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                cell.border = THIN_BORDER
+    else:
+        headers = list(INVOICE_HEADERS_SR.values())
+        _style_header_row(ws, headers)
+
+        for row_idx, inv in enumerate(invoices, 2):
+            row_data = extract_invoice_row(inv, date_format, decimal_separator)
+            for col_idx, key in enumerate(INVOICE_HEADERS_SR.keys(), 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=row_data[key])
+                cell.border = THIN_BORDER
 
     _auto_width(ws)
 

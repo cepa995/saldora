@@ -45,7 +45,11 @@
     "collapse": "Skupi meni",
     "expand": "Proširi meni",
     "sefInbox": "SEF prijemno",
-    "rules": "Pravila"
+    "rules": "Pravila",
+    "templates": "Šabloni",
+    "groupOverview": "Pregled",
+    "groupDocuments": "Dokumenti",
+    "groupTools": "Alati"
   },
   "script": {
     "latin": "Lat",
@@ -578,6 +582,36 @@
     "op_is_null": "nije postavljeno",
     "op_is_not_null": "postavljeno je"
   },
+  "templates": {
+    "title": "Šabloni izvoza",
+    "subtitle": "Kreirajte prilagođene šablone za izvoz faktura",
+    "newTemplate": "Novi šablon",
+    "emptyState": "Nema prilagođenih šablona",
+    "emptyStateSubtitle": "Kreirajte prvi šablon ili koristite podrazumevane",
+    "systemBadge": "Sistemski",
+    "customBadge": "Prilagođeni",
+    "fieldCount": "{count} polja",
+    "formats": "Formati",
+    "editTemplate": "Izmeni",
+    "deleteTemplate": "Izbriši",
+    "deleteConfirmTitle": "Brisanje šablona",
+    "deleteConfirmMessage": "Da li ste sigurni da želite da izbrišete šablon \"{name}\"?",
+    "createTemplate": "Kreiraj šablon",
+    "updateTemplate": "Sačuvaj izmene",
+    "templateName": "Naziv šablona",
+    "templateNamePlaceholder": "npr. Mesečni izveštaj",
+    "templateDescription": "Opis (opciono)",
+    "fieldsSection": "Polja za izvoz",
+    "fieldsHelp": "Odaberite i poređajte polja koja će se pojaviti u izvezenoj datoteci",
+    "customLabel": "Prilagođeni naziv kolone",
+    "supportedFormats": "Podržani formati",
+    "moveUp": "Pomeri gore",
+    "moveDown": "Pomeri dole",
+    "noFieldsSelected": "Odaberite barem jedno polje",
+    "fieldsList": "Dostupna polja",
+    "selectedFields": "Odabrana polja ({count})",
+    "allFormats": "Svi formati"
+  },
   "export": {
     "dialogTitle": "Izvezi fakture",
     "invoiceCount": "{count} faktura",
@@ -600,7 +634,9 @@
     "exporting": "Izvoz u toku...",
     "exportError": "Greška pri izvozu faktura",
     "blockedTitle": "Izvoz blokiran za sledeće fakture",
-    "blockedToast": "Izvoz nije moguć — fakture moraju biti verifikovane za MiniMax XML format",
+    "blockedToast": "Neke fakture ne zadovoljavaju uslove za izvoz",
+    "forceExport": "Izvezi svejedno",
+    "forceExportWarning": "Podaci mogu biti nepotpuni. Nastavite na sopstvenu odgovornost.",
     "exportSuccess": "Fakture su uspešno izvezene",
     "formatMinimaxDesc": "MiniMax XML format za uvoz u računovodstveni softver",
     "pushToMinimaxTitle": "Direktan uvoz u MiniMax",
@@ -612,6 +648,8 @@
     "pushSuccess": "{count} faktura uspešno poslato u MiniMax",
     "pushPartial": "{success} uspešno, {errors} sa greškom",
     "pushFailed": "Slanje u MiniMax nije uspelo",
-    "pushError": "Greška pri slanju u MiniMax"
+    "pushError": "Greška pri slanju u MiniMax",
+    "template": "Šablon izvoza",
+    "templateDefault": "Podrazumevani (sva polja)"
   }
 }

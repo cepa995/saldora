@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 from app.models.invoice import Invoice
 from app.services.export.core import (
     INVOICE_HEADERS_SR,
+    apply_template,
     extract_invoice_row,
 )
 
@@ -28,6 +29,7 @@ def generate_csv(
     date_format: str = "DD.MM.YYYY",
     decimal_separator: str = ",",
     delimiter: str = "semicolon",
+    template_fields: list[dict] | None = None,
 ) -> BytesIO:
     """Generate CSV file with UTF-8 BOM.
 
@@ -36,6 +38,8 @@ def generate_csv(
         date_format: Date format string.
         decimal_separator: Decimal separator for numbers.
         delimiter: CSV delimiter ('semicolon', 'comma', 'tab').
+        template_fields: Optional list of {key, label, order} dicts for
+            custom field selection and ordering.
 
     Returns:
         BytesIO buffer containing the CSV file with BOM.
@@ -44,13 +48,20 @@ def generate_csv(
     string_buffer = StringIO()
     writer = csv.writer(string_buffer, delimiter=delim_char)
 
-    # Header row
-    writer.writerow(list(INVOICE_HEADERS_SR.values()))
+    if template_fields:
+        sorted_fields = sorted(template_fields, key=lambda f: f["order"])
+        writer.writerow([f["label"] for f in sorted_fields])
 
-    # Data rows
-    for inv in invoices:
-        row_data = extract_invoice_row(inv, date_format, decimal_separator)
-        writer.writerow([row_data[key] for key in INVOICE_HEADERS_SR])
+        for inv in invoices:
+            row_data = extract_invoice_row(inv, date_format, decimal_separator)
+            templated = apply_template(row_data, template_fields)
+            writer.writerow(list(templated.values()))
+    else:
+        writer.writerow(list(INVOICE_HEADERS_SR.values()))
+
+        for inv in invoices:
+            row_data = extract_invoice_row(inv, date_format, decimal_separator)
+            writer.writerow([row_data[key] for key in INVOICE_HEADERS_SR])
 
     # Encode to bytes with BOM
     buffer = BytesIO()

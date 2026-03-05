@@ -45,7 +45,11 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu",
     "sefInbox": "SEF Inbox",
-    "rules": "Rules"
+    "rules": "Rules",
+    "templates": "Templates",
+    "groupOverview": "Overview",
+    "groupDocuments": "Documents",
+    "groupTools": "Tools"
   },
   "script": {
     "latin": "Lat",
@@ -600,7 +604,9 @@
     "exporting": "Exporting...",
     "exportError": "Failed to export invoices",
     "blockedTitle": "Export blocked for the following invoices",
-    "blockedToast": "Export not possible — invoices must be verified for MiniMax XML format",
+    "blockedToast": "Some invoices do not meet export requirements",
+    "forceExport": "Export anyway",
+    "forceExportWarning": "Data may be incomplete. Proceed at your own risk.",
     "exportSuccess": "Invoices exported successfully",
     "formatMinimaxDesc": "MiniMax XML format for accounting software import",
     "pushToMinimaxTitle": "Direct push to MiniMax",
@@ -612,6 +618,38 @@
     "pushSuccess": "{count} invoice(s) successfully pushed to MiniMax",
     "pushPartial": "{success} successful, {errors} with errors",
     "pushFailed": "Push to MiniMax failed",
-    "pushError": "Error pushing to MiniMax"
+    "pushError": "Error pushing to MiniMax",
+    "template": "Export template",
+    "templateDefault": "Default (all fields)"
+  },
+  "templates": {
+    "title": "Export Templates",
+    "subtitle": "Create custom templates for invoice export",
+    "newTemplate": "New Template",
+    "emptyState": "No custom templates",
+    "emptyStateSubtitle": "Create your first template or use the defaults",
+    "systemBadge": "System",
+    "customBadge": "Custom",
+    "fieldCount": "{count} fields",
+    "formats": "Formats",
+    "editTemplate": "Edit",
+    "deleteTemplate": "Delete",
+    "deleteConfirmTitle": "Delete Template",
+    "deleteConfirmMessage": "Are you sure you want to delete the template \"{name}\"?",
+    "createTemplate": "Create Template",
+    "updateTemplate": "Save Changes",
+    "templateName": "Template Name",
+    "templateNamePlaceholder": "e.g. Monthly Report",
+    "templateDescription": "Description (optional)",
+    "fieldsSection": "Export Fields",
+    "fieldsHelp": "Select and order the fields that will appear in the exported file",
+    "customLabel": "Custom column name",
+    "supportedFormats": "Supported Formats",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "noFieldsSelected": "Select at least one field",
+    "fieldsList": "Available fields",
+    "selectedFields": "Selected fields ({count})",
+    "allFormats": "All formats"
   }
 }

@@ -1,6 +1,7 @@
 """Export orchestration — validate, block-check, dispatch to generators."""
 
 import logging
+from collections import OrderedDict
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -32,6 +33,9 @@ INVOICE_HEADERS_SR = {
     "status": "Status",
     "confidence_score": "Pouzdanost (%)",
 }
+
+# Valid field keys for custom templates (keys from INVOICE_HEADERS_SR)
+VALID_FIELD_KEYS = set(INVOICE_HEADERS_SR.keys())
 
 # Serbian column headers for line items
 LINE_ITEM_HEADERS_SR = {
@@ -281,3 +285,29 @@ def extract_accounting_row(
         "debit_konta": debit_str,
         "credit_konta": credit_str,
     }
+
+
+def apply_template(
+    row_data: dict,
+    template_fields: list[dict],
+) -> OrderedDict:
+    """Filter and reorder row data according to template field config.
+
+    Takes the full row dict from extract_invoice_row() and returns only
+    the fields specified in the template, in the template's order,
+    with the template's custom labels as keys.
+
+    Args:
+        row_data: Full dict from extract_invoice_row() (keyed by field key).
+        template_fields: List of {key, label, order} dicts from a template.
+
+    Returns:
+        OrderedDict with only the selected fields, using custom labels as keys.
+    """
+    sorted_fields = sorted(template_fields, key=lambda f: f["order"])
+    result = OrderedDict()
+    for field in sorted_fields:
+        key = field["key"]
+        label = field["label"]
+        result[label] = row_data.get(key, "")
+    return result

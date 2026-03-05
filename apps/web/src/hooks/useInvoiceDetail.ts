@@ -89,8 +89,15 @@ export function useInvoiceDetail(id: string): UseInvoiceDetailReturn {
       setInvoice(updated);
       setEditedFields({});
       return true;
-    } catch {
-      setError('Greška pri verifikaciji fakture');
+    } catch (err: unknown) {
+      const apiErr = err as { message?: string; status?: number };
+      if (apiErr?.status === 400 && apiErr.message?.includes("'verified'")) {
+        setError('Faktura je već verifikovana');
+      } else if (apiErr?.status === 400 && apiErr.message?.includes('status')) {
+        setError('Faktura nije u statusu za verifikaciju');
+      } else {
+        setError(apiErr?.message || 'Greška pri verifikaciji fakture');
+      }
       return false;
     } finally {
       setIsVerifying(false);

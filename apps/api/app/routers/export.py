@@ -2,18 +2,29 @@
 
 import logging
 import re
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.audit_export import AuditExport
+from app.models.export_template import ExportTemplate
 from app.models.minimax_config import MiniMaxConfig
-from app.schemas.export import AuditExportRequest, ExportBlockedResponse, ExportRequest
+from app.schemas.export import (
+    AuditExportRequest,
+    AuditExportResponse,
+    ExportBlockedResponse,
+    ExportRequest,
+    ExportTemplateCreate,
+    ExportTemplateResponse,
+    ExportTemplateUpdate,
+)
 from app.schemas.minimax import (
     MiniMaxConfigCreate,
     MiniMaxConfigResponse,
@@ -24,6 +35,7 @@ from app.schemas.minimax import (
 )
 from app.services.export.audit import generate_audit_export
 from app.services.export.core import (
+    VALID_FIELD_KEYS,
     check_export_blocking,
     load_invoices_for_export,
 )
@@ -75,6 +87,7 @@ async def create_export(
 
     Streams the file directly as a response (XLSX, CSV, JSON, or MiniMax XML).
     Applies SRS 4.9.7 blocking rules before generating the export.
+    Optionally applies a custom template for field selection and ordering.
     """
     # Load invoices scoped by organization
     try:
@@ -87,29 +100,60 @@ async def create_export(
             detail=str(e),
         )
 
-    # Check export blocking rules (MiniMax XML has stricter verification rules)
-    blocked = check_export_blocking(invoices, export_format=request.format)
-    if blocked:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "blocked_invoices": blocked,
-                "message": f"{len(blocked)} faktura blokirano za izvoz",
-            },
-        )
+    # Check export blocking rules (MiniMax XML has stricter verification rules).
+    # When skip_validation=True, bypass Rules 1-3 (missing fields, low
+    # confidence, unresolved warnings) but still enforce Rule 4 for MiniMax
+    # XML which requires verified status.
+    if not request.skip_validation:
+        blocked = check_export_blocking(invoices, export_format=request.format)
+        if blocked:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "blocked_invoices": blocked,
+                    "message": f"{len(blocked)} faktura blokirano za izvoz",
+                },
+            )
+    elif request.format == "minimax_xml":
+        # Even with skip_validation, MiniMax requires verified/exported status
+        blocked = check_export_blocking(invoices, export_format="minimax_xml")
+        minimax_blocked = [
+            b for b in blocked if any("verifikovana" in r for r in b.get("reasons", []))
+        ]
+        if minimax_blocked:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "blocked_invoices": minimax_blocked,
+                    "message": "MiniMax XML zahteva verifikovane fakture",
+                },
+            )
+
+    # Load template if specified
+    template_fields = None
+    opts = request.options
+    if request.template_id and request.template_id != "default":
+        template = await _load_template(db, request.template_id, current_user.organization_id)
+        if template and template.fields:
+            template_fields = template.fields
+            # Apply template format overrides
+            if template.date_format:
+                opts.date_format = template.date_format
+            if template.decimal_separator:
+                opts.decimal_separator = template.decimal_separator
 
     # Generate export
-    opts = request.options
-    buffer = _generate_export(request.format, invoices, opts)
+    buffer = _generate_export(request.format, invoices, opts, template_fields)
 
     config = FORMAT_CONFIG[request.format]
     filename = _build_filename(invoices, config["extension"])
 
     logger.info(
-        "Export generated: format=%s, invoices=%d, user=%s",
+        "Export generated: format=%s, invoices=%d, user=%s, template=%s",
         request.format,
         len(invoices),
         current_user.id,
+        request.template_id,
     )
 
     return StreamingResponse(
@@ -119,13 +163,19 @@ async def create_export(
     )
 
 
-def _generate_export(fmt: str, invoices, opts) -> BytesIO:
+def _generate_export(
+    fmt: str,
+    invoices,
+    opts,
+    template_fields: list[dict] | None = None,
+) -> BytesIO:
     """Dispatch to the appropriate format generator.
 
     Args:
         fmt: Export format string.
         invoices: List of Invoice instances.
         opts: ExportOptions instance.
+        template_fields: Optional template field config for custom columns.
 
     Returns:
         BytesIO buffer with generated file content.
@@ -136,6 +186,7 @@ def _generate_export(fmt: str, invoices, opts) -> BytesIO:
             include_line_items=opts.include_line_items,
             date_format=opts.date_format,
             decimal_separator=opts.decimal_separator,
+            template_fields=template_fields,
         )
     elif fmt == "csv":
         return generate_csv(
@@ -143,6 +194,7 @@ def _generate_export(fmt: str, invoices, opts) -> BytesIO:
             date_format=opts.date_format,
             decimal_separator=opts.decimal_separator,
             delimiter=opts.delimiter,
+            template_fields=template_fields,
         )
     elif fmt == "json":
         return generate_json(
@@ -150,14 +202,48 @@ def _generate_export(fmt: str, invoices, opts) -> BytesIO:
             nested=opts.nested_json,
             date_format=opts.date_format,
             decimal_separator=opts.decimal_separator,
+            template_fields=template_fields,
         )
     elif fmt == "minimax_xml":
+        # MiniMax XML has a fixed schema — templates not applicable
         return generate_minimax_xml(invoices)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Nepoznat format: {fmt}",
         )
+
+
+async def _load_template(
+    db: AsyncSession,
+    template_id: str,
+    organization_id: UUID,
+) -> ExportTemplate | None:
+    """Load a template by ID, enforcing org isolation.
+
+    Args:
+        db: Database session.
+        template_id: Template UUID string.
+        organization_id: Current user's organization.
+
+    Returns:
+        ExportTemplate instance or None if not found.
+    """
+    try:
+        tid = UUID(template_id)
+    except ValueError:
+        return None
+
+    result = await db.execute(
+        select(ExportTemplate).where(
+            ExportTemplate.id == tid,
+            or_(
+                ExportTemplate.organization_id.is_(None),
+                ExportTemplate.organization_id == organization_id,
+            ),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 def _sanitize_filename(text: str) -> str:
@@ -221,46 +307,206 @@ def _build_filename(invoices: list, extension: str) -> str:
     return f"fakture_{count}_izvoz.{extension}"
 
 
-@router.get("/templates")
+# ---------------------------------------------------------------------------
+# Export Templates CRUD
+# ---------------------------------------------------------------------------
+
+
+@router.get("/templates", response_model=list[ExportTemplateResponse])
 async def list_export_templates(
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
-) -> list[dict]:
-    """List available export templates."""
-    return [
-        {
-            "id": "default",
-            "name": "Standardni izvoz",
-            "description": "Sva polja u standardnom redosledu",
-            "formats": ["xlsx", "csv", "json"],
-        },
-        {
-            "id": "accounting",
-            "name": "Računovodstveni izvoz",
-            "description": "Polja za knjiženje u računovodstveni softver",
-            "formats": ["xlsx", "csv", "json"],
-        },
-        {
-            "id": "minimax",
-            "name": "MiniMax izvoz",
-            "description": "Format za uvoz u MiniMax računovodstveni softver",
-            "formats": ["minimax_xml"],
-        },
-        {
-            "id": "tax",
-            "name": "PDV evidencija",
-            "description": "Format za PDV prijavu",
-            "formats": ["xlsx", "csv"],
-        },
-    ]
+) -> list[ExportTemplateResponse]:
+    """List available export templates (system defaults + organization custom).
+
+    Returns system-default templates (organization_id IS NULL) and any
+    custom templates belonging to the current organization.
+    """
+    result = await db.execute(
+        select(ExportTemplate)
+        .where(
+            or_(
+                ExportTemplate.organization_id.is_(None),
+                ExportTemplate.organization_id == current_user.organization_id,
+            )
+        )
+        .order_by(ExportTemplate.is_default.desc(), ExportTemplate.name)
+    )
+    templates = result.scalars().all()
+    return [ExportTemplateResponse.model_validate(t) for t in templates]
 
 
-@router.post("/audit")
+@router.post(
+    "/templates",
+    response_model=ExportTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_export_template(
+    data: ExportTemplateCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ExportTemplateResponse:
+    """Create a custom export template for the organization.
+
+    Validates that all field keys are recognized invoice field keys.
+    """
+    # Validate field keys
+    invalid_keys = {f.key for f in data.fields} - VALID_FIELD_KEYS
+    if invalid_keys:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Nepoznati kljucevi polja: {', '.join(sorted(invalid_keys))}",
+        )
+
+    template = ExportTemplate(
+        organization_id=current_user.organization_id,
+        name=data.name,
+        description=data.description,
+        is_default=False,
+        fields=[f.model_dump() for f in data.fields],
+        date_format=data.date_format,
+        decimal_separator=data.decimal_separator,
+        supported_formats=data.supported_formats,
+        created_by=current_user.id,
+    )
+    db.add(template)
+    await db.commit()
+    await db.refresh(template)
+
+    logger.info(
+        "Export template created: id=%s, name=%s, org=%s",
+        template.id,
+        template.name,
+        current_user.organization_id,
+    )
+    return ExportTemplateResponse.model_validate(template)
+
+
+@router.get("/templates/{template_id}", response_model=ExportTemplateResponse)
+async def get_export_template(
+    template_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ExportTemplateResponse:
+    """Get a single export template by ID.
+
+    Returns system defaults or templates owned by the current organization.
+    """
+    result = await db.execute(
+        select(ExportTemplate).where(
+            ExportTemplate.id == template_id,
+            or_(
+                ExportTemplate.organization_id.is_(None),
+                ExportTemplate.organization_id == current_user.organization_id,
+            ),
+        )
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sablon nije pronadjen",
+        )
+    return ExportTemplateResponse.model_validate(template)
+
+
+@router.patch("/templates/{template_id}", response_model=ExportTemplateResponse)
+async def update_export_template(
+    template_id: UUID,
+    data: ExportTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ExportTemplateResponse:
+    """Update a custom export template.
+
+    System default templates cannot be modified.
+    """
+    result = await db.execute(
+        select(ExportTemplate).where(
+            ExportTemplate.id == template_id,
+            ExportTemplate.organization_id == current_user.organization_id,
+        )
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sablon nije pronadjen",
+        )
+    if template.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sistemski sabloni ne mogu biti izmenjeni",
+        )
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    # Validate field keys if fields are being updated
+    if "fields" in update_data and update_data["fields"]:
+        invalid_keys = {f["key"] for f in update_data["fields"]} - VALID_FIELD_KEYS
+        if invalid_keys:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Nepoznati kljucevi polja: {', '.join(sorted(invalid_keys))}",
+            )
+        # Convert TemplateField models to dicts
+        update_data["fields"] = [
+            f.model_dump() if hasattr(f, "model_dump") else f for f in update_data["fields"]
+        ]
+
+    for field, value in update_data.items():
+        setattr(template, field, value)
+
+    await db.commit()
+    await db.refresh(template)
+
+    return ExportTemplateResponse.model_validate(template)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_export_template(
+    template_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> None:
+    """Delete a custom export template.
+
+    System default templates cannot be deleted.
+    """
+    result = await db.execute(
+        select(ExportTemplate).where(
+            ExportTemplate.id == template_id,
+            ExportTemplate.organization_id == current_user.organization_id,
+        )
+    )
+    template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sablon nije pronadjen",
+        )
+    if template.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sistemski sabloni ne mogu biti obrisani",
+        )
+
+    await db.delete(template)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Audit Export
+# ---------------------------------------------------------------------------
+
+
+@router.post("/audit", response_model=AuditExportResponse)
 async def create_audit_export(
     request: AuditExportRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
-) -> dict:
-    """Create audit export for tax inspection.
+) -> AuditExportResponse:
+    """Create audit export for tax inspection (admin only).
 
     Generates comprehensive export including:
     - Invoice register (CSV)
@@ -269,7 +515,15 @@ async def create_audit_export(
     - VAT summary (XLSX)
 
     Uploads ZIP to S3 and returns presigned URL (30-day expiry).
+    Records the export in the audit_exports table for tracking.
     """
+    # Admin-only access
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Samo administratori mogu kreirati revizijski izvoz",
+        )
+
     try:
         date_from = date.fromisoformat(request.date_from)
         date_to = date.fromisoformat(request.date_to)
@@ -282,9 +536,26 @@ async def create_audit_export(
     if date_from > date_to:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Datum od ne može biti posle datuma do.",
+            detail="Datum od ne moze biti posle datuma do.",
         )
 
+    # Create tracking record
+    audit_export = AuditExport(
+        organization_id=current_user.organization_id,
+        requested_by=current_user.id,
+        date_from=date_from,
+        date_to=date_to,
+        reason=request.reason,
+        status="processing",
+        include_documents=request.include_documents,
+        include_audit_trail=request.include_audit_trail,
+        include_vat_summary=request.include_vat_summary,
+    )
+    db.add(audit_export)
+    await db.commit()
+    await db.refresh(audit_export)
+
+    # Generate export
     result = await generate_audit_export(
         db=db,
         organization_id=current_user.organization_id,
@@ -294,7 +565,74 @@ async def create_audit_export(
         include_audit_trail=request.include_audit_trail,
         include_vat_summary=request.include_vat_summary,
     )
-    return result
+
+    # Update tracking record with results
+    audit_export.status = "ready"
+    audit_export.file_path = result["s3_key"]
+    audit_export.file_size_bytes = result["file_size"]
+    audit_export.invoice_count = result["invoice_count"]
+    audit_export.download_url = result["download_url"]
+    audit_export.expires_at = datetime.now(UTC) + timedelta(days=30)
+    await db.commit()
+    await db.refresh(audit_export)
+
+    logger.info(
+        "Audit export created: id=%s, org=%s, period=%s to %s",
+        audit_export.id,
+        current_user.organization_id,
+        date_from,
+        date_to,
+    )
+
+    return AuditExportResponse(
+        id=audit_export.id,
+        download_url=audit_export.download_url,
+        file_size=audit_export.file_size_bytes,
+        invoice_count=audit_export.invoice_count,
+        period=result["period"],
+        status=audit_export.status,
+        reason=audit_export.reason,
+        expires_at=audit_export.expires_at,
+        created_at=audit_export.created_at,
+    )
+
+
+@router.get("/audit/history", response_model=list[AuditExportResponse])
+async def list_audit_exports(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> list[AuditExportResponse]:
+    """List past audit exports for the organization (admin only).
+
+    Returns all audit export records ordered by creation date (newest first).
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Samo administratori mogu pristupiti istoriji revizijskih izvoza",
+        )
+
+    result = await db.execute(
+        select(AuditExport)
+        .where(AuditExport.organization_id == current_user.organization_id)
+        .order_by(AuditExport.created_at.desc())
+    )
+    exports = result.scalars().all()
+
+    return [
+        AuditExportResponse(
+            id=e.id,
+            download_url=e.download_url,
+            file_size=e.file_size_bytes,
+            invoice_count=e.invoice_count,
+            period={"from": e.date_from.isoformat(), "to": e.date_to.isoformat()},
+            status=e.status,
+            reason=e.reason,
+            expires_at=e.expires_at,
+            created_at=e.created_at,
+        )
+        for e in exports
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +748,14 @@ async def push_to_minimax(
                     error=str(e),
                 )
             )
+
+    # Mark successfully pushed invoices as "exported"
+    success_ids = {r.invoice_id for r in results if r.status == "success"}
+    if success_ids:
+        for inv in invoices:
+            if inv.id in success_ids:
+                inv.status = "exported"
+        await db.commit()
 
     success_count = sum(1 for r in results if r.status == "success")
     return MiniMaxPushResponse(
