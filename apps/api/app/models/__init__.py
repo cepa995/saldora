@@ -9,7 +9,9 @@ from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.base import Base
 from app.models.correction_log import CorrectionLog
 from app.models.export_template import ExportTemplate
+from app.models.invitation import Invitation
 from app.models.invoice import Invoice
+from app.models.join_request import JoinRequest
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
 from app.models.user import User
@@ -22,7 +24,9 @@ __all__ = [
     "Base",
     "CorrectionLog",
     "ExportTemplate",
+    "Invitation",
     "Invoice",
+    "JoinRequest",
     "MiniMaxConfig",
     "Organization",
     "RuleExecution",

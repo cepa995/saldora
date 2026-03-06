@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.organization import Organization
 from app.models.user import User
+from app.routers.organizations import _generate_unique_slug
 from app.schemas.auth import RefreshRequest, TokenResponse, UserCreate, UserResponse
 from app.services import audit
 
@@ -51,9 +52,9 @@ async def register(
         )
 
     # 2. Create organization
-    org = Organization(
-        name=user_data.organization_name or f"{user_data.email.split('@')[0]}'s organization"
-    )
+    org_name = user_data.organization_name or f"{user_data.email.split('@')[0]}'s organization"
+    org_slug = await _generate_unique_slug(db, org_name)
+    org = Organization(name=org_name, slug=org_slug)
     db.add(org)
     await db.flush()  # Assigns org.id without committing
 
