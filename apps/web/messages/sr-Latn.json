@@ -50,7 +50,8 @@
     "groupOverview": "Pregled",
     "groupDocuments": "Dokumenti",
     "groupTools": "Alati",
-    "audit": "Revizija"
+    "audit": "Revizija",
+    "billing": "Naplata"
   },
   "script": {
     "latin": "Lat",
@@ -708,5 +709,24 @@
     "tipsTitle": "Saveti",
     "tipDocumentsSize": "Uključivanje originalnih dokumenata može značajno povećati veličinu arhive.",
     "tipAuditTrail": "Revizijski trag je zakonom obavezan za poresku kontrolu. Preporučujemo da ga uvek uključite."
+  },
+  "billing": {
+    "title": "Naplata i pretplata",
+    "subtitle": "Upravljajte planom i pratite potrošnju",
+    "currentPlan": "Trenutni plan",
+    "freePlan": "Besplatni",
+    "usage": "Potrošnja ovog meseca",
+    "invoicesUsed": "{used} od {limit} faktura",
+    "invoicesUsedUnlimited": "{used} faktura (neograničeno)",
+    "usagePercent": "{percent}% iskorišćeno",
+    "plans": "Dostupni planovi",
+    "yourPlan": "Vaš plan",
+    "upgrade": "Nadogradi",
+    "contactSales": "Kontaktirajte nas",
+    "comingSoonTitle": "Uskoro dostupno",
+    "comingSoonDesc": "Integracija sa platnim sistemom je u pripremi. Biće dostupna uskoro.",
+    "perMonth": "/mesečno",
+    "popular": "Najpopularniji",
+    "adminOnly": "Samo administratori mogu pristupiti ovoj stranici."
   }
 }

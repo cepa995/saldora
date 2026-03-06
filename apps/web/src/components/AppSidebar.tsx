@@ -17,7 +17,8 @@ interface NavItem {
     | "upload"
     | "rules"
     | "templates"
-    | "audit";
+    | "audit"
+    | "billing";
   icon: React.ReactNode;
 }
 
@@ -177,6 +178,22 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+const BILLING_ICON = (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    stroke="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.75}
+      d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+    />
+  </svg>
+);
+
 const SETTINGS_ICON = (
   <svg
     className="w-5 h-5"
@@ -308,6 +325,15 @@ export function AppSidebar() {
 
         {/* Bottom section */}
         <div className="px-2 pb-4 space-y-2 border-t border-gray-100 pt-3">
+          {/* Billing */}
+          {renderNavLink(
+            "/billing",
+            BILLING_ICON,
+            t("billing"),
+            collapsed,
+            mobile,
+          )}
+
           {/* Settings */}
           {renderNavLink(
             "/settings",

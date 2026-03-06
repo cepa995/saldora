@@ -50,7 +50,8 @@
     "groupOverview": "Overview",
     "groupDocuments": "Documents",
     "groupTools": "Tools",
-    "audit": "Audit"
+    "audit": "Audit",
+    "billing": "Billing"
   },
   "script": {
     "latin": "Lat",
@@ -708,5 +709,24 @@
     "tipsTitle": "Tips",
     "tipDocumentsSize": "Including original documents may significantly increase the archive size.",
     "tipAuditTrail": "The audit trail is legally required for tax audits. We recommend always including it."
+  },
+  "billing": {
+    "title": "Billing & Subscription",
+    "subtitle": "Manage your plan and track usage",
+    "currentPlan": "Current plan",
+    "freePlan": "Free",
+    "usage": "This month's usage",
+    "invoicesUsed": "{used} of {limit} invoices",
+    "invoicesUsedUnlimited": "{used} invoices (unlimited)",
+    "usagePercent": "{percent}% used",
+    "plans": "Available plans",
+    "yourPlan": "Your plan",
+    "upgrade": "Upgrade",
+    "contactSales": "Contact us",
+    "comingSoonTitle": "Coming soon",
+    "comingSoonDesc": "Payment system integration is being prepared. It will be available soon.",
+    "perMonth": "/month",
+    "popular": "Most popular",
+    "adminOnly": "Only administrators can access this page."
   }
 }
