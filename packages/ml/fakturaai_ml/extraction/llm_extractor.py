@@ -49,8 +49,19 @@ _SYSTEM_PROMPT = (  # noqa: E501
     "(e.g. 20, 25, 10), not a decimal fraction.\n"
     "- For currency: detect from context "
     '(RSD, EUR, USD, HRK, BAM, etc.). Default to "RSD".\n'
-    "- For PIB (Serbian tax ID): 9 digits. "
-    "For Croatian OIB: 11 digits. Extract what's present.\n"
+    "- For PIB (Serbian tax ID): EXACTLY 9 digits, no more, no less. "
+    "If a number is not exactly 9 digits, it is NOT a PIB.\n"
+    "- FISCAL RECEIPTS (FISKALNI RAČUN / ФИСКАЛНИ РАЧУН): "
+    "The seller PIB is the standalone 9-digit number printed near the "
+    "top of the receipt, BEFORE the company name. Do NOT confuse it "
+    "with store/branch numbers (e.g. '1036918-БС Нови Сад 16' — "
+    "'1036918' is a store identifier, NOT a PIB).\n"
+    "- BUYER ID on fiscal receipts: 'ИД купца: XX:NNNNNNNNN' — "
+    "the XX before the colon is a buyer identification TYPE CODE "
+    "(e.g. 10=PIB, 11=JMBG), NOT part of the ID itself. "
+    "Extract ONLY the digits AFTER the colon as the buyer PIB "
+    "(e.g. 'ИД купца: 10:111859782' → buyer PIB is '111859782').\n"
+    "- For Croatian OIB: 11 digits. Extract what's present.\n"
     "- For MB (matični broj): typically 8 digits.\n"
     "- Extract ALL line items from tables, "
     "including HTML tables in OCR output.\n"
@@ -128,13 +139,13 @@ class LLMFieldExtractor:
 
     Args:
         api_key: Anthropic API key. Reads ANTHROPIC_API_KEY env var if not provided.
-        model: Claude model identifier (default: claude-sonnet-4-20250514).
+        model: Claude model identifier (default: claude-haiku-4-5-20251001).
     """
 
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-haiku-4-5-20251001",
     ):
         """Initialize the LLM field extractor.
 

@@ -796,3 +796,78 @@ class TestSnapToSerbianRate:
 
     def test_boundary_beyond_1(self):
         assert _snap_to_serbian_rate(Decimal("21.01")) is None
+
+
+# ===========================================================================
+# PIB sanitization tests (InvoicePipeline._sanitize_pibs)
+# ===========================================================================
+
+
+class TestSanitizePIBs:
+    """Tests for _sanitize_pibs() — fixing common LLM extraction errors."""
+
+    def _sanitize(self, invoice: ExtractedInvoice) -> None:
+        """Call _sanitize_pibs on a pipeline instance."""
+        pipeline = InvoicePipeline.__new__(InvoicePipeline)
+        pipeline._sanitize_pibs(invoice)
+
+    def test_fiscal_receipt_buyer_id_prefix(self):
+        """'10:111859782' → '111859782' (strip type-code prefix)."""
+        inv = ExtractedInvoice(
+            buyer=CompanyData(pib="10:111859782"),
+        )
+        self._sanitize(inv)
+        assert inv.buyer.pib == "111859782"
+
+    def test_fiscal_receipt_jmbg_prefix_not_9_digits(self):
+        """'11:0101990710234' — not 9 digits after colon, kept as-is."""
+        inv = ExtractedInvoice(
+            buyer=CompanyData(pib="11:0101990710234"),
+        )
+        self._sanitize(inv)
+        # Candidate after colon is not 9 digits → left unchanged for validation
+        assert inv.buyer.pib == "11:0101990710234"
+
+    def test_clean_pib_no_change(self):
+        """Valid 9-digit PIB passes through unchanged."""
+        inv = ExtractedInvoice(
+            seller=CompanyData(pib=VALID_PIB_1),
+        )
+        self._sanitize(inv)
+        assert inv.seller.pib == VALID_PIB_1
+
+    def test_strips_ocr_noise(self):
+        """Whitespace, dashes, dots stripped from PIB."""
+        inv = ExtractedInvoice(
+            seller=CompanyData(pib="103 867-022"),
+        )
+        self._sanitize(inv)
+        assert inv.seller.pib == "103867022"
+
+    def test_none_pib_no_error(self):
+        """None PIB is skipped without error."""
+        inv = ExtractedInvoice(
+            seller=CompanyData(pib=None),
+            buyer=CompanyData(pib=None),
+        )
+        self._sanitize(inv)
+        assert inv.seller.pib is None
+        assert inv.buyer.pib is None
+
+    def test_empty_pib_no_error(self):
+        """Empty string PIB is skipped without error."""
+        inv = ExtractedInvoice(
+            seller=CompanyData(pib=""),
+        )
+        self._sanitize(inv)
+        assert inv.seller.pib == ""
+
+    def test_both_seller_and_buyer_sanitized(self):
+        """Both seller and buyer PIBs are sanitized."""
+        inv = ExtractedInvoice(
+            seller=CompanyData(pib="103.867.022"),
+            buyer=CompanyData(pib="10:111859782"),
+        )
+        self._sanitize(inv)
+        assert inv.seller.pib == "103867022"
+        assert inv.buyer.pib == "111859782"

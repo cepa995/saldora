@@ -433,7 +433,7 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
           )}
 
           <button
-            onClick={handleExport}
+            onClick={() => handleExport()}
             disabled={isBusy}
             className="px-5 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
           >

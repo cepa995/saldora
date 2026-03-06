@@ -18,7 +18,7 @@ from io import BytesIO, StringIO
 from uuid import UUID
 
 from openpyxl import Workbook
-from sqlalchemy import select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -34,8 +34,9 @@ logger = logging.getLogger(__name__)
 # UTF-8 BOM for CSV Excel compatibility
 UTF8_BOM = b"\xef\xbb\xbf"
 
-# 30-day presigned URL expiry for audit exports
-AUDIT_URL_EXPIRY = 30 * 24 * 3600
+# Presigned URL expiry — S3 max is 7 days (604800s).
+# We use 1 hour here since URLs are regenerated on-demand in the history endpoint.
+AUDIT_URL_EXPIRY = 3600
 
 
 async def generate_audit_export(
@@ -61,15 +62,17 @@ async def generate_audit_export(
     Returns:
         Dict with download_url, file_size, and metadata.
     """
-    # Load invoices in date range
+    # Load invoices in date range.
+    # Use COALESCE so invoices without an extracted date fall back to created_at.
+    effective_date = func.coalesce(Invoice.invoice_date, cast(Invoice.created_at, Date))
     result = await db.execute(
         select(Invoice)
         .where(
             Invoice.organization_id == organization_id,
-            Invoice.invoice_date >= date_from,
-            Invoice.invoice_date <= date_to,
+            effective_date >= date_from,
+            effective_date <= date_to,
         )
-        .order_by(Invoice.invoice_date)
+        .order_by(effective_date)
     )
     invoices = list(result.scalars().all())
 
@@ -319,7 +322,7 @@ async def _add_documents(zf: zipfile.ZipFile, invoices: list[Invoice]) -> None:
             body = await asyncio.to_thread(response["Body"].read)
 
             # Use invoice number or ID for the filename
-            ext = inv.content_type.split("/")[-1] if inv.content_type else "pdf"
+            ext = inv.document_content_type.split("/")[-1] if inv.document_content_type else "pdf"
             name = inv.invoice_number or str(inv.id)
             # Sanitize filename
             safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
