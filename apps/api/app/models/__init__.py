@@ -12,6 +12,8 @@ from app.models.export_template import ExportTemplate
 from app.models.invoice import Invoice
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
+from app.models.sef_connection import SefConnection
+from app.models.sef_invoice import SefInvoice
 from app.models.user import User
 
 __all__ = [
@@ -26,5 +28,7 @@ __all__ = [
     "MiniMaxConfig",
     "Organization",
     "RuleExecution",
+    "SefConnection",
+    "SefInvoice",
     "User",
 ]
