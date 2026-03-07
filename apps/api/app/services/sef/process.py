@@ -107,7 +107,7 @@ async def process_sef_invoice(db: AsyncSession, sef_invoice_id: UUID, org_id: UU
             total_amount=total_amount,
             currency=sef_inv.currency,
             line_items=line_items if line_items else None,
-            confidence_score=Decimal("100.00"),  # SEF data is authoritative
+            confidence_score=Decimal("1.00"),  # SEF data is authoritative (0-1 scale)
             ocr_engine="sef",
         )
         db.add(invoice)

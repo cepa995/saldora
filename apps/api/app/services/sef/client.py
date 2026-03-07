@@ -151,7 +151,28 @@ class DemoSefClient(BaseSefClient):
             days_ago = (len(_DEMO_SUPPLIERS) - i) * 3
             received = now - timedelta(days=days_ago)
             inv_date = (now - timedelta(days=days_ago + 2)).date()
-            amount = Decimal(str((i + 1) * 12500 + 3000))
+            num_items = min(i + 1, 3)
+            base_unit_price = Decimal(str((i + 1) * 5000 + 2000))
+            line_items = []
+            subtotal = Decimal("0")
+            for j in range(num_items):
+                qty = Decimal(str(j + 1))
+                unit_price = base_unit_price + Decimal(str(j * 1500))
+                item_total = qty * unit_price
+                item_vat = (item_total * Decimal("20")) / Decimal("100")
+                subtotal += item_total
+                line_items.append(
+                    {
+                        "description": f"Usluge - stavka {j + 1}",
+                        "quantity": str(qty),
+                        "unit_price": str(unit_price),
+                        "total": str(item_total),
+                        "vat_rate": "20.00",
+                        "vat_amount": str(item_vat),
+                    }
+                )
+            tax_amount = (subtotal * Decimal("20")) / Decimal("100")
+            payable = subtotal + tax_amount
 
             self._invoices.append(
                 {
@@ -161,24 +182,14 @@ class DemoSefClient(BaseSefClient):
                     "invoice_date": inv_date.isoformat(),
                     "due_date": (inv_date + timedelta(days=30)).isoformat(),
                     "supplier": supplier,
-                    "amount": str(amount),
+                    "amount": str(payable),
                     "currency": "RSD",
                     "received_at": received.isoformat(),
-                    "line_items": [
-                        {
-                            "description": f"Usluge - stavka {j + 1}",
-                            "quantity": j + 1,
-                            "unit_price": str(amount / Decimal(str(j + 1 + i))),
-                            "total": str(amount),
-                            "vat_rate": "20.00",
-                            "vat_amount": str(amount * Decimal("0.2")),
-                        }
-                        for j in range(min(i + 1, 3))
-                    ],
+                    "line_items": line_items,
                     "monetary_totals": {
-                        "tax_exclusive_amount": str(amount),
-                        "tax_amount": str(amount * Decimal("0.2")),
-                        "payable_amount": str(amount * Decimal("1.2")),
+                        "tax_exclusive_amount": str(subtotal),
+                        "tax_amount": str(tax_amount),
+                        "payable_amount": str(payable),
                     },
                 }
             )
