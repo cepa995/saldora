@@ -258,17 +258,17 @@ export function AppSidebar() {
         href={href}
         onClick={mobile ? closeMobile : undefined}
         title={collapsed ? label : undefined}
-        className={`group flex items-center ${collapsed ? "justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative ${
+        className={`group flex items-center ${collapsed ? "justify-center" : ""} ${mobile ? "justify-center gap-4 px-4 py-3.5 text-base" : "gap-3 px-3 py-2.5 text-sm"} rounded-xl font-medium transition-all duration-200 relative ${
           active
             ? "bg-violet-50 text-violet-700"
             : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
         }`}
       >
-        {active && (
+        {active && !mobile && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-violet-600 rounded-r-full" />
         )}
         <span
-          className={`shrink-0 ${active ? "text-violet-600" : "text-gray-400 group-hover:text-gray-600"}`}
+          className={`shrink-0 ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : "text-gray-400 group-hover:text-gray-600"}`}
         >
           {icon}
         </span>
@@ -282,33 +282,34 @@ export function AppSidebar() {
 
     return (
       <div className="flex flex-col h-full">
-        {/* Logo */}
-        <div
-          className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
-        >
-          <Link
-            href="/dashboard"
-            className="flex items-center justify-center py-2"
-            onClick={mobile ? closeMobile : undefined}
+        {/* Logo — only on desktop sidebar */}
+        {!mobile && (
+          <div
+            className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
           >
-            {collapsed ? (
-              <span className="text-xl font-bold gradient-text">F</span>
-            ) : (
-              <span className="text-lg font-bold gradient-text">FakturaAI</span>
-            )}
-          </Link>
-        </div>
+            <Link
+              href="/dashboard"
+              className="flex items-center justify-center py-2"
+            >
+              {collapsed ? (
+                <span className="text-xl font-bold gradient-text">F</span>
+              ) : (
+                <span className="text-lg font-bold gradient-text">FakturaAI</span>
+              )}
+            </Link>
+          </div>
+        )}
 
         {/* Main nav links */}
-        <nav className="flex-1 px-2 py-4 overflow-y-auto">
+        <nav className={`flex-1 overflow-y-auto ${mobile ? "px-6 py-6 flex flex-col justify-center" : "px-2 py-4"}`}>
           {NAV_GROUPS.map((group, gi) => (
-            <div key={group.labelKey} className={gi > 0 ? "mt-4" : ""}>
+            <div key={group.labelKey} className={gi > 0 ? (mobile ? "mt-6" : "mt-4") : ""}>
               {!collapsed && (
-                <p className="px-3 mb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                <p className={`${mobile ? "px-4 mb-2 text-xs" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
                   {t(group.labelKey)}
                 </p>
               )}
-              <div className="space-y-1">
+              <div className={mobile ? "space-y-1.5" : "space-y-1"}>
                 {group.items.map((item) =>
                   renderNavLink(
                     item.href,
@@ -324,7 +325,7 @@ export function AppSidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className="px-2 pb-4 space-y-2 border-t border-gray-100 pt-3">
+        <div className={`${mobile ? "px-6 pb-6 space-y-2" : "px-2 pb-4 space-y-2"} border-t border-gray-100 pt-3`}>
           {/* Billing */}
           {renderNavLink(
             "/billing",
@@ -344,13 +345,13 @@ export function AppSidebar() {
           )}
 
           {/* Script toggle */}
-          <div className={collapsed ? "flex justify-center" : "px-3"}>
+          <div className={collapsed ? "flex justify-center" : mobile ? "flex justify-center px-4 py-2" : "px-3"}>
             <ScriptToggle collapsed={collapsed} />
           </div>
 
           {/* User section */}
           <div
-            className={`${collapsed ? "px-1" : "px-3"} pt-2 border-t border-gray-100`}
+            className={`${collapsed ? "px-1" : mobile ? "px-4" : "px-3"} pt-2 border-t border-gray-100`}
           >
             {collapsed ? (
               <div className="flex flex-col items-center gap-2">
@@ -476,21 +477,19 @@ export function AppSidebar() {
         <div className="w-10" />
       </div>
 
-      {/* Mobile overlay */}
+      {/* Mobile full-screen overlay */}
       {isMobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-            onClick={closeMobile}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[280px] bg-white shadow-2xl">
+        <div className="md:hidden fixed inset-0 z-50 bg-white flex flex-col">
+          {/* Close button */}
+          <div className="flex items-center justify-between px-4 h-14 border-b border-gray-100 shrink-0">
+            <span className="text-lg font-bold gradient-text">FakturaAI</span>
             <button
               onClick={closeMobile}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors z-10"
+              className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               aria-label={t("closeMenu")}
             >
               <svg
-                className="w-5 h-5"
+                className="w-6 h-6"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -503,8 +502,8 @@ export function AppSidebar() {
                 />
               </svg>
             </button>
-            {renderSidebarContent(true)}
           </div>
+          {renderSidebarContent(true)}
         </div>
       )}
 
