@@ -305,7 +305,7 @@ export function AppSidebar() {
           {NAV_GROUPS.map((group, gi) => (
             <div key={group.labelKey} className={gi > 0 ? (mobile ? "mt-6" : "mt-4") : ""}>
               {!collapsed && (
-                <p className={`${mobile ? "px-4 mb-2 text-xs" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
+                <p className={`${mobile ? "text-center mb-2 text-xs" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
                   {t(group.labelKey)}
                 </p>
               )}
@@ -381,12 +381,12 @@ export function AppSidebar() {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                <div className={`flex items-center gap-3 mb-2 ${mobile ? "justify-center" : ""}`}>
+                  <div className={`${mobile ? "w-10 h-10 text-sm" : "w-8 h-8 text-xs"} bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold shrink-0`}>
                     {userInitials}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className={`${mobile ? "text-base" : "text-sm"} font-medium text-gray-900 truncate`}>
                       {user?.firstName} {user?.lastName}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
@@ -399,10 +399,10 @@ export function AppSidebar() {
                     if (mobile) closeMobile();
                     logout();
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                  className={`w-full flex items-center ${mobile ? "justify-center gap-3 py-3 text-base" : "gap-2 px-2 py-2 text-sm"} text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
                 >
                   <svg
-                    className="w-4 h-4"
+                    className={mobile ? "w-5 h-5" : "w-4 h-4"}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
