@@ -258,17 +258,21 @@ export function AppSidebar() {
         href={href}
         onClick={mobile ? closeMobile : undefined}
         title={collapsed ? label : undefined}
-        className={`group flex items-center ${collapsed ? "justify-center" : ""} ${mobile ? "justify-center gap-4 px-4 py-3.5 text-base" : "gap-3 px-3 py-2.5 text-sm"} rounded-xl font-medium transition-all duration-200 relative ${
+        className={`group flex items-center ${collapsed ? "justify-center" : ""} ${mobile ? "gap-3.5 px-5 py-3 text-[15px]" : "gap-3 px-3 py-2.5 text-sm"} ${mobile ? "rounded-lg" : "rounded-xl"} font-medium transition-all duration-200 relative ${
           active
-            ? "bg-violet-50 text-violet-700"
-            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            ? mobile
+              ? "bg-violet-50 text-violet-700 border-l-[3px] border-violet-600 pl-[17px]"
+              : "bg-violet-50 text-violet-700"
+            : mobile
+              ? "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
         }`}
       >
         {active && !mobile && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-violet-600 rounded-r-full" />
         )}
         <span
-          className={`shrink-0 ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : "text-gray-400 group-hover:text-gray-600"}`}
+          className={`shrink-0 ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : mobile ? "text-gray-500" : "text-gray-400 group-hover:text-gray-600"}`}
         >
           {icon}
         </span>
@@ -301,15 +305,15 @@ export function AppSidebar() {
         )}
 
         {/* Main nav links */}
-        <nav className={`flex-1 overflow-y-auto ${mobile ? "px-6 py-6 flex flex-col justify-center" : "px-2 py-4"}`}>
+        <nav className={`flex-1 overflow-y-auto ${mobile ? "py-2" : "px-2 py-4"}`}>
           {NAV_GROUPS.map((group, gi) => (
-            <div key={group.labelKey} className={gi > 0 ? (mobile ? "mt-6" : "mt-4") : ""}>
+            <div key={group.labelKey} className={mobile ? `${gi > 0 ? "border-t border-gray-200 mt-2 pt-2" : ""}` : `${gi > 0 ? "mt-4" : ""}`}>
               {!collapsed && (
-                <p className={`${mobile ? "text-center mb-2 text-xs" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
+                <p className={`${mobile ? "px-5 pt-3 pb-1 text-[13px]" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
                   {t(group.labelKey)}
                 </p>
               )}
-              <div className={mobile ? "space-y-1.5" : "space-y-1"}>
+              <div className={mobile ? "space-y-0.5 px-2" : "space-y-1"}>
                 {group.items.map((item) =>
                   renderNavLink(
                     item.href,
@@ -325,7 +329,7 @@ export function AppSidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className={`${mobile ? "px-6 pb-6 space-y-2" : "px-2 pb-4 space-y-2"} border-t border-gray-100 pt-3`}>
+        <div className={`${mobile ? "px-2 pb-4 space-y-0.5" : "px-2 pb-4 space-y-2"} border-t ${mobile ? "border-gray-200" : "border-gray-100"} pt-2`}>
           {/* Billing */}
           {renderNavLink(
             "/billing",
@@ -345,13 +349,13 @@ export function AppSidebar() {
           )}
 
           {/* Script toggle */}
-          <div className={collapsed ? "flex justify-center" : mobile ? "flex justify-center px-4 py-2" : "px-3"}>
+          <div className={collapsed ? "flex justify-center" : mobile ? "px-5 py-2" : "px-3"}>
             <ScriptToggle collapsed={collapsed} />
           </div>
 
           {/* User section */}
           <div
-            className={`${collapsed ? "px-1" : mobile ? "px-4" : "px-3"} pt-2 border-t border-gray-100`}
+            className={`${collapsed ? "px-1" : mobile ? "mx-3 px-4 py-3 bg-gray-50 rounded-xl" : "px-3"} pt-2 border-t ${mobile ? "border-gray-200" : "border-gray-100"}`}
           >
             {collapsed ? (
               <div className="flex flex-col items-center gap-2">
@@ -381,12 +385,12 @@ export function AppSidebar() {
               </div>
             ) : (
               <>
-                <div className={`flex items-center gap-3 mb-2 ${mobile ? "justify-center" : ""}`}>
-                  <div className={`${mobile ? "w-10 h-10 text-sm" : "w-8 h-8 text-xs"} bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold shrink-0`}>
+                <div className={`flex items-center gap-3 mb-2 ${mobile ? "flex-col text-center" : ""}`}>
+                  <div className={`${mobile ? "w-12 h-12 text-base" : "w-8 h-8 text-xs"} bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold shrink-0`}>
                     {userInitials}
                   </div>
-                  <div className="min-w-0">
-                    <p className={`${mobile ? "text-base" : "text-sm"} font-medium text-gray-900 truncate`}>
+                  <div className={`min-w-0 ${mobile ? "" : "flex-1"}`}>
+                    <p className={`${mobile ? "text-[15px]" : "text-sm"} font-medium text-gray-900 truncate`}>
                       {user?.firstName} {user?.lastName}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
@@ -399,7 +403,7 @@ export function AppSidebar() {
                     if (mobile) closeMobile();
                     logout();
                   }}
-                  className={`w-full flex items-center ${mobile ? "justify-center gap-3 py-3 text-base" : "gap-2 px-2 py-2 text-sm"} text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
+                  className={`w-full flex items-center ${mobile ? "justify-center gap-3 py-2.5 text-[15px]" : "gap-2 px-2 py-2 text-sm"} text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
                 >
                   <svg
                     className={mobile ? "w-5 h-5" : "w-4 h-4"}

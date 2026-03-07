@@ -413,11 +413,11 @@ export function FileUpload({
 
       {/* Camera capture button */}
       {!isUploading && !allDone && !disabled && (
-        <div className="mt-3 flex justify-center">
+        <div className="mt-4 flex justify-center">
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-violet-600 bg-violet-50 rounded-xl hover:bg-violet-100 transition-colors"
+            className="inline-flex items-center gap-2.5 px-6 py-3 text-base font-medium text-white bg-gradient-to-r from-violet-600 to-indigo-600 rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm shadow-violet-200 active:scale-[0.98]"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
