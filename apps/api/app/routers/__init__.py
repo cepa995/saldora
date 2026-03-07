@@ -1,6 +1,8 @@
 """API routers package."""
 
 from app.routers import (
+    analytics,
+    audit_logs,
     auth,
     billing,
     export,
@@ -9,12 +11,15 @@ from app.routers import (
     join_requests,
     organizations,
     rules,
+    sef,
     team,
     users,
     webhooks,
 )
 
 __all__ = [
+    "analytics",
+    "audit_logs",
     "auth",
     "billing",
     "export",
@@ -23,6 +28,7 @@ __all__ = [
     "join_requests",
     "organizations",
     "rules",
+    "sef",
     "team",
     "users",
     "webhooks",

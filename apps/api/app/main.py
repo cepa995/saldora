@@ -19,6 +19,7 @@ from app.routers import (
     join_requests,
     organizations,
     rules,
+    sef,
     team,
     users,
     webhooks,
@@ -124,6 +125,7 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(team.router, prefix="/api/v1/team", tags=["Team"])
 app.include_router(invitations.router, prefix="/api/v1/invitations", tags=["Invitations"])
 app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["Join Requests"])
+app.include_router(sef.router, prefix="/api/v1/sef", tags=["SEF"])
 
 
 @app.get("/health")

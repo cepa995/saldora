@@ -258,17 +258,21 @@ export function AppSidebar() {
         href={href}
         onClick={mobile ? closeMobile : undefined}
         title={collapsed ? label : undefined}
-        className={`group flex items-center ${collapsed ? "justify-center" : ""} gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative ${
+        className={`group flex items-center ${collapsed ? "justify-center" : ""} ${mobile ? "gap-3.5 px-5 py-3 text-[15px]" : "gap-3 px-3 py-2.5 text-sm"} ${mobile ? "rounded-lg" : "rounded-xl"} font-medium transition-all duration-200 relative ${
           active
-            ? "bg-violet-50 text-violet-700"
-            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            ? mobile
+              ? "bg-violet-50 text-violet-700 border-l-[3px] border-violet-600 pl-[17px]"
+              : "bg-violet-50 text-violet-700"
+            : mobile
+              ? "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
         }`}
       >
-        {active && (
+        {active && !mobile && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-violet-600 rounded-r-full" />
         )}
         <span
-          className={`shrink-0 ${active ? "text-violet-600" : "text-gray-400 group-hover:text-gray-600"}`}
+          className={`shrink-0 ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : mobile ? "text-gray-500" : "text-gray-400 group-hover:text-gray-600"}`}
         >
           {icon}
         </span>
@@ -282,33 +286,34 @@ export function AppSidebar() {
 
     return (
       <div className="flex flex-col h-full">
-        {/* Logo */}
-        <div
-          className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
-        >
-          <Link
-            href="/dashboard"
-            className="flex items-center justify-center py-2"
-            onClick={mobile ? closeMobile : undefined}
+        {/* Logo — only on desktop sidebar */}
+        {!mobile && (
+          <div
+            className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
           >
-            {collapsed ? (
-              <span className="text-xl font-bold gradient-text">F</span>
-            ) : (
-              <span className="text-lg font-bold gradient-text">FakturaAI</span>
-            )}
-          </Link>
-        </div>
+            <Link
+              href="/dashboard"
+              className="flex items-center justify-center py-2"
+            >
+              {collapsed ? (
+                <span className="text-xl font-bold gradient-text">F</span>
+              ) : (
+                <span className="text-lg font-bold gradient-text">FakturaAI</span>
+              )}
+            </Link>
+          </div>
+        )}
 
         {/* Main nav links */}
-        <nav className="flex-1 px-2 py-4 overflow-y-auto">
+        <nav className={`flex-1 overflow-y-auto ${mobile ? "py-2" : "px-2 py-4"}`}>
           {NAV_GROUPS.map((group, gi) => (
-            <div key={group.labelKey} className={gi > 0 ? "mt-4" : ""}>
+            <div key={group.labelKey} className={mobile ? `${gi > 0 ? "border-t border-gray-200 mt-2 pt-2" : ""}` : `${gi > 0 ? "mt-4" : ""}`}>
               {!collapsed && (
-                <p className="px-3 mb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                <p className={`${mobile ? "px-5 pt-3 pb-1 text-[13px]" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
                   {t(group.labelKey)}
                 </p>
               )}
-              <div className="space-y-1">
+              <div className={mobile ? "space-y-0.5 px-2" : "space-y-1"}>
                 {group.items.map((item) =>
                   renderNavLink(
                     item.href,
@@ -324,7 +329,7 @@ export function AppSidebar() {
         </nav>
 
         {/* Bottom section */}
-        <div className="px-2 pb-4 space-y-2 border-t border-gray-100 pt-3">
+        <div className={`${mobile ? "px-2 pb-4 space-y-0.5" : "px-2 pb-4 space-y-2"} border-t ${mobile ? "border-gray-200" : "border-gray-100"} pt-2`}>
           {/* Billing */}
           {renderNavLink(
             "/billing",
@@ -344,13 +349,13 @@ export function AppSidebar() {
           )}
 
           {/* Script toggle */}
-          <div className={collapsed ? "flex justify-center" : "px-3"}>
+          <div className={collapsed ? "flex justify-center" : mobile ? "px-5 py-2" : "px-3"}>
             <ScriptToggle collapsed={collapsed} />
           </div>
 
           {/* User section */}
           <div
-            className={`${collapsed ? "px-1" : "px-3"} pt-2 border-t border-gray-100`}
+            className={`${collapsed ? "px-1" : mobile ? "mx-3 px-4 py-3 bg-gray-50 rounded-xl" : "px-3"} pt-2 border-t ${mobile ? "border-gray-200" : "border-gray-100"}`}
           >
             {collapsed ? (
               <div className="flex flex-col items-center gap-2">
@@ -380,12 +385,12 @@ export function AppSidebar() {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                <div className={`flex items-center gap-3 mb-2 ${mobile ? "flex-col text-center" : ""}`}>
+                  <div className={`${mobile ? "w-12 h-12 text-base" : "w-8 h-8 text-xs"} bg-gradient-to-br from-violet-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold shrink-0`}>
                     {userInitials}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                  <div className={`min-w-0 ${mobile ? "" : "flex-1"}`}>
+                    <p className={`${mobile ? "text-[15px]" : "text-sm"} font-medium text-gray-900 truncate`}>
                       {user?.firstName} {user?.lastName}
                     </p>
                     <p className="text-xs text-gray-500 truncate">
@@ -398,10 +403,10 @@ export function AppSidebar() {
                     if (mobile) closeMobile();
                     logout();
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                  className={`w-full flex items-center ${mobile ? "justify-center gap-3 py-2.5 text-[15px]" : "gap-2 px-2 py-2 text-sm"} text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors`}
                 >
                   <svg
-                    className="w-4 h-4"
+                    className={mobile ? "w-5 h-5" : "w-4 h-4"}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -476,21 +481,19 @@ export function AppSidebar() {
         <div className="w-10" />
       </div>
 
-      {/* Mobile overlay */}
+      {/* Mobile full-screen overlay */}
       {isMobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-            onClick={closeMobile}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[280px] bg-white shadow-2xl">
+        <div className="md:hidden fixed inset-0 z-50 bg-white flex flex-col">
+          {/* Close button */}
+          <div className="flex items-center justify-between px-4 h-14 border-b border-gray-100 shrink-0">
+            <span className="text-lg font-bold gradient-text">FakturaAI</span>
             <button
               onClick={closeMobile}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors z-10"
+              className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
               aria-label={t("closeMenu")}
             >
               <svg
-                className="w-5 h-5"
+                className="w-6 h-6"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -503,8 +506,8 @@ export function AppSidebar() {
                 />
               </svg>
             </button>
-            {renderSidebarContent(true)}
           </div>
+          {renderSidebarContent(true)}
         </div>
       )}
 

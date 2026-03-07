@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = None
 
+    # SEF (eFaktura)
+    sef_api_base_url: str = "https://efaktura.mfin.gov.rs/api/v1"
+    sef_environment: str = "test"
+    sef_sync_interval_minutes: int = 15
+    sef_demo_mode: bool = True
+
     # ML Processing
     ocr_confidence_threshold: float = 0.80
     ocr_max_file_size_mb: int = 20

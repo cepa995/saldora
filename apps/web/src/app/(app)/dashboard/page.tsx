@@ -110,12 +110,27 @@ function StatCardSkeleton() {
 
 function RecentInvoiceRowSkeleton() {
   return (
-    <div className="px-6 py-3.5 border-b border-gray-50 flex items-center gap-4">
-      <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-      <div className="h-4 w-32 bg-gray-200 rounded animate-pulse flex-1" />
-      <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse" />
-      <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
-      <div className="h-4 w-16 bg-gray-100 rounded animate-pulse hidden sm:block" />
+    <div className="px-5 sm:px-6 py-3.5 border-b border-gray-50">
+      {/* Desktop */}
+      <div className="hidden sm:flex items-center gap-4">
+        <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+        <div className="h-4 w-32 bg-gray-200 rounded animate-pulse flex-1" />
+        <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse" />
+        <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+        <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
+      </div>
+      {/* Mobile */}
+      <div className="sm:hidden space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+          <div className="h-6 w-16 bg-gray-200 rounded-full animate-pulse" />
+        </div>
+        <div className="h-4 w-36 bg-gray-100 rounded animate-pulse" />
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+          <div className="h-3 w-12 bg-gray-100 rounded animate-pulse" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -126,21 +141,42 @@ function RecentInvoiceRow({ invoice }: { invoice: InvoiceResponse }) {
   return (
     <Link
       href={`/invoices/${invoice.id}`}
-      className="flex items-center gap-4 px-6 py-3.5 border-b border-gray-50 hover:bg-violet-50/30 transition-colors group"
+      className="block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group"
     >
-      <span className="text-sm font-medium text-gray-900 w-24 truncate">
-        {invoice.invoice_number ?? '—'}
-      </span>
-      <span className="text-sm text-gray-600 flex-1 truncate">
-        {invoice.seller?.name ?? '—'}
-      </span>
-      <StatusBadge status={invoice.status} />
-      <span className="text-sm font-semibold text-gray-900 tabular-nums w-28 text-right">
-        {formatAmountSr(invoice.total_amount, invoice.currency)}
-      </span>
-      <span className="text-xs text-gray-500 w-20 text-right hidden sm:block">
-        {formatRelativeTime(invoice.created_at)}
-      </span>
+      {/* Desktop row */}
+      <div className="hidden sm:flex items-center gap-4">
+        <span className="text-sm font-medium text-gray-900 w-24 truncate">
+          {invoice.invoice_number ?? '—'}
+        </span>
+        <span className="text-sm text-gray-600 flex-1 truncate">
+          {invoice.seller?.name ?? '—'}
+        </span>
+        <StatusBadge status={invoice.status} />
+        <span className="text-sm font-semibold text-gray-900 tabular-nums w-28 text-right">
+          {formatAmountSr(invoice.total_amount, invoice.currency)}
+        </span>
+        <span className="text-xs text-gray-500 w-20 text-right">
+          {formatRelativeTime(invoice.created_at)}
+        </span>
+      </div>
+      {/* Mobile card */}
+      <div className="sm:hidden space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-900 truncate">
+            {invoice.invoice_number ?? '—'}
+          </span>
+          <StatusBadge status={invoice.status} />
+        </div>
+        <p className="text-sm text-gray-500 truncate">{invoice.seller?.name ?? '—'}</p>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold text-gray-900 tabular-nums">
+            {formatAmountSr(invoice.total_amount, invoice.currency)}
+          </span>
+          <span className="text-xs text-gray-400">
+            {formatRelativeTime(invoice.created_at)}
+          </span>
+        </div>
+      </div>
     </Link>
   );
 }
