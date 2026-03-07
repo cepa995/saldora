@@ -329,6 +329,8 @@
     "removeFile": "Remove file",
     "maxFilesNote": "up to {max} files",
     "maxSizeNote": "{size} per file",
+    "takePhoto": "Take a photo of the invoice",
+    "orTakePhoto": "or take a photo",
     "stepDescUpload": "File uploaded",
     "stepDescQueued": "Waiting for processing",
     "stepDescProcessing": "Data extraction",

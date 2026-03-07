@@ -105,7 +105,7 @@ export default function InvoicesPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="text-center sm:text-left">
           <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
         </div>
         <Link
@@ -140,10 +140,10 @@ export default function InvoicesPage() {
           />
         </div>
 
-        {/* Status chips + Date range */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          {/* Status chips */}
-          <div className="flex flex-wrap gap-2">
+        {/* Filter chips + Date range */}
+        <div className="space-y-3">
+          {/* All filter chips in one wrapping row */}
+          <div className="flex flex-wrap items-center gap-2">
             {STATUS_OPTIONS.map((status) => {
               const isActive = filters.status === status;
               const label = status ? tStatus(status) : tCommon('all');
@@ -161,49 +161,52 @@ export default function InvoicesPage() {
                 </button>
               );
             })}
+
+            {/* Separator dot on larger screens */}
+            <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
+
+            {/* Accounting review filter */}
+            <button
+              onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+                filters.accounting_review === true
+                  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {t('needsAccountingReview')}
+            </button>
+
+            {/* PDV book type filters */}
+            <button
+              onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
+              title={tDetail('bookTypeKPR')}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                filters.book_type === 'KPR'
+                  ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              KPR
+            </button>
+            <button
+              onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
+              title={tDetail('bookTypeKIR')}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                filters.book_type === 'KIR'
+                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              KIR
+            </button>
           </div>
 
-          {/* Accounting review filter */}
-          <button
-            onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
-              filters.accounting_review === true
-                ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {t('needsAccountingReview')}
-          </button>
-
-          {/* PDV book type filters */}
-          <button
-            onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
-            title={tDetail('bookTypeKPR')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              filters.book_type === 'KPR'
-                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            KPR
-          </button>
-          <button
-            onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
-            title={tDetail('bookTypeKIR')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              filters.book_type === 'KIR'
-                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            KIR
-          </button>
-
           {/* Date range */}
-          <div className="flex items-center gap-2 sm:ml-auto">
+          <div className="flex items-center justify-center gap-2">
             <input
               type="date"
               value={dateFrom}
@@ -413,12 +416,12 @@ export default function InvoicesPage() {
             </div>
 
             {/* Mobile cards */}
-            <div className="md:hidden divide-y divide-gray-100">
+            <div className="md:hidden divide-y divide-gray-200">
               {invoices.map((invoice) => (
                 <Link
                   key={invoice.id}
                   href={`/invoices/${invoice.id}`}
-                  className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 transition-colors"
+                  className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
                 >
                   <input
                     type="checkbox"
@@ -430,8 +433,8 @@ export default function InvoicesPage() {
                     onClick={(e) => e.stopPropagation()}
                     className="mt-1 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 shrink-0"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={invoice.status} />
                         {invoice.pdv_book_type && (
@@ -451,20 +454,22 @@ export default function InvoicesPage() {
                           </svg>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-gray-900">
+                      <span className="text-[15px] font-semibold text-gray-900 tabular-nums">
                         {formatAmountSr(invoice.total_amount, invoice.currency)}
                       </span>
                     </div>
                     <p className="text-sm text-gray-700 truncate">
                       {invoice.seller?.name || t('noSeller')}
                     </p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-500 font-mono">
-                        {invoice.invoice_number || t('noInvoiceNumber')}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {formatDateSr(invoice.invoice_date)}
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 font-mono">
+                          {invoice.invoice_number || t('noInvoiceNumber')}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {formatDateSr(invoice.invoice_date)}
+                        </span>
+                      </div>
                       <ConfidenceBadge confidence={invoice.confidence_score} />
                     </div>
                   </div>

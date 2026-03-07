@@ -524,8 +524,8 @@ export default function TemplatesPage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="text-center sm:text-left">
           <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
         </div>
@@ -579,7 +579,7 @@ export default function TemplatesPage() {
           {/* System templates */}
           {systemTemplates.length > 0 && (
             <div>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 text-center sm:text-left">
                 {t('systemBadge')}
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -598,7 +598,7 @@ export default function TemplatesPage() {
 
           {/* Custom templates */}
           <div>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 text-center sm:text-left">
               {t('customBadge')}
             </h2>
             {customTemplates.length === 0 ? (

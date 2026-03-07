@@ -298,11 +298,11 @@ export default function RulesPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="text-center sm:text-left">
           <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-1 text-sm text-gray-500">{t('subtitle')}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center sm:justify-end gap-3">
           <button
             onClick={() => setShowTemplates(true)}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50 transition-all"
@@ -345,50 +345,54 @@ export default function RulesPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
         {/* Rule type chips */}
-        <div className="flex flex-wrap gap-2">
-          {RULE_TYPES.map((ruleType) => {
-            const isActive = filters.rule_type === ruleType;
-            const label = ruleType
-              ? t(`ruleType_${ruleType}`)
-              : tCommon('all');
-            return (
-              <button
-                key={ruleType ?? 'all'}
-                onClick={() => setRuleType(ruleType)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  isActive
-                    ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active/Inactive filter */}
-        <div className="flex gap-2 sm:ml-auto">
-          {[
-            { value: undefined, label: tCommon('all') },
-            { value: true, label: t('filterActive') },
-            { value: false, label: t('filterInactive') },
-          ].map((opt) => (
+        {RULE_TYPES.map((ruleType) => {
+          const isActive = filters.rule_type === ruleType;
+          const label = ruleType
+            ? t(`ruleType_${ruleType}`)
+            : tCommon('all');
+          return (
             <button
-              key={String(opt.value)}
-              onClick={() => setActiveFilter(opt.value as boolean | undefined)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                activeFilterValue === opt.value
+              key={ruleType ?? 'all'}
+              onClick={() => setRuleType(ruleType)}
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+                isActive
                   ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {opt.label}
+              {label}
             </button>
-          ))}
-        </div>
+          );
+        })}
+
+        {/* Separator */}
+        <span className="hidden sm:block text-gray-300 select-none">·</span>
+
+        {/* Active/Inactive filter */}
+        {[
+          { value: true, label: t('filterActive') },
+          { value: false, label: t('filterInactive') },
+        ].map((opt) => (
+          <button
+            key={String(opt.value)}
+            onClick={() =>
+              setActiveFilter(
+                activeFilterValue === opt.value
+                  ? undefined
+                  : (opt.value as boolean),
+              )
+            }
+            className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+              activeFilterValue === opt.value
+                ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {/* Error */}
@@ -1440,7 +1444,7 @@ function TemplatesModal({
                     key={tmpl.name}
                     className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-violet-200 hover:bg-violet-50/30 transition-all"
                   >
-                    <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center mb-3">
+                    <div className="w-10 h-10 bg-violet-100 rounded-xl flex items-center justify-center mb-3 mx-auto sm:mx-0">
                       <svg
                         className="w-5 h-5 text-violet-600"
                         fill="none"
@@ -1455,10 +1459,10 @@ function TemplatesModal({
                         />
                       </svg>
                     </div>
-                    <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-1 text-center sm:text-left">
                       {tmpl.description}
                     </h3>
-                    <p className="text-xs text-gray-500 mb-3">
+                    <p className="text-xs text-gray-500 mb-3 text-center sm:text-left">
                       {t(`ruleType_${tmpl.rule_type}`)}
                     </p>
                     <button

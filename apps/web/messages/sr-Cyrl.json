@@ -329,6 +329,8 @@
     "removeFile": "Уклони фајл",
     "maxFilesNote": "до {max} фајлова",
     "maxSizeNote": "{size} по фајлу",
+    "takePhoto": "Фотографишите фактуру",
+    "orTakePhoto": "или фотографишите",
     "stepDescUpload": "Фајл отпремљен",
     "stepDescQueued": "Чека на обраду",
     "stepDescProcessing": "Екстракција података",
