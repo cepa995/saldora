@@ -247,7 +247,7 @@ export default function SefInvoiceDetailPage() {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(canProcess || canReprocess) && (
             <button
               onClick={() => setShowConfirm("process")}

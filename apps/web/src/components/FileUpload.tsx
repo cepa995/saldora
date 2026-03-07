@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, InputHTMLAttributes } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, InputHTMLAttributes } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { useTranslations } from 'next-intl';
@@ -99,6 +99,7 @@ export function FileUpload({
   const t = useTranslations('upload');
   const router = useRouter();
   const uploadedFiles = useUploadFiles();
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const isUploading = uploadedFiles.some((f) => f.status === 'uploading');
@@ -322,6 +323,17 @@ export function FileUpload({
     return `${baseClasses} ${heightClass} border-gray-300 bg-white hover:border-violet-400 hover:bg-violet-50`;
   };
 
+  const handleCameraCapture = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      onDrop(Array.from(files), []);
+      // Reset input so the same file can be re-captured
+      e.target.value = '';
+    },
+    [onDrop],
+  );
+
   const pendingCount = uploadedFiles.filter((f) => f.status === 'pending').length;
   const totalSize = uploadedFiles.filter((f) => f.status === 'pending').reduce((sum, f) => sum + f.file.size, 0);
 
@@ -377,17 +389,54 @@ export function FileUpload({
             <>
               <p className="text-lg font-medium text-gray-700 mb-1">{t('dropzone')}</p>
               <p className="text-sm font-medium text-violet-600 mb-3">{t('multipleHint')}</p>
-              <div className="flex items-center gap-4 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs text-gray-400">
                 <span>{SUPPORTED_FORMATS.join(', ')}</span>
-                <span className="w-1 h-1 rounded-full bg-gray-300" />
+                <span className="hidden sm:inline w-1 h-1 rounded-full bg-gray-300" />
                 <span>{t('maxFilesNote', { max: String(MAX_BATCH_FILES) })}</span>
-                <span className="w-1 h-1 rounded-full bg-gray-300" />
+                <span className="hidden sm:inline w-1 h-1 rounded-full bg-gray-300" />
                 <span>{t('maxSizeNote', { size: formatFileSize(MAX_FILE_SIZE) })}</span>
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* Hidden camera input for mobile capture */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleCameraCapture}
+      />
+
+      {/* Camera capture button */}
+      {!isUploading && !allDone && !disabled && (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-violet-600 bg-violet-50 rounded-xl hover:bg-violet-100 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
+              />
+            </svg>
+            {t('takePhoto')}
+          </button>
+        </div>
+      )}
 
       {/* Validation Error */}
       {validationError && (
@@ -466,9 +515,9 @@ export function FileUpload({
                   key={`${uf.file.name}-${index}`}
                   className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
                 >
-                  <div className="flex">
-                    <div className="flex-shrink-0 w-48 bg-gray-50 border-r border-gray-100 flex flex-col items-center justify-center p-5 gap-3">
-                      <div className="w-28 h-36 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center shadow-inner">
+                  <div className="flex flex-col sm:flex-row">
+                    <div className="flex-shrink-0 sm:w-48 bg-gray-50 sm:border-r border-b sm:border-b-0 border-gray-100 flex flex-row sm:flex-col items-center justify-center p-4 sm:p-5 gap-3">
+                      <div className="w-16 h-20 sm:w-28 sm:h-36 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center shadow-inner">
                         {uf.preview ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={uf.preview} alt="Preview" className="w-full h-full object-cover" />
