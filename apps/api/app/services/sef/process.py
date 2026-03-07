@@ -120,6 +120,7 @@ async def process_sef_invoice(db: AsyncSession, sef_invoice_id: UUID, org_id: UU
         sef_inv.processing_error = None
 
         await db.commit()
+        await db.refresh(sef_inv)
         logger.info(
             "Processed SEF invoice %s → Invoice %s",
             sef_invoice_id,
