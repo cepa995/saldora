@@ -25,8 +25,8 @@ The following diagram shows the major components of the FakturaAI platform and h
 └──────────────────────────────────────────────────────────────┘
          │                    │                   │
          ▼                    ▼                   ▼
-   SEF Portal           dots.ocr            Claude API
-   (eFaktura)           (VLM OCR)           (Extraction)
+   SEF Portal           dots.ocr            Claude API         NBS API
+   (eFaktura)           (VLM OCR)           (Extraction)       (Exchange Rates)
 ```
 
 **Components at a glance:**
@@ -38,7 +38,7 @@ The following diagram shows the major components of the FakturaAI platform and h
 | **Workers** (Celery) | Background OCR/extraction without blocking the user |
 | **PostgreSQL** | All data — invoices, users, rules, audit logs |
 | **Document Store** (S3/R2) | Original invoice files (PDFs, images) |
-| **External: SEF, dots.ocr, Claude** | eFaktura portal, OCR engine, AI extraction |
+| **External: SEF, dots.ocr, Claude, NBS** | eFaktura portal, OCR engine, AI extraction, exchange rates |
 
 ---
 
@@ -275,6 +275,41 @@ Fields below 80% confidence are highlighted for manual review.
 
 ---
 
+## 8.4 Exchange Rate Conversion (Non-RSD Invoices)
+
+When an invoice is in a foreign currency (EUR, USD, CHF, GBP), the system automatically converts the total amount to RSD using the NBS (National Bank of Serbia) middle rate.
+
+### How It Works
+
+```
+Invoice: EUR 2,000.00  (dated 2026-03-03)
+                │
+                ▼
+    Look up NBS middle rate for EUR on 2026-03-03
+                │
+    ┌───────────┴───────────────────────────┐
+    │  4-tier lookup:                        │
+    │  1. Redis cache (fastest)              │
+    │  2. Database (exchange_rates table)    │
+    │  3. NBS API (kurs.resenje.org)         │
+    │  4. Fallback: latest known rate        │
+    └───────────┬───────────────────────────┘
+                │
+                ▼
+    Rate: 1 EUR = 117.1234 RSD (NBS srednji kurs)
+    Conversion: 2,000.00 × 117.1234 = 234,246.80 RSD
+```
+
+### Key Points
+
+- **Rate date = invoice date** — Serbian accounting law requires using the NBS middle rate from the date the invoice was issued, not the current date.
+- **Rates cached in Redis** with 24-hour TTL to avoid repeated API calls.
+- **Celery Beat** fetches rates for all supported currencies daily at 08:30 on business days (Mon–Fri), pre-populating the database and cache.
+- **Audit trail** — the exchange rate, rate date, and RSD equivalent are stored on the invoice record for traceability.
+- **Supported currencies:** EUR, USD, CHF, GBP. RSD invoices skip this step entirely.
+
+---
+
 ## 9. Step 6 — Accounting Intelligence
 
 **Goal:** Automatically suggest accounting entries so the accountant doesn't have to classify every invoice manually.
@@ -387,6 +422,13 @@ The invoice detail page shows:
 │                               │  Subtotal: 49.166,67         OK  │
 │                               │  PDV 20%:   9.833,33         OK  │
 │                               │  Total:    59.000,00         OK  │
+│                               │                                   │
+│                               │  ┌─ RSD ekvivalent ────────────┐ │
+│                               │  │ 234.246,80 RSD              │ │
+│                               │  │ 1 EUR = 117.1234 RSD        │ │
+│                               │  │ NBS srednji kurs (03.03.26) │ │
+│                               │  └─────────────────────────────┘ │
+│                               │                                   │
 │                               │  Konto: 5330 (Services)      OK  │
 │                               │  VAT: Fully deductible       OK  │
 │                               │                                   │
@@ -570,13 +612,14 @@ This diagram traces a single invoice through the entire system, from upload to e
 ```
  UPLOAD          PROCESS                          REVIEW & EXPORT
  ──────          ───────                          ───────────────
- User uploads    1. Store in S3                   7. User reviews data
- PDF / image     2. Prepare document              8. Correct errors if needed
-      │          3. OCR — dots.ocr VLM            9. Approve invoice
- SEF inbox  ───► 4. AI extraction — Claude LLM   10. Export (XLSX/CSV/JSON/XML)
- import          5. Validate (PIB, math, dupes)   11. MiniMax push (optional)
-      │          6. Accounting intelligence        12. Audit export (admin)
- API call           (type, VAT, konta, rules)
+ User uploads    1. Store in S3                    8. User reviews data
+ PDF / image     2. Prepare document               9. Correct errors if needed
+      │          3. OCR — dots.ocr VLM            10. Approve invoice
+ SEF inbox  ───► 4. AI extraction — Claude LLM   11. Export (XLSX/CSV/JSON/XML)
+ import          5. Validate (PIB, math, dupes)   12. MiniMax push (optional)
+      │          6. Exchange rate (NBS, non-RSD)   13. Audit export (admin)
+ API call        7. Accounting intelligence
+                    (type, VAT, konta, rules)
                                                          AUDIT LOG
                                                       (every step recorded)
 ```
@@ -651,8 +694,9 @@ Each log entry records: who (user), what (action), when (timestamp), where (IP a
 | **Math verification, not recomputation** | We check if extracted numbers are consistent, not recompute them. This respects real-world rounding that varies between invoices. |
 | **Background processing** | Heavy OCR and AI work runs asynchronously. Users never wait for a loading screen. |
 | **Pre-built rule templates** | Lower the barrier to entry. New users can set up automation in minutes using templates for common scenarios. |
+| **NBS rate by invoice date** | Foreign currency conversion uses the NBS middle rate from the invoice date, not the current date, as required by Serbian accounting law. Rates are cached and pre-fetched daily. |
 | **Immutable audit trail** | Every action is logged permanently. Records can never be deleted or modified. Required for compliance and builds trust. |
 
 ---
 
-*This document describes FakturaAI through Milestone 6 (Data Export). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+*This document describes FakturaAI through Milestone 7 (External Integrations). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
