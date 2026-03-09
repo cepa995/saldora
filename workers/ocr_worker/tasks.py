@@ -434,6 +434,128 @@ def _update_invoice_status(
         session.close()
 
 
+@app.task(name="ocr_worker.tasks.fetch_nbs_exchange_rates")
+def fetch_nbs_exchange_rates() -> dict[str, Any]:
+    """Fetch daily NBS exchange rates for all supported currencies.
+
+    Returns:
+        Dict with synced count and status message.
+    """
+    import json
+
+    import httpx
+
+    from ocr_worker.database import get_session, text
+
+    logger.info("Starting NBS exchange rate sync...")
+
+    api_url = os.getenv("NBS_API_URL", "https://kurs.resenje.org/api/v1")
+    supported = os.getenv("NBS_SUPPORTED_CURRENCIES", "EUR,USD,CHF,GBP").split(",")
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    cache_ttl = int(os.getenv("NBS_CACHE_TTL", "86400"))
+
+    # Fetch rates from API
+    try:
+        with httpx.Client(timeout=10) as client:
+            response = client.get(f"{api_url}/rates/today")
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        logger.error("Failed to fetch NBS rates: %s", exc)
+        return {"synced": 0, "error": str(exc)}
+
+    rates_list = data.get("rates", [])
+    supported_set = set(supported)
+
+    # Save to database
+    session = get_session()
+    count = 0
+    try:
+        for item in rates_list:
+            code = item.get("code", "")
+            if code not in supported_set:
+                continue
+
+            middle = item.get("exchange_middle")
+            if middle is None:
+                continue
+
+            rate_date = item["date"]
+            buying = item.get("exchange_buy")
+            selling = item.get("exchange_sell")
+            unit = item.get("parity", 1)
+
+            # Upsert exchange rate
+            session.execute(
+                text("""
+                    INSERT INTO exchange_rates (id, currency, rate_date, buying_rate, middle_rate,
+                        selling_rate, unit, source, fetched_at, created_at, updated_at)
+                    VALUES (gen_random_uuid(), :currency, :rate_date, :buying_rate, :middle_rate,
+                        :selling_rate, :unit, 'NBS', NOW(), NOW(), NOW())
+                    ON CONFLICT ON CONSTRAINT uq_exchange_rate_currency_date
+                    DO UPDATE SET
+                        buying_rate = :buying_rate,
+                        middle_rate = :middle_rate,
+                        selling_rate = :selling_rate,
+                        unit = :unit,
+                        fetched_at = NOW(),
+                        updated_at = NOW()
+                """),
+                {
+                    "currency": code,
+                    "rate_date": rate_date,
+                    "buying_rate": buying,
+                    "middle_rate": middle,
+                    "selling_rate": selling,
+                    "unit": unit,
+                },
+            )
+            count += 1
+
+        session.commit()
+        logger.info("Synced %d NBS exchange rates", count)
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to save NBS exchange rates")
+        raise
+    finally:
+        session.close()
+
+    # Update Redis cache
+    try:
+        import redis
+
+        r = redis.from_url(redis_url)
+        for item in rates_list:
+            code = item.get("code", "")
+            if code not in supported_set:
+                continue
+            middle = item.get("exchange_middle")
+            if middle is None:
+                continue
+
+            cache_data = {
+                "middle_rate": str(middle),
+                "buying_rate": str(item["exchange_buy"])
+                if item.get("exchange_buy")
+                else None,
+                "selling_rate": str(item["exchange_sell"])
+                if item.get("exchange_sell")
+                else None,
+                "unit": item.get("parity", 1),
+            }
+            r.set(
+                f"nbs_rate:{code}:{item['date']}",
+                json.dumps(cache_data),
+                ex=cache_ttl,
+            )
+        r.close()
+    except Exception as exc:
+        logger.warning("Failed to update Redis cache for NBS rates: %s", exc)
+
+    return {"synced": count}
+
+
 def _send_webhook(url: str, resource_id: str, data: dict[str, Any]) -> None:
     """Send webhook notification."""
     import httpx

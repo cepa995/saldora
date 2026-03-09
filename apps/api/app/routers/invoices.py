@@ -44,6 +44,7 @@ from app.services import audit
 from app.services.accounting_intent import generate_accounting_intent
 from app.services.email import send_invoice_processed_email
 from app.services.invoice_verification import check_duplicates, verify_calculations
+from app.services.nbs import convert_to_rsd
 from app.services.pib import validate_pib
 from app.services.storage import (
     delete_document,
@@ -417,6 +418,45 @@ def _json_safe(obj):
     return obj
 
 
+async def _update_exchange_rate(
+    invoice: Invoice,
+    request: Request,
+    db: AsyncSession,
+) -> None:
+    """Compute and store RSD equivalent for a non-RSD invoice.
+
+    Sets exchange_rate, exchange_rate_date, and total_amount_rsd on the
+    invoice model. No-op for RSD invoices.
+
+    Args:
+        invoice: Invoice model with currency and total_amount set.
+        request: FastAPI request (for Redis access).
+        db: Database session.
+    """
+    if invoice.currency == "RSD" or not invoice.total_amount:
+        invoice.exchange_rate = None
+        invoice.exchange_rate_date = None
+        invoice.total_amount_rsd = None
+        return
+
+    redis = request.app.state.redis
+    invoice_date = invoice.invoice_date or datetime.now(UTC).date()
+
+    result = await convert_to_rsd(db, redis, invoice.total_amount, invoice.currency, invoice_date)
+
+    if result.get("error"):
+        logger.warning(
+            "Exchange rate conversion failed for invoice %s: %s",
+            invoice.id,
+            result["error"],
+        )
+        return
+
+    invoice.exchange_rate = result["exchange_rate"]
+    invoice.exchange_rate_date = result["rate_date"]
+    invoice.total_amount_rsd = result["rsd_amount"]
+
+
 def _build_invoice_response(
     invoice: Invoice,
     document_url: str | None = None,
@@ -505,6 +545,9 @@ def _build_invoice_response(
         tax_amount=invoice.tax_amount,
         total_amount=invoice.total_amount,
         currency=invoice.currency,
+        exchange_rate=invoice.exchange_rate,
+        exchange_rate_date=invoice.exchange_rate_date,
+        total_amount_rsd=invoice.total_amount_rsd,
         line_items=line_items,
         tax_groups=tax_groups,
         field_confidences=field_confidences,
@@ -547,6 +590,7 @@ async def _get_invoice_or_404(invoice_id: UUID, db: AsyncSession, user: User) ->
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(
     invoice_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> InvoiceResponse:
@@ -557,6 +601,7 @@ async def get_invoice(
 
     Args:
         invoice_id: UUID of the invoice.
+        request: FastAPI request (for Redis access).
         db: Database session.
         user: Authenticated user.
 
@@ -564,6 +609,12 @@ async def get_invoice(
         Full invoice data with presigned document URL.
     """
     invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    # Lazy-compute exchange rate for non-RSD invoices after OCR processing
+    if invoice.currency != "RSD" and invoice.total_amount and invoice.exchange_rate is None:
+        await _update_exchange_rate(invoice, request, db)
+        await db.commit()
+        await db.refresh(invoice)
 
     # Generate presigned URL for document download (fail-silent)
     document_url = None
@@ -883,6 +934,12 @@ async def update_invoice(
                     model_confidence=confidence_map.get(field_name),
                 )
             )
+
+    # Recalculate RSD equivalent if currency or total changed
+    currency_changed = "currency" in updates
+    amount_changed = "total_amount" in updates
+    if (currency_changed or amount_changed) and invoice.total_amount and invoice.currency:
+        await _update_exchange_rate(invoice, request, db)
 
     # Audit the update (same transaction)
     await audit.log(

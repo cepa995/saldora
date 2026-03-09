@@ -117,6 +117,11 @@ class InvoiceResponse(BaseModel):
     total_amount: Decimal | None
     currency: str = "RSD"
 
+    # Exchange rate conversion (for non-RSD invoices)
+    exchange_rate: Decimal | None = None
+    exchange_rate_date: date | None = None
+    total_amount_rsd: Decimal | None = None
+
     # Line items
     line_items: list[LineItem] = Field(default_factory=list)
 

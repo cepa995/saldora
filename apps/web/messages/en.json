@@ -278,6 +278,8 @@
     "computedTotal": "Computed",
     "mathMismatch": "Difference of {diff}",
     "mathMatch": "Math checks out",
+    "rsdEquivalent": "RSD equivalent",
+    "nbsMiddleRate": "NBS middle rate",
     "processingStage": "Processing...",
     "stageDownloading": "Downloading document...",
     "stagePreprocessing": "Preparing image...",

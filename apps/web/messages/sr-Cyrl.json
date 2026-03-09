@@ -278,6 +278,8 @@
     "computedTotal": "Израчунато",
     "mathMismatch": "Разлика од {diff}",
     "mathMatch": "Математика се поклапа",
+    "rsdEquivalent": "РСД еквивалент",
+    "nbsMiddleRate": "НБС средњи курс",
     "processingStage": "У обради...",
     "stageDownloading": "Преузимање документа...",
     "stagePreprocessing": "Припрема слике...",
