@@ -1,27 +1,54 @@
-"""Billing router — subscription info and usage stats."""
+"""Billing router — subscription info, usage stats, and Paddle checkout."""
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_role
 from app.models.invoice import Invoice
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.billing import SubscriptionResponse
+from app.plans import PlanTier, get_plan
+from app.schemas.billing import (
+    BillingConfigResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    SubscriptionResponse,
+)
+from app.services.paddle import get_checkout_settings
 
 router = APIRouter()
+settings = get_settings()
+logger = logging.getLogger(__name__)
 
-# Plan limits configuration (invoices per month).
-PLAN_LIMITS: dict[str, int | None] = {
-    "free": 10,
-    "starter": 100,
-    "professional": 500,
-    "enterprise": None,
-}
+
+@router.get("/config", response_model=BillingConfigResponse)
+async def get_billing_config() -> BillingConfigResponse:
+    """Return public Paddle configuration for frontend initialization.
+
+    No authentication required — these are client-side tokens.
+
+    Returns:
+        Paddle environment, client token, and price ID mapping.
+    """
+    return BillingConfigResponse(
+        paddle_environment=settings.paddle_environment,
+        paddle_client_token=settings.paddle_client_side_token,
+        prices={
+            "starter_monthly": settings.paddle_price_id_starter_monthly or None,
+            "starter_annual": settings.paddle_price_id_starter_annual or None,
+            "pro_monthly": settings.paddle_price_id_pro_monthly or None,
+            "pro_annual": settings.paddle_price_id_pro_annual or None,
+            "agency_monthly": settings.paddle_price_id_agency_monthly or None,
+            "agency_annual": settings.paddle_price_id_agency_annual or None,
+        },
+    )
 
 
 @router.get("/subscription", response_model=SubscriptionResponse)
@@ -61,12 +88,126 @@ async def get_subscription(
     )
     monthly_usage = invoice_count_result.scalar() or 0
 
-    plan = org.plan or "free"
-    plan_limit = PLAN_LIMITS.get(plan)
+    plan_name = org.plan or "free"
+    plan_def = get_plan(plan_name)
 
     return SubscriptionResponse(
-        plan=plan,
-        plan_limit=plan_limit,
+        plan=plan_name,
+        plan_limit=plan_def.invoice_limit,
         monthly_usage=monthly_usage,
         organization_name=org.name,
+        features=[f.value for f in plan_def.features],
+        subscription_status=org.subscription_status,
+        paddle_customer_id=org.payment_provider_customer_id,
     )
+
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def create_checkout(
+    body: CheckoutRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> CheckoutResponse:
+    """Generate checkout settings for Paddle.js overlay.
+
+    Args:
+        body: Target plan tier and billing interval.
+        db: Database session.
+        user: Authenticated admin user.
+
+    Returns:
+        Price ID and customer info for Paddle.Checkout.open().
+    """
+    try:
+        tier = PlanTier(body.tier)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown plan: {body.tier}",
+        )
+
+    if tier == PlanTier.FREE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot checkout for free plan",
+        )
+
+    if body.interval not in ("monthly", "annual"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Interval must be 'monthly' or 'annual'",
+        )
+
+    result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
+    org = result.scalar_one_or_none()
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    try:
+        checkout = get_checkout_settings(
+            tier=tier,
+            interval=body.interval,
+            org_id=str(org.id),
+            billing_email=org.billing_email or user.email,
+            paddle_customer_id=org.payment_provider_customer_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    return CheckoutResponse(**checkout)
+
+
+@router.post("/cancel")
+async def cancel_subscription(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> dict[str, str]:
+    """Request subscription cancellation via Paddle API.
+
+    Args:
+        db: Database session.
+        user: Authenticated admin user.
+
+    Returns:
+        Confirmation dict.
+    """
+    result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
+    org = result.scalar_one_or_none()
+    if not org or not org.payment_provider_subscription_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active subscription",
+        )
+
+    if not settings.paddle_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paddle is not configured",
+        )
+
+    from paddle_billing import Client, Environment, Options
+
+    env = (
+        Environment.SANDBOX if settings.paddle_environment == "sandbox" else Environment.PRODUCTION
+    )
+    paddle = Client(settings.paddle_api_key, options=Options(env))
+
+    try:
+        await asyncio.to_thread(
+            paddle.subscriptions.cancel,
+            org.payment_provider_subscription_id,
+        )
+    except Exception:
+        logger.exception("Failed to cancel Paddle subscription")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to cancel subscription",
+        )
+
+    return {"status": "cancellation_requested"}

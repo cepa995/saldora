@@ -1,50 +1,68 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components';
 import { useBilling } from '@/hooks/useBilling';
+import { createCheckout, fetchBillingConfig } from '@/lib/api/billing';
+import { initializePaddle, openCheckout } from '@/lib/paddle';
 
 /* -- Plan tier data ------------------------------------------------------ */
 
 const PLANS = [
   {
     key: 'starter' as const,
-    price: '25',
+    monthlyPrice: 29,
+    annualPrice: 24,
     invoiceLimit: 100,
-    userLimit: 3,
-    features: ['pricingFeatureOcr', 'pricingFeatureExport'],
-    gradient: 'from-slate-500 to-slate-700',
-    iconBg: 'bg-slate-100',
-    iconColor: 'text-slate-600',
-  },
-  {
-    key: 'professional' as const,
-    price: '65',
-    invoiceLimit: 500,
-    userLimit: 10,
-    popular: true,
+    userLimit: 2,
+    overage: '€0,10',
+    icon: '🚀',
+    descKey: 'planDescStarter',
     features: [
       'pricingFeatureOcr',
       'pricingFeatureExport',
-      'pricingFeatureApi',
-      'pricingFeatureSef',
-      'pricingFeaturePriority',
+      'pricingFeatureMinimaxXml',
+      'pricingFeatureNbs',
     ],
-    gradient: 'from-violet-600 to-indigo-600',
-    iconBg: 'bg-violet-100',
-    iconColor: 'text-violet-600',
+    popular: false,
   },
   {
-    key: 'enterprise' as const,
-    price: null,
-    invoiceLimit: null,
-    userLimit: null,
-    features: ['pricingFeatureCustom', 'pricingFeatureSla', 'pricingFeaturePriority'],
-    gradient: 'from-amber-500 to-orange-600',
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-600',
+    key: 'pro' as const,
+    monthlyPrice: 79,
+    annualPrice: 66,
+    invoiceLimit: 400,
+    userLimit: 5,
+    overage: '€0,07',
+    icon: '⭐',
+    descKey: 'planDescPro',
+    features: [
+      'pricingFeatureOcr',
+      'pricingFeatureAllExports',
+      'pricingFeatureAccounting',
+      'pricingFeatureSef',
+      'pricingFeatureMinimaxPush',
+      'pricingFeatureNbs',
+    ],
+    popular: true,
+  },
+  {
+    key: 'agency' as const,
+    monthlyPrice: 199,
+    annualPrice: 165,
+    invoiceLimit: 1500,
+    userLimit: 15,
+    overage: '€0,05',
+    icon: '🏢',
+    descKey: 'planDescAgency',
+    features: [
+      'pricingFeatureAllPro',
+      'pricingFeatureAutomation',
+      'pricingFeatureAuditExport',
+      'pricingFeaturePriority',
+    ],
+    popular: false,
   },
 ];
 
@@ -56,10 +74,10 @@ function capitalize(s: string): string {
 
 /* -- Inline Icons -------------------------------------------------------- */
 
-function CheckIcon() {
+function CheckIcon({ className = 'text-emerald-600' }: { className?: string }) {
   return (
     <svg
-      className="w-4 h-4 text-violet-500 shrink-0"
+      className={`w-3 h-3 ${className}`}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -94,51 +112,6 @@ function ChartBarIcon({ className = 'w-6 h-6' }: { className?: string }) {
     </svg>
   );
 }
-
-function SparklesIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-      />
-    </svg>
-  );
-}
-
-function RocketIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-        d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"
-      />
-    </svg>
-  );
-}
-
-function BuildingIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.8}
-        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-      />
-    </svg>
-  );
-}
-
-const PLAN_ICONS: Record<string, ({ className }: { className?: string }) => React.ReactNode> = {
-  starter: SparklesIcon,
-  professional: RocketIcon,
-  enterprise: BuildingIcon,
-};
 
 /* -- Skeleton Components ------------------------------------------------- */
 
@@ -179,17 +152,69 @@ export default function BillingPage() {
   const tLanding = useTranslations('landing');
   const tCommon = useTranslations('common');
   const [toast, setToast] = useState<string | null>(null);
+  const [annual, setAnnual] = useState(true);
+  const [upgrading, setUpgrading] = useState(false);
+  const paddleInitialized = useRef(false);
 
   const isAdmin = user?.role === 'admin';
+
+  // Load Paddle.js script and initialize on mount
+  useEffect(() => {
+    if (paddleInitialized.current) return;
+
+    function loadAndInit() {
+      fetchBillingConfig()
+        .then((config) => {
+          if (!config.paddle_client_token) return;
+
+          // Load Paddle.js if not already present
+          if (window.Paddle) {
+            initializePaddle(config.paddle_client_token, config.paddle_environment);
+            paddleInitialized.current = true;
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+          script.async = true;
+          script.onload = () => {
+            initializePaddle(config.paddle_client_token, config.paddle_environment);
+            paddleInitialized.current = true;
+          };
+          document.head.appendChild(script);
+        })
+        .catch(() => {
+          // Paddle not configured — upgrade buttons will show fallback toast
+        });
+    }
+
+    loadAndInit();
+  }, []);
 
   // Non-admin guard
   if (!isAdmin) {
     return <AccessDenied />;
   }
 
-  function handleUpgradeClick() {
-    setToast(t('comingSoonDesc'));
-    setTimeout(() => setToast(null), 4000);
+  async function handleUpgradeClick(planKey: string) {
+    if (upgrading) return;
+    setUpgrading(true);
+    try {
+      const interval = annual ? 'annual' : 'monthly';
+      const checkout = await createCheckout(planKey, interval);
+      openCheckout({
+        priceId: checkout.price_id,
+        customerEmail: checkout.customer_email ?? undefined,
+        customerId: checkout.customer_id ?? undefined,
+        customData: checkout.custom_data,
+        successUrl: `${window.location.origin}/billing?success=true`,
+      });
+    } catch {
+      setToast(t('comingSoonDesc'));
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setUpgrading(false);
+    }
   }
 
   const usagePercent =
@@ -262,6 +287,15 @@ export default function BillingPage() {
                   ? t('freePlan')
                   : tLanding(`pricing${capitalize(data.plan)}`)}
               </span>
+              {data.subscription_status && data.subscription_status !== 'active' && (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  data.subscription_status === 'past_due'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {t(`subscription${capitalize(data.subscription_status.replace('_', ''))}`)}
+                </span>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-3">{data.organization_name}</p>
           </div>
@@ -306,7 +340,24 @@ export default function BillingPage() {
 
       {/* Plans comparison */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-5">{t('plans')}</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900">{t('plans')}</h2>
+          <div className="inline-flex items-center gap-1 p-1.5 bg-gray-100 rounded-full">
+            <button
+              onClick={() => setAnnual(false)}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 ${!annual ? 'bg-white shadow-md text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {t('monthly')}
+            </button>
+            <button
+              onClick={() => setAnnual(true)}
+              className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2 ${annual ? 'bg-white shadow-md text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {t('annually')}
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">-17%</span>
+            </button>
+          </div>
+        </div>
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <SkeletonPlanCard />
@@ -314,118 +365,125 @@ export default function BillingPage() {
             <SkeletonPlanCard />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 items-start">
             {PLANS.map((plan) => {
               const isCurrent = data?.plan === plan.key;
-              const PlanIcon = PLAN_ICONS[plan.key];
               return (
                 <div
                   key={plan.key}
-                  className={`relative bg-white rounded-2xl border shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 ${
+                  className={`group relative p-8 rounded-3xl transition-all duration-500 hover:-translate-y-2 ${
                     plan.popular
-                      ? 'border-violet-300 ring-2 ring-violet-100'
-                      : 'border-gray-100'
+                      ? 'bg-gradient-to-br from-gray-900 to-gray-800 text-white lg:scale-105 shadow-2xl shadow-violet-500/20 hover:shadow-violet-500/30 z-10'
+                      : 'bg-white border border-gray-200/80 shadow-lg shadow-gray-200/50 hover:border-violet-200 hover:shadow-2xl hover:shadow-violet-200/30'
                   }`}
                 >
+                  {/* Glow effect for popular plan */}
+                  {plan.popular && (
+                    <div className="absolute -inset-px rounded-3xl bg-gradient-to-br from-violet-500 to-indigo-500 opacity-20 blur-xl group-hover:opacity-30 transition-opacity" />
+                  )}
+
                   {/* Popular badge */}
                   {plan.popular && (
-                    <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-center text-xs font-semibold py-1.5">
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-violet-500 to-indigo-500 text-white text-xs font-semibold rounded-full shadow-lg shadow-violet-500/30">
                       {t('popular')}
                     </div>
                   )}
 
-                  <div className={`p-6 ${plan.popular ? 'pt-10' : ''}`}>
-                    {/* Plan icon + name */}
+                  <div className="relative">
+                    {/* Icon and name */}
                     <div className="flex items-center gap-3 mb-4">
-                      <div
-                        className={`w-10 h-10 rounded-xl ${plan.iconBg} flex items-center justify-center`}
-                      >
-                        <PlanIcon className={`w-5 h-5 ${plan.iconColor}`} />
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${
+                        plan.popular ? 'bg-white/10' : 'bg-gray-100'
+                      }`}>
+                        {plan.icon}
                       </div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {tLanding(`pricing${capitalize(plan.key)}`)}
-                      </h3>
+                      <div>
+                        <h3 className={`text-xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>
+                          {tLanding(`pricing${capitalize(plan.key)}`)}
+                        </h3>
+                        <p className={`text-sm ${plan.popular ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {t(plan.descKey)}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Price */}
-                    <div className="mb-5">
-                      {plan.price ? (
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-bold text-gray-900">
-                            &euro;{plan.price}
-                          </span>
-                          <span className="text-sm text-gray-500">{t('perMonth')}</span>
-                        </div>
-                      ) : (
-                        <p className="text-lg font-semibold text-gray-700">{t('contactSales')}</p>
+                    <div className={`mb-6 pb-6 border-b ${plan.popular ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-5xl font-bold ${plan.popular ? 'text-white' : 'text-gray-900'}`}>
+                          &euro;{annual ? plan.annualPrice : plan.monthlyPrice}
+                        </span>
+                        <span className={`text-sm ${plan.popular ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {annual ? t('perMonthAnnual') : t('perMonth')}
+                        </span>
+                      </div>
+                      {annual && (
+                        <p className={`text-sm mt-2 ${plan.popular ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                          {t('annualSavings', { amount: String((plan.monthlyPrice - plan.annualPrice) * 12) })}
+                        </p>
                       )}
                     </div>
 
-                    {/* Divider */}
-                    <div className="border-t border-gray-100 mb-5" />
-
                     {/* Features */}
-                    <ul className="space-y-2.5">
-                      <li className="flex items-center gap-2.5 text-sm text-gray-600">
-                        <CheckIcon />
-                        {plan.invoiceLimit
-                          ? tLanding('pricingFeatureInvoices', {
-                              count: String(plan.invoiceLimit),
-                            })
-                          : tLanding('pricingFeatureUnlimited')}
+                    <ul className="space-y-3 mb-8">
+                      <li className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${plan.popular ? 'bg-violet-500/20' : 'bg-emerald-100'}`}>
+                          <CheckIcon className={plan.popular ? 'text-violet-300' : 'text-emerald-600'} />
+                        </div>
+                        <span className={`text-sm ${plan.popular ? 'text-gray-300' : 'text-gray-600'}`}>
+                          {tLanding('pricingFeatureInvoices', { count: String(plan.invoiceLimit) })}
+                        </span>
                       </li>
-                      <li className="flex items-center gap-2.5 text-sm text-gray-600">
-                        <CheckIcon />
-                        {plan.userLimit
-                          ? tLanding('pricingFeatureUsers', { count: String(plan.userLimit) })
-                          : tLanding('pricingFeatureUnlimitedUsers')}
+                      <li className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${plan.popular ? 'bg-violet-500/20' : 'bg-emerald-100'}`}>
+                          <CheckIcon className={plan.popular ? 'text-violet-300' : 'text-emerald-600'} />
+                        </div>
+                        <span className={`text-sm ${plan.popular ? 'text-gray-300' : 'text-gray-600'}`}>
+                          {tLanding('pricingFeatureUsers', { count: String(plan.userLimit) })}
+                        </span>
                       </li>
                       {plan.features.map((featureKey) => (
-                        <li
-                          key={featureKey}
-                          className="flex items-center gap-2.5 text-sm text-gray-600"
-                        >
-                          <CheckIcon />
-                          {tLanding(featureKey)}
+                        <li key={featureKey} className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${plan.popular ? 'bg-violet-500/20' : 'bg-emerald-100'}`}>
+                            <CheckIcon className={plan.popular ? 'text-violet-300' : 'text-emerald-600'} />
+                          </div>
+                          <span className={`text-sm ${plan.popular ? 'text-gray-300' : 'text-gray-600'}`}>
+                            {tLanding(featureKey)}
+                          </span>
                         </li>
                       ))}
                     </ul>
 
+                    {/* Overage info */}
+                    <p className={`text-xs mb-6 ${plan.popular ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {t('overageRate')}: {plan.overage}
+                    </p>
+
                     {/* CTA button */}
-                    <div className="mt-6">
-                      {isCurrent ? (
-                        <span className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-violet-50 text-violet-700 text-sm font-semibold rounded-xl border border-violet-200">
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
-                          {t('yourPlan')}
-                        </span>
-                      ) : plan.key === 'enterprise' ? (
-                        <button
-                          onClick={handleUpgradeClick}
-                          className="w-full px-4 py-2.5 border-2 border-amber-500 text-amber-700 text-sm font-medium rounded-xl hover:bg-amber-50 transition-colors"
-                        >
-                          {t('contactSales')}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleUpgradeClick}
-                          className={`w-full px-4 py-2.5 bg-gradient-to-r ${plan.gradient} text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-violet-500/25 hover:scale-[1.02] transition-all duration-200`}
-                        >
-                          {t('upgrade')}
-                        </button>
-                      )}
-                    </div>
+                    {isCurrent ? (
+                      <span className={`flex items-center justify-center gap-2 w-full py-4 font-medium rounded-full ${
+                        plan.popular
+                          ? 'bg-white text-gray-900'
+                          : 'bg-violet-50 text-violet-700 border border-violet-200'
+                      }`}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {t('yourPlan')}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleUpgradeClick(plan.key)}
+                        disabled={upgrading}
+                        className={`w-full py-4 font-medium rounded-full transition-all duration-300 disabled:opacity-50 ${
+                          plan.popular
+                            ? 'bg-white text-gray-900 hover:bg-gray-100 hover:shadow-lg'
+                            : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-xl hover:shadow-violet-500/30 hover:scale-[1.02]'
+                        }`}
+                      >
+                        {upgrading ? t('processing') : t('upgrade')}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
