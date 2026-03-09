@@ -1,60 +1,118 @@
 /**
  * Paddle.js initialization and checkout helper.
  *
- * Loads Paddle configuration from the API, initializes the Paddle
- * client with the correct environment and token, and provides
- * a helper to open the overlay checkout.
+ * Matches the @paddle/paddle-js npm package behavior exactly:
+ * - Loads the Paddle v2 script from CDN
+ * - Uses window.PaddleBillingV1 (NOT window.Paddle) — this is what
+ *   the official npm package does internally
+ * - Calls Environment.set + Initialize on the correct instance
  */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const PADDLE_CDN_URL = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+const PADDLE_INSTANCE_KEY = 'PaddleBillingV1';
+
+let paddleInstance: any = null;
+let loadPromise: Promise<any> | null = null;
 
 declare global {
   interface Window {
-    Paddle?: {
-      Initialize: (config: {
-        token: string;
-        environment?: string;
-      }) => void;
-      Checkout: {
-        open: (config: PaddleCheckoutConfig) => void;
-      };
-    };
+    Paddle?: any;
+    PaddleBillingV1?: any;
   }
 }
 
-interface PaddleCheckoutConfig {
-  items: Array<{ priceId: string; quantity: number }>;
-  customer?: { email?: string; id?: string };
-  customData?: Record<string, string>;
-  settings?: {
-    displayMode?: 'overlay' | 'inline';
-    theme?: 'light' | 'dark';
-    locale?: string;
-    successUrl?: string;
-  };
-}
+/**
+ * Load Paddle.js script from CDN and return the billing instance.
+ * Uses window.PaddleBillingV1 (matching the official npm package).
+ */
+function loadPaddleScript(): Promise<any> {
+  if (loadPromise) return loadPromise;
 
-let initialized = false;
+  loadPromise = new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      resolve(null);
+      return;
+    }
+
+    // Already loaded — return existing instance
+    if (window[PADDLE_INSTANCE_KEY]) {
+      resolve(window[PADDLE_INSTANCE_KEY]);
+      return;
+    }
+
+    // Find existing script or inject new one
+    let script = document.querySelector(
+      `script[src="${PADDLE_CDN_URL}"]`,
+    ) as HTMLScriptElement | null;
+
+    if (!script) {
+      script = document.createElement('script');
+      script.src = PADDLE_CDN_URL;
+      script.async = true;
+      (document.head || document.body).appendChild(script);
+    }
+
+    script.addEventListener('load', () => {
+      if (window[PADDLE_INSTANCE_KEY]) {
+        resolve(window[PADDLE_INSTANCE_KEY]);
+      } else {
+        reject(new Error('Paddle.js not available after load'));
+      }
+    });
+
+    script.addEventListener('error', () => {
+      reject(new Error('Failed to load Paddle.js'));
+    });
+  });
+
+  return loadPromise;
+}
 
 /**
  * Initialize Paddle.js with client-side token and environment.
  *
- * Safe to call multiple times — will only initialize once.
+ * Loads the script from CDN, sets sandbox environment if needed,
+ * and calls Paddle.Initialize(). Safe to call multiple times.
  */
-export function initializePaddle(
+export async function initPaddle(
   clientToken: string,
   environment: string,
-): void {
-  if (initialized || !window.Paddle) return;
-  window.Paddle.Initialize({
-    token: clientToken,
-    environment: environment === 'sandbox' ? 'sandbox' : undefined,
-  });
-  initialized = true;
+): Promise<any> {
+  if (paddleInstance) return paddleInstance;
+
+  try {
+    const paddle = await loadPaddleScript();
+    if (!paddle) return null;
+
+    if (environment === 'sandbox' && paddle.Environment) {
+      paddle.Environment.set('sandbox');
+    }
+
+    if (paddle.Initialized) {
+      paddle.Update({ token: clientToken });
+    } else {
+      paddle.Initialize({ token: clientToken });
+    }
+
+    paddleInstance = paddle;
+    return paddle;
+  } catch (error) {
+    console.error('Failed to initialize Paddle:', error);
+    return null;
+  }
+}
+
+/**
+ * Get the current Paddle instance, or null if not initialized.
+ */
+export function getPaddle(): any {
+  return paddleInstance;
 }
 
 /**
  * Open the Paddle Checkout overlay.
- *
- * @param config Checkout configuration with price ID, customer info, and custom data.
  */
 export function openCheckout(config: {
   priceId: string;
@@ -63,33 +121,22 @@ export function openCheckout(config: {
   customData?: Record<string, string>;
   successUrl?: string;
 }): void {
-  if (!window.Paddle) {
-    console.error('Paddle.js not loaded');
+  if (!paddleInstance) {
+    console.error('Paddle not initialized');
     return;
   }
 
-  const checkoutConfig: PaddleCheckoutConfig = {
+  paddleInstance.Checkout.open({
     items: [{ priceId: config.priceId, quantity: 1 }],
+    customer: config.customerEmail
+      ? { email: config.customerEmail }
+      : undefined,
+    customData: config.customData,
     settings: {
       displayMode: 'overlay',
       theme: 'light',
-      successUrl: config.successUrl,
+      locale: 'hr',
+      ...(config.successUrl && { successUrl: config.successUrl }),
     },
-  };
-
-  if (config.customerEmail || config.customerId) {
-    checkoutConfig.customer = {};
-    if (config.customerEmail) {
-      checkoutConfig.customer.email = config.customerEmail;
-    }
-    if (config.customerId) {
-      checkoutConfig.customer.id = config.customerId;
-    }
-  }
-
-  if (config.customData) {
-    checkoutConfig.customData = config.customData;
-  }
-
-  window.Paddle.Checkout.open(checkoutConfig);
+  });
 }

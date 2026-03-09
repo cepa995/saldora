@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 from openpyxl import load_workbook
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import decode_token
@@ -188,6 +189,17 @@ def _get_org_id(headers: dict) -> str:
     token = headers["Authorization"].removeprefix("Bearer ")
     payload = decode_token(token)
     return payload["org"]
+
+
+async def _set_org_plan(test_engine, org_id: str, plan: str) -> None:
+    """Update organization plan directly in the database."""
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        await session.execute(
+            text("UPDATE organizations SET plan = :plan WHERE id = :org_id"),
+            {"plan": plan, "org_id": org_id},
+        )
+        await session.commit()
 
 
 async def _seed_default_templates(test_engine) -> None:
@@ -1309,18 +1321,9 @@ class TestAuditExportEndpoint:
         )
         admin_headers = {"Authorization": f"Bearer {org_resp.json()['access_token']}"}
 
-        # Set plan to agency (audit export requires AUDIT_EXPORT feature)
-        from sqlalchemy import text
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-        session_factory = async_sessionmaker(
-            test_engine, class_=AsyncSession, expire_on_commit=False
-        )
-        async with session_factory() as session:
-            await session.execute(
-                text("UPDATE organizations SET plan = 'agency' WHERE name = 'Audit Org'")
-            )
-            await session.commit()
+        # Upgrade to pro plan (audit_export is a Pro feature)
+        org_id = _get_org_id(admin_headers)
+        await _set_org_plan(test_engine, org_id, "pro")
 
         # Admin should NOT get 403
         from unittest.mock import AsyncMock, patch
@@ -1346,6 +1349,8 @@ class TestAuditExportEndpoint:
     async def test_audit_export_invalid_dates(self, client: AsyncClient, test_engine):
         """Audit export returns 400 for date_from > date_to."""
         headers = await _auth_headers(client)
+        org_id = _get_org_id(headers)
+        await _set_org_plan(test_engine, org_id, "agency")
 
         resp = await client.post(
             "/api/v1/export/audit",
@@ -1357,6 +1362,8 @@ class TestAuditExportEndpoint:
     async def test_audit_export_success_with_mock(self, client: AsyncClient, test_engine):
         """Audit export succeeds and returns expected response shape."""
         headers = await _auth_headers(client)
+        org_id = _get_org_id(headers)
+        await _set_org_plan(test_engine, org_id, "agency")
 
         from unittest.mock import AsyncMock, patch
 
@@ -1395,6 +1402,8 @@ class TestAuditExportEndpoint:
     async def test_audit_export_saves_record(self, client: AsyncClient, test_engine):
         """Audit export creates a tracking record in the database."""
         headers = await _auth_headers(client)
+        org_id = _get_org_id(headers)
+        await _set_org_plan(test_engine, org_id, "agency")
 
         from unittest.mock import AsyncMock, patch
 
@@ -1431,6 +1440,8 @@ class TestAuditExportEndpoint:
     async def test_audit_export_history(self, client: AsyncClient, test_engine):
         """List audit export history returns past exports."""
         headers = await _auth_headers(client)
+        org_id = _get_org_id(headers)
+        await _set_org_plan(test_engine, org_id, "agency")
 
         from unittest.mock import AsyncMock, patch
 
