@@ -13,10 +13,6 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8, description="Minimum 8 characters")
     first_name: str | None = None
     last_name: str | None = None
-    organization_name: str | None = Field(
-        default=None,
-        description="Company name (creates new organization)",
-    )
 
 
 class UserResponse(BaseModel):
@@ -26,7 +22,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     first_name: str | None
     last_name: str | None
-    organization_id: UUID
+    organization_id: UUID | None
     role: str
     email_verified: bool
     created_at: datetime
@@ -47,6 +43,13 @@ class RefreshRequest(BaseModel):
     """Schema for token refresh request."""
 
     refresh_token: str
+
+
+class CreateOrganizationRequest(BaseModel):
+    """Schema for creating an organization after registration."""
+
+    name: str = Field(min_length=1, max_length=255)
+    pib: str | None = Field(default=None, max_length=20)
 
 
 class PasswordResetRequest(BaseModel):

@@ -2661,6 +2661,134 @@ The system SHOULD provide a dashboard for tracking extraction accuracy per field
 
 These metrics serve to identify systemic issues and inform the team about potential problems with input document quality or system configuration.
 
+### 9.9 Invoice Template Learning & LLM Cost Optimization
+
+The system SHOULD implement a template learning mechanism that caches invoice layout patterns per seller, enabling field extraction without LLM calls for recurring invoice formats. This reduces per-invoice processing costs by eliminating redundant LLM API calls for invoices with previously seen structures.
+
+#### 9.9.1 Template Learning Architecture
+
+```
+Invoice arrives → OCR extracts raw text + bounding boxes
+                        ↓
+              Compute layout fingerprint
+                        ↓
+         Template exists for (seller_pib, fingerprint)?
+                        ↓
+               ┌────────┴────────┐
+               YES               NO
+               ↓                  ↓
+    Template-based extraction   LLM extraction (Claude API)
+    (coordinate + regex)         ↓ (paid API call)
+               ↓                Learn template from
+    Confidence >= threshold?    successful extraction
+               ↓                  ↓
+         ┌─────┴─────┐     Store template
+         YES          NO    (field mappings,
+         ↓            ↓     coordinates, patterns)
+    Use result   Fall back
+    ($0.00)      to LLM ($)
+```
+
+#### 9.9.2 Layout Fingerprinting
+
+The system MUST generate a deterministic structural fingerprint from OCR output that is:
+- **Invariant to changing values** — same layout with different amounts/dates produces the same fingerprint
+- **Sensitive to structural changes** — different label positions, added/removed sections produce different fingerprints
+- **Based on structural elements** — label text (e.g., "Datum fakture:", "PIB:"), relative positions of text blocks, table column headers, section boundaries
+
+**Fingerprint components:**
+- Sorted list of detected label strings (normalized: lowered, trimmed)
+- Relative positions of text blocks (quantized to grid cells, not pixel-exact)
+- Table structure signature (column count, header text)
+- Hash algorithm: SHA-256 of the canonical representation
+
+#### 9.9.3 Template Storage
+
+**InvoiceTemplate model:**
+
+```python
+class InvoiceTemplate:
+    id: UUID
+    organization_id: UUID          # Multi-tenant scoping
+    seller_pib: str                # Primary lookup key
+    layout_fingerprint: str        # SHA-256 hash of structural elements
+    field_mappings: dict           # JSONB — per-field extraction rules
+    sample_invoice_id: UUID        # Reference invoice this was learned from
+    usage_count: int               # How many times used successfully
+    success_rate: float            # Successful extractions / total attempts
+    is_active: bool                # Deactivated after repeated failures
+    last_used_at: datetime
+    created_at: datetime
+    updated_at: datetime
+```
+
+**Field mapping structure (per field):**
+
+```json
+{
+  "invoice_number": {
+    "bbox_region": [120, 45, 280, 65],
+    "label_text": "Faktura br:",
+    "label_offset": [-15, 0],
+    "value_regex": "[A-Z0-9/-]+",
+    "confidence_weight": 0.9
+  },
+  "total_amount": {
+    "bbox_region": [400, 520, 580, 545],
+    "label_text": "UKUPNO:",
+    "label_offset": [-120, 0],
+    "value_regex": "[\\d.,]+\\s*(RSD|EUR|USD)?",
+    "confidence_weight": 0.85
+  }
+}
+```
+
+#### 9.9.4 Template-Based Extraction
+
+The template extraction engine MUST implement a three-tier fallback chain:
+
+1. **Coordinate-based extraction** (primary): Use stored bounding box regions to locate field values in OCR output at known positions relative to known labels
+2. **Pattern-based extraction** (secondary): If coordinate extraction yields low confidence, use stored regex patterns matched against text near expected label positions
+3. **LLM fallback** (last resort): If both template methods produce confidence below threshold, invoke Claude API as normal
+
+**Confidence thresholds:**
+- Template extraction minimum: 0.70 (configurable per organization)
+- Per-field minimum: 0.60 — any field below this triggers LLM fallback for the entire invoice
+- Overall invoice minimum: weighted average of field confidences >= 0.70
+
+#### 9.9.5 Automatic Template Learning
+
+Templates are learned automatically — no manual configuration required:
+
+1. After a successful LLM extraction with overall confidence >= 0.85:
+   - Compute the layout fingerprint
+   - If no template exists for this `(seller_pib, fingerprint)` pair, create one
+   - Map each extracted field back to its OCR bounding box region and nearby label text
+   - Generate regex patterns from the extracted value formats
+2. **Minimum field threshold:** At least 5 fields must be successfully mapped to create a template
+3. **Template refinement:** Successful template uses reinforce field mappings; failures decrement success rate
+4. **Auto-deactivation:** After 3 consecutive failures (configurable), the template is deactivated and the next successful LLM extraction creates a replacement
+
+#### 9.9.6 Cost Tracking
+
+The system MUST track LLM cost savings from template usage:
+
+| Metric | Description |
+|--------|-------------|
+| `template_used` | Boolean — was a template used for this invoice? |
+| `template_id` | Which template was used (nullable) |
+| `llm_called` | Boolean — was the LLM API called? |
+| `estimated_llm_cost` | Estimated cost of the LLM call (or saved cost if bypassed) |
+
+**Expected cost reduction:** For organizations with recurring suppliers (typical for accounting agencies), template hit rate should reach 80-95% within 2-3 months, reducing LLM costs by a corresponding amount.
+
+#### 9.9.7 Limitations and Considerations
+
+- Templates are **per-organization** — different organizations may receive the same seller's invoices but cannot share templates (multi-tenant isolation)
+- Template learning does NOT constitute model training — no neural network weights are modified. Templates are deterministic lookup tables.
+- Line item extraction from tables is more complex to template than header fields; the system MAY fall back to LLM for line items while using templates for header fields
+- Sellers who change their invoice software/layout will trigger new template creation automatically
+
 
 ---
 
@@ -4140,6 +4268,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.1 | February 2026 | FakturaAI Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
 | 2.2 | February 2026 | FakturaAI Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
 | 2.3 | March 2026 | FakturaAI Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
+| 2.4 | March 2026 | FakturaAI Team | Added Invoice Template Learning & LLM Cost Optimization spec (9.9): layout fingerprinting, template storage model, template-based field extraction with three-tier fallback chain, automatic template learning from LLM extractions, cost tracking metrics. |
 
 ---
 

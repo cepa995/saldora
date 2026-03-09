@@ -33,22 +33,23 @@ def _make_png(width: int = 800, height: int = 600) -> bytes:
 
 
 async def _auth_headers(client: AsyncClient) -> dict[str, str]:
-    """Register a user, log in, and return Authorization headers."""
-    await client.post(
+    """Register a user, create an organization, and return Authorization headers."""
+    reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "upload-test@example.com",
             "password": "securepass123",
             "first_name": "Upload",
             "last_name": "Tester",
-            "organization_name": "Test Org",
         },
     )
-    login_resp = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "upload-test@example.com", "password": "securepass123"},
+    reg_token = reg_resp.json()["access_token"]
+    org_resp = await client.post(
+        "/api/v1/auth/create-organization",
+        json={"name": "Test Org"},
+        headers={"Authorization": f"Bearer {reg_token}"},
     )
-    token = login_resp.json()["access_token"]
+    token = org_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -280,21 +281,22 @@ async def test_status_hides_other_org_invoices(client: AsyncClient):
     invoice_id = await _upload_and_get_id(client, headers1)
 
     # Register second user (different org)
-    await client.post(
+    reg_resp2 = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "other-org@example.com",
             "password": "securepass123",
             "first_name": "Other",
             "last_name": "User",
-            "organization_name": "Different Org",
         },
     )
-    login_resp = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "other-org@example.com", "password": "securepass123"},
+    reg_token2 = reg_resp2.json()["access_token"]
+    org_resp2 = await client.post(
+        "/api/v1/auth/create-organization",
+        json={"name": "Different Org"},
+        headers={"Authorization": f"Bearer {reg_token2}"},
     )
-    headers2 = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    headers2 = {"Authorization": f"Bearer {org_resp2.json()['access_token']}"}
 
     # Second user should get 404 (not 403, to avoid leaking existence)
     response = await client.get(f"/api/v1/invoices/{invoice_id}/status", headers=headers2)

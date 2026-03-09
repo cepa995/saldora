@@ -1,7 +1,7 @@
 """create sef_connections and sef_invoices tables
 
-Revision ID: f6a7b8c9d0e1
-Revises: e5f6a7b8c9d0
+Revision ID: i9d0e1f2g3h4
+Revises: h8c9d0e1f2g3
 Create Date: 2026-03-06
 
 """
@@ -14,8 +14,8 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "f6a7b8c9d0e1"
-down_revision: str = "e5f6a7b8c9d0"
+revision: str = "i9d0e1f2g3h4"
+down_revision: str = "h8c9d0e1f2g3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

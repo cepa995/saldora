@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/contexts/AuthContext';
+import { AccessDenied } from '@/components';
 import {
   fetchTemplates,
   createTemplate,
@@ -464,6 +466,7 @@ function TemplateFormModal({
 
 export default function TemplatesPage() {
   const t = useTranslations('templates');
+  const { hasRole } = useAuth();
   const [templates, setTemplates] = useState<ExportTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -485,6 +488,10 @@ export default function TemplatesPage() {
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
+
+  if (!hasRole('manager')) {
+    return <AccessDenied />;
+  }
 
   async function handleCreate(data: ExportTemplateCreate | ExportTemplateUpdate) {
     try {

@@ -16,7 +16,7 @@ from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.sef_invoice import SefInvoice
 from app.models.user import User
 from app.schemas.sef import (
@@ -205,7 +205,7 @@ async def get_sef_invoice(
 async def process_invoice(
     invoice_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> SefInvoiceResponse:
     """Process a SEF invoice — creates a FakturaAI invoice from it.
 
@@ -234,7 +234,7 @@ async def process_invoice(
 async def reject_invoice(
     invoice_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> SefInvoiceResponse:
     """Reject a SEF invoice.
 
@@ -280,7 +280,7 @@ async def reject_invoice(
 async def archive_invoice(
     invoice_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> SefInvoiceResponse:
     """Archive a SEF invoice without processing.
 
@@ -320,7 +320,7 @@ async def archive_invoice(
 async def trigger_sync(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> SefSyncStatusResponse:
     """Trigger a manual sync with the SEF system.
 

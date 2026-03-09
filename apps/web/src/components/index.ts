@@ -1,3 +1,4 @@
+export { AccessDenied } from './AccessDenied';
 export { FileUpload } from './FileUpload';
 export type { UploadedFile, BatchUploadResult } from './FileUpload';
 export { PipelineStepper } from './PipelineStepper';

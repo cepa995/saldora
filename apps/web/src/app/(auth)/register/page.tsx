@@ -24,7 +24,6 @@ export default function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [organizationName, setOrganizationName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +49,6 @@ export default function RegisterPage() {
         password,
         firstName: firstName || undefined,
         lastName: lastName || undefined,
-        organizationName: organizationName || undefined,
       });
     } catch (err) {
       setError(getErrorMessage(err));
@@ -61,6 +59,21 @@ export default function RegisterPage() {
 
   return (
     <>
+      {/* Step indicator */}
+      <div className="flex items-center justify-center gap-2 mb-8">
+        <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-violet-100 text-violet-700 text-sm font-medium min-w-[140px]">
+          <span className="w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
+          {t("stepAccount")}
+        </span>
+        <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full border border-gray-200 text-gray-400 text-sm min-w-[140px]">
+          <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-400 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+          {t("stepOrganization")}
+        </span>
+      </div>
+
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-gray-900">{t("registerTitle")}</h1>
         <p className="text-sm text-gray-500 mt-2">{t("registerSubtitle")}</p>
@@ -120,24 +133,6 @@ export default function RegisterPage() {
             placeholder={t("emailPlaceholder")}
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="email"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="organizationName"
-            className="block text-sm font-medium text-gray-700 mb-1.5"
-          >
-            {t("organizationName")}
-          </label>
-          <input
-            id="organizationName"
-            type="text"
-            value={organizationName}
-            onChange={(e) => setOrganizationName(e.target.value)}
-            placeholder={t("companyNamePlaceholder")}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
-            autoComplete="organization"
           />
         </div>
 

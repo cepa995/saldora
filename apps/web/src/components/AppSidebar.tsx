@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { ScriptToggle } from "./ScriptToggle";
 
 interface NavItem {
@@ -20,6 +21,7 @@ interface NavItem {
     | "audit"
     | "billing";
   icon: React.ReactNode;
+  minRole?: string;
 }
 
 interface NavGroup {
@@ -96,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/upload",
         labelKey: "upload",
+        minRole: "operator",
         icon: (
           <svg
             className="w-5 h-5"
@@ -120,6 +123,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/rules",
         labelKey: "rules",
+        minRole: "manager",
         icon: (
           <svg
             className="w-5 h-5"
@@ -139,6 +143,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/templates",
         labelKey: "templates",
+        minRole: "manager",
         icon: (
           <svg
             className="w-5 h-5"
@@ -158,6 +163,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/revizija",
         labelKey: "audit",
+        minRole: "admin",
         icon: (
           <svg
             className="w-5 h-5"
@@ -225,10 +231,11 @@ const SETTINGS_ICON = (
  */
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const { isCollapsed, isMobileOpen, toggleCollapse, openMobile, closeMobile } =
     useSidebar();
   const t = useTranslations("nav");
+  const { pendingJoinRequests } = useNotifications();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -250,6 +257,7 @@ export function AppSidebar() {
     label: string,
     collapsed: boolean,
     mobile: boolean,
+    badge?: number,
   ) {
     const active = isActive(href);
     return (
@@ -272,11 +280,21 @@ export function AppSidebar() {
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-violet-600 rounded-r-full" />
         )}
         <span
-          className={`shrink-0 ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : mobile ? "text-gray-500" : "text-gray-400 group-hover:text-gray-600"}`}
+          className={`shrink-0 relative ${mobile ? "[&>svg]:w-6 [&>svg]:h-6" : ""} ${active ? "text-violet-600" : mobile ? "text-gray-500" : "text-gray-400 group-hover:text-gray-600"}`}
         >
           {icon}
+          {collapsed && badge ? (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full">
+              {badge}
+            </span>
+          ) : null}
         </span>
         {!collapsed && label}
+        {!collapsed && badge ? (
+          <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full">
+            {badge}
+          </span>
+        ) : null}
       </Link>
     );
   }
@@ -306,7 +324,12 @@ export function AppSidebar() {
 
         {/* Main nav links */}
         <nav className={`flex-1 overflow-y-auto ${mobile ? "py-2" : "px-2 py-4"}`}>
-          {NAV_GROUPS.map((group, gi) => (
+          {NAV_GROUPS.map((group, gi) => {
+            const visibleItems = group.items.filter(
+              (item) => !item.minRole || hasRole(item.minRole),
+            );
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={group.labelKey} className={mobile ? `${gi > 0 ? "border-t border-gray-200 mt-2 pt-2" : ""}` : `${gi > 0 ? "mt-4" : ""}`}>
               {!collapsed && (
                 <p className={`${mobile ? "px-5 pt-3 pb-1 text-[13px]" : "px-3 mb-1 text-[11px]"} font-semibold text-gray-400 uppercase tracking-wider`}>
@@ -314,7 +337,7 @@ export function AppSidebar() {
                 </p>
               )}
               <div className={mobile ? "space-y-0.5 px-2" : "space-y-1"}>
-                {group.items.map((item) =>
+                {visibleItems.map((item) =>
                   renderNavLink(
                     item.href,
                     item.icon,
@@ -325,13 +348,14 @@ export function AppSidebar() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Bottom section */}
         <div className={`${mobile ? "px-2 pb-4 space-y-0.5" : "px-2 pb-4 space-y-2"} border-t ${mobile ? "border-gray-200" : "border-gray-100"} pt-2`}>
           {/* Billing */}
-          {renderNavLink(
+          {hasRole("admin") && renderNavLink(
             "/billing",
             BILLING_ICON,
             t("billing"),
@@ -346,6 +370,7 @@ export function AppSidebar() {
             t("settings"),
             collapsed,
             mobile,
+            pendingJoinRequests || undefined,
           )}
 
           {/* Script toggle */}

@@ -56,3 +56,45 @@ export async function revokeInvitation(invitationId: string): Promise<{ message:
     method: 'DELETE',
   });
 }
+
+export interface InvitationPublicInfo {
+  organization_name: string;
+  role: string;
+  email: string;
+  expires_at: string;
+}
+
+/**
+ * Get public information about an invitation (no auth required).
+ *
+ * @param token - Invitation token.
+ * @returns Public invitation info.
+ */
+export async function getInvitationInfo(token: string): Promise<InvitationPublicInfo> {
+  return apiClient<InvitationPublicInfo>(
+    `/api/v1/invitations/accept/${token}`,
+    {},
+    true,
+  );
+}
+
+/**
+ * Accept an invitation (no auth required).
+ *
+ * @param token - Invitation token.
+ * @param data - Acceptance data (password, optional name).
+ * @returns Success message.
+ */
+export async function acceptInvitation(
+  token: string,
+  data: { first_name?: string; last_name?: string; password: string },
+): Promise<{ message: string }> {
+  return apiClient<{ message: string }>(
+    `/api/v1/invitations/accept/${token}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+    true,
+  );
+}

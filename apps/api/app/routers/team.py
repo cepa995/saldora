@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.user import User
 from app.schemas.team import TeamMemberResponse, UpdateMemberRoleRequest
 from app.services import audit
@@ -47,7 +47,7 @@ async def update_member_role(
     body: UpdateMemberRoleRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> TeamMemberResponse:
     """Update a team member's role.
 
@@ -63,12 +63,6 @@ async def update_member_role(
     Returns:
         Updated team member details.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can change member roles",
-        )
-
     result = await db.execute(
         select(User).where(
             User.id == user_id,
@@ -116,7 +110,7 @@ async def remove_member(
     user_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> dict[str, str]:
     """Remove a member from the organization.
 
@@ -131,12 +125,6 @@ async def remove_member(
     Returns:
         Success message.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can remove members",
-        )
-
     if user_id == user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

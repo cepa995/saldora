@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/contexts/AuthContext';
 import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
@@ -29,10 +30,13 @@ const SORTABLE_COLUMNS: { key: SortColumn; labelKey: string }[] = [
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { hasRole } = useAuth();
   const t = useTranslations('invoices');
   const tCommon = useTranslations('common');
   const tStatus = useTranslations('status');
   const tDetail = useTranslations('detail');
+  const canWrite = hasRole('operator');
+  const canDelete = hasRole('manager');
   const {
     invoices,
     pagination,
@@ -108,15 +112,17 @@ export default function InvoicesPage() {
         <div className="text-center sm:text-left">
           <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
         </div>
-        <Link
-          href="/upload"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm shadow-violet-200"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-          {t('uploadInvoice')}
-        </Link>
+        {canWrite && (
+          <Link
+            href="/upload"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm shadow-violet-200"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            {t('uploadInvoice')}
+          </Link>
+        )}
       </div>
 
       {/* Search + Filters */}
@@ -235,24 +241,28 @@ export default function InvoicesPage() {
             {tCommon('selected', { count: selectedIds.size.toString() })}
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={batchVerify}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
-            >
-              {t('batchVerify')}
-            </button>
+            {canWrite && (
+              <button
+                onClick={batchVerify}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors"
+              >
+                {t('batchVerify')}
+              </button>
+            )}
             <button
               onClick={() => setShowExportDialog(true)}
               className="px-3 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition-colors"
             >
               {t('batchExport')}
             </button>
-            <button
-              onClick={handleBatchDelete}
-              className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
-            >
-              {t('batchDelete')}
-            </button>
+            {canDelete && (
+              <button
+                onClick={handleBatchDelete}
+                className="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
+              >
+                {t('batchDelete')}
+              </button>
+            )}
             <button
               onClick={clearSelection}
               className="px-3 py-1.5 text-gray-600 text-xs font-medium hover:text-gray-900 transition-colors"
@@ -286,6 +296,7 @@ export default function InvoicesPage() {
         ) : invoices.length === 0 ? (
           <EmptyState
             hasFilters={!!(filters.status || filters.search || filters.date_from || filters.date_to)}
+            canUpload={canWrite}
           />
         ) : (
           <>
@@ -615,7 +626,7 @@ function SkeletonTable() {
   );
 }
 
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
+function EmptyState({ hasFilters, canUpload = true }: { hasFilters: boolean; canUpload?: boolean }) {
   const t = useTranslations('invoices');
 
   return (
@@ -636,7 +647,7 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
       <p className="text-sm text-gray-500 mb-6 text-center max-w-sm">
         {hasFilters ? t('noResultsSubtitle') : t('emptyStateSubtitle')}
       </p>
-      {!hasFilters && (
+      {!hasFilters && canUpload && (
         <Link
           href="/upload"
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm"

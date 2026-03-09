@@ -28,3 +28,30 @@ export async function updateOrganization(data: OrganizationUpdateRequest): Promi
     body: JSON.stringify(data),
   });
 }
+
+/**
+ * Upload an organization logo.
+ *
+ * @param file - Image file (PNG or JPG, max 2 MB).
+ * @returns Object with the presigned logo URL.
+ */
+export async function uploadLogo(file: File): Promise<{ logo_url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiClient<{ logo_url: string }>('/api/v1/organizations/current/logo', {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header — browser sets it with boundary for FormData
+  });
+}
+
+/**
+ * Delete the organization logo.
+ *
+ * @returns Success message.
+ */
+export async function deleteLogo(): Promise<{ message: string }> {
+  return apiClient<{ message: string }>('/api/v1/organizations/current/logo', {
+    method: 'DELETE',
+  });
+}

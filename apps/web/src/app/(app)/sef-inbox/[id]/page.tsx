@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   fetchSefInvoice,
   processSefInvoice,
@@ -46,9 +47,11 @@ const SEF_STATUS_CONFIG: Record<
 
 export default function SefInvoiceDetailPage() {
   const params = useParams();
+  const { hasRole } = useAuth();
   const t = useTranslations("sef");
   const tCommon = useTranslations("common");
   const id = params.id as string;
+  const canWrite = hasRole("operator");
 
   const [invoice, setInvoice] = useState<SefInvoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -248,7 +251,7 @@ export default function SefInvoiceDetailPage() {
 
         {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {(canProcess || canReprocess) && (
+          {canWrite && (canProcess || canReprocess) && (
             <button
               onClick={() => setShowConfirm("process")}
               disabled={!!actionLoading}
@@ -270,7 +273,7 @@ export default function SefInvoiceDetailPage() {
               {canReprocess ? t("reprocess") : t("process")}
             </button>
           )}
-          {canReject && (
+          {canWrite && canReject && (
             <button
               onClick={() => setShowConfirm("reject")}
               disabled={!!actionLoading}
@@ -292,7 +295,7 @@ export default function SefInvoiceDetailPage() {
               {t("reject")}
             </button>
           )}
-          {canArchive && (
+          {canWrite && canArchive && (
             <button
               onClick={handleArchive}
               disabled={!!actionLoading}

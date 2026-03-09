@@ -8,8 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import hash_password
+from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_role
 from app.models.invitation import Invitation
 from app.models.organization import Organization
 from app.models.user import User
@@ -20,6 +21,7 @@ from app.schemas.invitation import (
     InvitationResponse,
 )
 from app.services import audit
+from app.services.email import send_invitation_email
 
 router = APIRouter()
 
@@ -31,7 +33,7 @@ async def create_invitation(
     body: InvitationCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> InvitationResponse:
     """Create an invitation to join the organization.
 
@@ -46,12 +48,6 @@ async def create_invitation(
     Returns:
         Created invitation with token.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can send invitations",
-        )
-
     # Check for existing pending invitation
     existing = await db.execute(
         select(Invitation).where(
@@ -103,13 +99,29 @@ async def create_invitation(
     await db.commit()
     await db.refresh(invitation)
 
+    # Send invitation email
+    settings = get_settings()
+    accept_url = f"{settings.frontend_url}/invite/{invitation.token}"
+    org_result = await db.execute(
+        select(Organization.name).where(Organization.id == user.organization_id)
+    )
+    org_name = org_result.scalar_one()
+    inviter_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    await send_invitation_email(
+        to_email=body.email,
+        organization_name=org_name,
+        role=body.role,
+        accept_url=accept_url,
+        inviter_name=inviter_name,
+    )
+
     return InvitationResponse.model_validate(invitation)
 
 
 @router.get("", response_model=list[InvitationResponse])
 async def list_invitations(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> list[InvitationResponse]:
     """List pending invitations for the organization.
 
@@ -122,12 +134,6 @@ async def list_invitations(
     Returns:
         List of pending invitations.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view invitations",
-        )
-
     result = await db.execute(
         select(Invitation)
         .where(
@@ -155,7 +161,7 @@ async def revoke_invitation(
     invitation_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> dict[str, str]:
     """Revoke a pending invitation.
 
@@ -170,12 +176,6 @@ async def revoke_invitation(
     Returns:
         Success message.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can revoke invitations",
-        )
-
     result = await db.execute(
         select(Invitation).where(
             Invitation.id == invitation_id,

@@ -29,22 +29,23 @@ async def _register_and_login(
     last_name: str = "Tester",
     org_name: str = "Verify Org",
 ) -> dict[str, str]:
-    """Register a user, log in, and return auth headers."""
-    await client.post(
+    """Register a user, create an organization, and return auth headers."""
+    reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
             "email": email,
             "password": password,
             "first_name": first_name,
             "last_name": last_name,
-            "organization_name": org_name,
         },
     )
-    login_resp = await client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": password},
+    reg_token = reg_resp.json()["access_token"]
+    org_resp = await client.post(
+        "/api/v1/auth/create-organization",
+        json={"name": org_name},
+        headers={"Authorization": f"Bearer {reg_token}"},
     )
-    token = login_resp.json()["access_token"]
+    token = org_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 

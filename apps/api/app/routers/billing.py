@@ -7,7 +7,7 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_role
 from app.models.invoice import Invoice
 from app.models.organization import Organization
 from app.models.user import User
@@ -27,7 +27,7 @@ PLAN_LIMITS: dict[str, int | None] = {
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> SubscriptionResponse:
     """Return current subscription plan and monthly usage for the organization.
 
@@ -38,12 +38,6 @@ async def get_subscription(
     Returns:
         Subscription details including plan, usage count, and limit.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view billing information",
-        )
-
     org_id = user.organization_id
 
     result = await db.execute(select(Organization).where(Organization.id == org_id))

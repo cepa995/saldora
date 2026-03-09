@@ -13,6 +13,7 @@ class OrganizationResponse(BaseModel):
     billing_email: str | None = Field(default=None, description="Email for billing notifications")
     plan: str = Field(description="Current subscription plan")
     settings: dict = Field(default_factory=dict, description="Organization-specific settings")
+    logo_url: str | None = Field(default=None, description="Presigned URL for organization logo")
 
     model_config = {"from_attributes": True}
 

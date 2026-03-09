@@ -2,12 +2,12 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_role
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
 from app.models.user import User
@@ -24,7 +24,7 @@ router = APIRouter()
 @router.get("/corrections", response_model=CorrectionAnalyticsResponse)
 async def get_correction_analytics(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
 ) -> CorrectionAnalyticsResponse:
@@ -43,12 +43,6 @@ async def get_correction_analytics(
     Returns:
         Aggregated correction analytics.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view correction analytics",
-        )
-
     org_id = user.organization_id
 
     # Base conditions for all queries

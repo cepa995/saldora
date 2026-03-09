@@ -96,42 +96,44 @@ def _mock_invoice(**kwargs) -> SimpleNamespace:
 
 
 async def _auth_headers(client: AsyncClient) -> dict[str, str]:
-    """Register a user, log in, and return Authorization headers."""
-    await client.post(
+    """Register a user, create an organization, and return Authorization headers."""
+    reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "export-test@example.com",
             "password": "securepass123",
             "first_name": "Export",
             "last_name": "Tester",
-            "organization_name": "Export Org",
         },
     )
-    login_resp = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "export-test@example.com", "password": "securepass123"},
+    reg_token = reg_resp.json()["access_token"]
+    org_resp = await client.post(
+        "/api/v1/auth/create-organization",
+        json={"name": "Export Org"},
+        headers={"Authorization": f"Bearer {reg_token}"},
     )
-    token = login_resp.json()["access_token"]
+    token = org_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
 async def _auth_headers_alt(client: AsyncClient) -> dict[str, str]:
     """Register a second user (different org) and return Authorization headers."""
-    await client.post(
+    reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
             "email": "other-export@example.com",
             "password": "securepass123",
             "first_name": "Other",
             "last_name": "Export",
-            "organization_name": "Other Export Org",
         },
     )
-    login_resp = await client.post(
-        "/api/v1/auth/login",
-        data={"username": "other-export@example.com", "password": "securepass123"},
+    reg_token = reg_resp.json()["access_token"]
+    org_resp = await client.post(
+        "/api/v1/auth/create-organization",
+        json={"name": "Other Export Org"},
+        headers={"Authorization": f"Bearer {reg_token}"},
     )
-    token = login_resp.json()["access_token"]
+    token = org_resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -1243,37 +1245,23 @@ class TestAuditExportEndpoint:
 
     async def test_audit_export_requires_admin(self, client: AsyncClient, test_engine):
         """Audit export returns 403 for non-admin users."""
-        # Register first user (admin) then second user (member)
-        await client.post(
+        # Register first user (admin)
+        reg_resp = await client.post(
             "/api/v1/auth/register",
             json={
                 "email": "audit-admin@example.com",
                 "password": "securepass123",
                 "first_name": "Admin",
                 "last_name": "User",
-                "organization_name": "Audit Org",
             },
         )
-        # Second user in same org would be member, but auth registers new orgs
-        # So register a second org user — first user is always admin
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "audit-member@example.com",
-                "password": "securepass123",
-                "first_name": "Member",
-                "last_name": "User",
-                "organization_name": "Member Org",
-            },
+        reg_token = reg_resp.json()["access_token"]
+        org_resp = await client.post(
+            "/api/v1/auth/create-organization",
+            json={"name": "Audit Org"},
+            headers={"Authorization": f"Bearer {reg_token}"},
         )
-        # The second registered user IS admin of their own org.
-        # To test non-admin, we need to modify user role.
-        # For now, verify admin can access (first user is admin).
-        login_resp = await client.post(
-            "/api/v1/auth/login",
-            data={"username": "audit-admin@example.com", "password": "securepass123"},
-        )
-        admin_headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+        admin_headers = {"Authorization": f"Bearer {org_resp.json()['access_token']}"}
 
         # Admin should NOT get 403
         from unittest.mock import AsyncMock, patch

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/contexts/AuthContext';
+import { AccessDenied } from '@/components';
 import { useRuleList } from '@/hooks/useRuleList';
 import {
   createRule,
@@ -229,6 +231,7 @@ export default function RulesPage() {
   const t = useTranslations('rules');
   const tCommon = useTranslations('common');
   const tDetail = useTranslations('detail');
+  const { hasRole } = useAuth();
   const {
     rules,
     count,
@@ -253,6 +256,10 @@ export default function RulesPage() {
   const [showHistory, setShowHistory] =
     useState<AutomationRuleResponse | null>(null);
   const [templateData, setTemplateData] = useState<RuleTemplate | null>(null);
+
+  if (!hasRole('manager')) {
+    return <AccessDenied />;
+  }
 
   function handleEdit(rule: AutomationRuleResponse) {
     setEditingRule(rule);

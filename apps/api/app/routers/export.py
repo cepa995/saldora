@@ -12,7 +12,7 @@ from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.audit_export import AuditExport
 from app.models.export_template import ExportTemplate
 from app.models.invoice import Invoice
@@ -83,7 +83,7 @@ FORMAT_CONFIG = {
 async def create_export(
     request: ExportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("operator")),
 ) -> StreamingResponse:
     """Export invoices to the specified format.
 
@@ -346,7 +346,7 @@ async def list_export_templates(
 async def create_export_template(
     data: ExportTemplateCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("manager")),
 ) -> ExportTemplateResponse:
     """Create a custom export template for the organization.
 
@@ -417,7 +417,7 @@ async def update_export_template(
     template_id: UUID,
     data: ExportTemplateUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("manager")),
 ) -> ExportTemplateResponse:
     """Update a custom export template.
 
@@ -469,7 +469,7 @@ async def update_export_template(
 async def delete_export_template(
     template_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("manager")),
 ) -> None:
     """Delete a custom export template.
 
@@ -506,7 +506,7 @@ async def delete_export_template(
 async def create_audit_export(
     request: AuditExportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("admin")),
 ) -> AuditExportResponse:
     """Create audit export for tax inspection (admin only).
 
@@ -520,12 +520,6 @@ async def create_audit_export(
     presigned URLs are regenerated on-demand via the history endpoint.
     Records the export in the audit_exports table for tracking.
     """
-    # Admin-only access
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Samo administratori mogu kreirati revizijski izvoz",
-        )
 
     try:
         date_from = date.fromisoformat(request.date_from)
@@ -605,7 +599,7 @@ async def preview_audit_export(
     date_from: str,
     date_to: str,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("admin")),
 ) -> dict:
     """Preview invoice count for a date range before generating audit export.
 
@@ -639,17 +633,12 @@ async def preview_audit_export(
 @router.get("/audit/history", response_model=list[AuditExportResponse])
 async def list_audit_exports(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("admin")),
 ) -> list[AuditExportResponse]:
     """List past audit exports for the organization (admin only).
 
     Returns all audit export records ordered by creation date (newest first).
     """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Samo administratori mogu pristupiti istoriji revizijskih izvoza",
-        )
 
     result = await db.execute(
         select(AuditExport)
@@ -701,7 +690,7 @@ async def list_audit_exports(
 async def push_to_minimax(
     request: MiniMaxPushRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("operator")),
 ) -> MiniMaxPushResponse:
     """Push invoices to MiniMax accounting software via REST API.
 
@@ -837,7 +826,7 @@ async def get_minimax_config_endpoint(
 async def upsert_minimax_config(
     data: MiniMaxConfigCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("admin")),
 ) -> MiniMaxConfigResponse:
     """Create or update MiniMax configuration for the organization."""
     result = await db.execute(
@@ -873,7 +862,7 @@ async def upsert_minimax_config(
 async def update_minimax_config(
     data: MiniMaxConfigUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_role("admin")),
 ) -> MiniMaxConfigResponse:
     """Partially update MiniMax configuration."""
     config = await _get_minimax_config(db, current_user.organization_id)

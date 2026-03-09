@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = None
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    resend_from_email: str = "noreply@fakturaai.rs"
+    frontend_url: str = "http://localhost:3000"
+
     # SEF (eFaktura)
     sef_api_base_url: str = "https://efaktura.mfin.gov.rs/api/v1"
     sef_environment: str = "test"

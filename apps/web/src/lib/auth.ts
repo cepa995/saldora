@@ -12,7 +12,7 @@ export interface AuthUser {
   email: string;
   firstName: string | null;
   lastName: string | null;
-  organizationId: string;
+  organizationId: string | null;
   role: string;
 }
 
@@ -91,7 +91,7 @@ export function extractUserFromToken(token: string): AuthUser | null {
       email: (payload.email as string) || "",
       firstName: (payload.first_name as string) || null,
       lastName: (payload.last_name as string) || null,
-      organizationId: (payload.org as string) || "",
+      organizationId: (payload.org as string) || null,
       role: (payload.role as string) || "member",
     };
   } catch {

@@ -10,7 +10,10 @@ import { updateProfile, changePassword } from '@/lib/api/users';
 import { updateMemberRole, removeMember } from '@/lib/api/team';
 import { createInvitation, fetchInvitations, revokeInvitation, type InvitationInfo } from '@/lib/api/invitations';
 import { fetchJoinRequests, approveJoinRequest, rejectJoinRequest, type JoinRequestInfo } from '@/lib/api/join-requests';
+import { uploadLogo, deleteLogo } from '@/lib/api/organizations';
+import { Toast, type ToastType } from '@/components/Toast';
 import { formatRelativeTime } from '@/lib/formatters';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 type SettingsTab = 'profile' | 'organization' | 'team' | 'data-privacy';
 
@@ -28,6 +31,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
 
   const isAdmin = user?.role === 'admin';
+  const { pendingJoinRequests } = useNotifications();
   const visibleTabs = TABS.filter((tab) => !tab.adminOnly || isAdmin);
   const tabParam = searchParams.get('tab') as SettingsTab | null;
   const activeTab = visibleTabs.find((tab) => tab.key === tabParam)?.key ?? 'profile';
@@ -48,13 +52,18 @@ export default function SettingsPage() {
             <button
               key={tab.key}
               onClick={() => switchTab(tab.key)}
-              className={`relative pb-3 text-sm font-medium transition-colors ${
+              className={`relative pb-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${
                 activeTab === tab.key
                   ? 'text-violet-700'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
               {t(tab.labelKey)}
+              {tab.key === 'team' && pendingJoinRequests > 0 && (
+                <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full">
+                  {pendingJoinRequests}
+                </span>
+              )}
               {activeTab === tab.key && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600 rounded-full" />
               )}
@@ -106,7 +115,6 @@ function ProfileTab() {
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
   }
 
   async function handleSaveProfile() {
@@ -229,13 +237,8 @@ function ProfileTab() {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 text-sm rounded-xl shadow-lg ${
-          toast.type === 'success' ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
-        }`}>
-          {toast.message}
-        </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );
@@ -244,9 +247,11 @@ function ProfileTab() {
 function OrganizationTab() {
   const t = useTranslations('settings');
   const { user } = useAuth();
-  const { data, isLoading, isSaving, error, saveError, save } = useOrganization();
+  const { data, isLoading, isSaving, error, saveError, save, refresh: refreshOrg } = useOrganization();
   const isAdmin = user?.role === 'admin';
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isDeletingLogo, setIsDeletingLogo] = useState(false);
 
   // Track form edits as overrides on top of loaded data
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -259,6 +264,10 @@ function OrganizationTab() {
   function setBillingEmail(v: string) { setOverrides((o) => ({ ...o, billingEmail: v })); }
   function setPib(v: string) { setOverrides((o) => ({ ...o, pib: v })); }
 
+  function showOrgToast(message: string, type: 'success' | 'error') {
+    setToast({ message, type });
+  }
+
   async function handleSave() {
     const success = await save({
       name: name || undefined,
@@ -266,11 +275,44 @@ function OrganizationTab() {
       pib: pib || null,
     });
     if (success) setOverrides({});
-    setToast({
-      message: success ? t('organizationSaved') : (saveError ?? t('organizationError')),
-      type: success ? 'success' : 'error',
-    });
-    setTimeout(() => setToast(null), 4000);
+    showOrgToast(success ? t('organizationSaved') : (saveError ?? t('organizationError')), success ? 'success' : 'error');
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      showOrgToast(t('logoSizeLimit'), 'error');
+      return;
+    }
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      showOrgToast(t('logoFormats'), 'error');
+      return;
+    }
+    setIsUploadingLogo(true);
+    try {
+      await uploadLogo(file);
+      refreshOrg();
+      showOrgToast(t('logoUploaded'), 'success');
+    } catch {
+      showOrgToast(t('logoError'), 'error');
+    } finally {
+      setIsUploadingLogo(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleLogoDelete() {
+    setIsDeletingLogo(true);
+    try {
+      await deleteLogo();
+      refreshOrg();
+      showOrgToast(t('logoRemoved'), 'success');
+    } catch {
+      showOrgToast(t('logoError'), 'error');
+    } finally {
+      setIsDeletingLogo(false);
+    }
   }
 
   if (isLoading) {
@@ -296,6 +338,48 @@ function OrganizationTab() {
 
   return (
     <div className="space-y-6">
+      {/* Logo */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-base font-semibold text-gray-900 mb-4">{t('logo')}</h2>
+        <div className="flex items-center gap-6">
+          <div className="w-20 h-20 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+            {data?.logo_url ? (
+              <img src={data.logo_url} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+              </svg>
+            )}
+          </div>
+          {isAdmin && (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <label className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors cursor-pointer disabled:opacity-50">
+                  {isUploadingLogo ? t('saving') : t('uploadLogo')}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleLogoUpload}
+                    disabled={isUploadingLogo}
+                    className="hidden"
+                  />
+                </label>
+                {data?.logo_url && (
+                  <button
+                    onClick={handleLogoDelete}
+                    disabled={isDeletingLogo}
+                    className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {isDeletingLogo ? t('saving') : t('removeLogo')}
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">PNG, JPG — max 2 MB</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-4">{t('organization')}</h2>
         <div className="space-y-4 max-w-lg">
@@ -364,11 +448,7 @@ function OrganizationTab() {
       </div>
 
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 text-sm rounded-xl shadow-lg ${
-          toast.type === 'success' ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
-        }`}>
-          {toast.message}
-        </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );
@@ -393,6 +473,7 @@ function TeamTab() {
   const tCommon = useTranslations('common');
   const { user } = useAuth();
   const { members, isLoading, error, refresh } = useTeam();
+  const { refreshJoinRequests } = useNotifications();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -411,7 +492,6 @@ function TeamTab() {
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
   }
 
   async function handleInvite() {
@@ -473,6 +553,7 @@ function TeamTab() {
       await approveJoinRequest(requestId);
       setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
       refresh();
+      refreshJoinRequests();
       showToast(t('requestApproved'), 'success');
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err
@@ -485,6 +566,7 @@ function TeamTab() {
     try {
       await rejectJoinRequest(requestId);
       setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+      refreshJoinRequests();
       showToast(t('requestRejected'), 'success');
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err
@@ -711,11 +793,7 @@ function TeamTab() {
       )}
 
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 text-sm rounded-xl shadow-lg ${
-          toast.type === 'success' ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
-        }`}>
-          {toast.message}
-        </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );
@@ -725,16 +803,14 @@ function DataPrivacyTab() {
   const t = useTranslations('settings');
   const tCommon = useTranslations('common');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   function handleExport() {
-    setToast(tCommon('comingSoon'));
-    setTimeout(() => setToast(null), 3000);
+    setToast({ message: tCommon('comingSoon'), type: 'info' });
   }
 
   function handleDelete() {
-    setToast(tCommon('comingSoon'));
-    setTimeout(() => setToast(null), 3000);
+    setToast({ message: tCommon('comingSoon'), type: 'info' });
     setShowDeleteConfirm(false);
   }
 
@@ -790,9 +866,7 @@ function DataPrivacyTab() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-gray-900 text-white text-sm rounded-xl shadow-lg">
-          {toast}
-        </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );

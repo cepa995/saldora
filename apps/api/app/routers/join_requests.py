@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.join_request import JoinRequest
 from app.models.organization import Organization
 from app.models.user import User
@@ -51,6 +51,50 @@ async def search_organizations(
     return [OrganizationSearchResult(id=org.id, name=org.name, slug=org.slug) for org in orgs]
 
 
+@router.get("/mine", response_model=JoinRequestResponse | None)
+async def get_my_pending_request(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> JoinRequestResponse | None:
+    """Get the current user's pending join request, if any.
+
+    Args:
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Pending join request or null.
+    """
+    result = await db.execute(
+        select(JoinRequest, Organization)
+        .join(Organization, JoinRequest.organization_id == Organization.id)
+        .where(
+            JoinRequest.user_id == user.id,
+            JoinRequest.status == "pending",
+        )
+        .order_by(JoinRequest.created_at.desc())
+        .limit(1)
+    )
+    row = result.first()
+    if not row:
+        return None
+
+    jr, org = row
+    return JoinRequestResponse(
+        id=jr.id,
+        organization_id=jr.organization_id,
+        user_id=jr.user_id,
+        message=jr.message,
+        status=jr.status,
+        reviewed_by=jr.reviewed_by,
+        reviewed_at=jr.reviewed_at,
+        created_at=jr.created_at,
+        user_email=user.email,
+        user_name=f"{user.first_name} {user.last_name}".strip() or None,
+        organization_name=org.name,
+    )
+
+
 @router.post(
     "",
     response_model=JoinRequestResponse,
@@ -83,18 +127,17 @@ async def create_join_request(
             detail="Organization not found",
         )
 
-    # Check if already a member
-    if user.organization_id == body.organization_id:
+    # Check if already a member of any org
+    if user.organization_id is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="You are already a member of this organization",
+            detail="You already belong to an organization",
         )
 
-    # Check for existing pending request
+    # Check for any existing pending request (not just to this org)
     existing = await db.execute(
         select(JoinRequest).where(
             JoinRequest.user_id == user.id,
-            JoinRequest.organization_id == body.organization_id,
             JoinRequest.status == "pending",
         )
     )
@@ -138,10 +181,36 @@ async def create_join_request(
     )
 
 
+@router.get("/pending-count")
+async def get_pending_count(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> dict[str, int]:
+    """Get the number of pending join requests for the organization.
+
+    Args:
+        db: Database session.
+        user: Authenticated admin user.
+
+    Returns:
+        Count of pending join requests.
+    """
+    result = await db.execute(
+        select(func.count())
+        .select_from(JoinRequest)
+        .where(
+            JoinRequest.organization_id == user.organization_id,
+            JoinRequest.status == "pending",
+        )
+    )
+    count = result.scalar_one()
+    return {"count": count}
+
+
 @router.get("", response_model=list[JoinRequestResponse])
 async def list_join_requests(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> list[JoinRequestResponse]:
     """List pending join requests for the organization.
 
@@ -154,12 +223,6 @@ async def list_join_requests(
     Returns:
         List of pending join requests with user details.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view join requests",
-        )
-
     result = await db.execute(
         select(JoinRequest, User)
         .join(User, JoinRequest.user_id == User.id)
@@ -193,7 +256,7 @@ async def approve_join_request(
     request_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> dict[str, str]:
     """Approve a join request.
 
@@ -208,12 +271,6 @@ async def approve_join_request(
     Returns:
         Success message.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can approve join requests",
-        )
-
     result = await db.execute(
         select(JoinRequest).where(
             JoinRequest.id == request_id,
@@ -264,7 +321,7 @@ async def reject_join_request(
     request_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
 ) -> dict[str, str]:
     """Reject a join request.
 
@@ -277,12 +334,6 @@ async def reject_join_request(
     Returns:
         Success message.
     """
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can reject join requests",
-        )
-
     result = await db.execute(
         select(JoinRequest).where(
             JoinRequest.id == request_id,

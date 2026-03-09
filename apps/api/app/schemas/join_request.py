@@ -32,6 +32,7 @@ class JoinRequestResponse(BaseModel):
     # Enriched fields (set in router, not from model)
     user_email: str | None = Field(default=None, description="Requester email")
     user_name: str | None = Field(default=None, description="Requester full name")
+    organization_name: str | None = Field(default=None, description="Organization name")
 
     model_config = {"from_attributes": True}
 

@@ -10,6 +10,7 @@ export interface OrganizationInfo {
   billing_email: string | null;
   plan: string;
   settings: Record<string, unknown>;
+  logo_url: string | null;
 }
 
 export interface OrganizationUpdateRequest {
