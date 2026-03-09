@@ -2,7 +2,7 @@
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
     create_access_token,
+    create_password_reset_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -24,11 +25,14 @@ from app.models.user import User
 from app.routers.organizations import _generate_unique_slug
 from app.schemas.auth import (
     CreateOrganizationRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     TokenResponse,
     UserCreate,
 )
 from app.services import audit
+from app.services.email import send_password_reset_email, send_welcome_email
 
 router = APIRouter()
 settings = get_settings()
@@ -38,6 +42,7 @@ settings = get_settings()
 async def register(
     user_data: UserCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Register a new user account (without an organization).
@@ -87,7 +92,10 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # 4. Issue tokens so user can proceed to org setup
+    # 4. Send welcome email (non-blocking)
+    background_tasks.add_task(send_welcome_email, user.email, user.first_name)
+
+    # 5. Issue tokens so user can proceed to org setup
     access_token = create_access_token(
         str(user.id),
         None,
@@ -377,28 +385,94 @@ def _validate_pib(pib: str) -> None:
 
 
 @router.post("/password-reset/request")
-async def request_password_reset(email: str) -> dict[str, str]:
+async def request_password_reset(
+    body: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Request a password reset email.
+
+    Always returns the same response regardless of whether the email
+    exists, to prevent email enumeration.
+
+    Args:
+        body: Contains the email address.
+        background_tasks: FastAPI background tasks for non-blocking email.
+        db: Database session.
+
+    Returns:
+        Generic confirmation message.
     """
-    Request password reset email.
-    """
-    # TODO: Implement password reset request
-    # 1. Find user by email
-    # 2. Generate reset token
-    # 3. Send reset email
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        token = create_password_reset_token(str(user.id), user.email)
+        reset_url = f"{settings.frontend_url}/password-reset/confirm?token={token}"
+        background_tasks.add_task(send_password_reset_email, user.email, reset_url)
+
     return {"message": "If the email exists, a reset link has been sent"}
 
 
 @router.post("/password-reset/confirm")
-async def confirm_password_reset(token: str, new_password: str) -> dict[str, str]:
+async def confirm_password_reset(
+    body: PasswordResetConfirm,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Confirm password reset using the token from the email link.
+
+    Validates the JWT reset token, updates the user's password,
+    and logs the action.
+
+    Args:
+        body: Contains the reset token and new password.
+        request: HTTP request for audit context.
+        db: Database session.
+
+    Returns:
+        Success confirmation message.
     """
-    Confirm password reset with token.
-    """
-    # TODO: Implement password reset confirmation
-    # 1. Validate reset token
-    # 2. Hash new password
-    # 3. Update user password
-    # 4. Invalidate all existing sessions
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Password reset not yet implemented",
+    # 1. Decode and validate the reset token
+    try:
+        payload = decode_token(body.token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link",
+        )
+
+    if payload.get("type") != "password_reset":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token type",
+        )
+
+    # 2. Find the user
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link",
+        )
+
+    # 3. Update password
+    user.password_hash = hash_password(body.new_password)
+
+    # 4. Audit log
+    await audit.log(
+        db=db,
+        action="password_reset",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
     )
+
+    await db.commit()
+
+    return {"message": "Password has been reset successfully"}

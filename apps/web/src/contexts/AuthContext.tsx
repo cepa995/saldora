@@ -47,6 +47,7 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
+  confirmPasswordReset: (token: string, newPassword: string) => Promise<string>;
   createOrganization: (name: string, pib?: string) => Promise<void>;
   hasRole: (minimumRole: string) => boolean;
 }
@@ -171,6 +172,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result.message;
   }, []);
 
+  const confirmPasswordReset = useCallback(
+    async (token: string, newPassword: string) => {
+      const result = await apiClient<{ message: string }>(
+        "/api/v1/auth/password-reset/confirm",
+        {
+          method: "POST",
+          body: JSON.stringify({ token, new_password: newPassword }),
+        },
+        true,
+      );
+      return result.message;
+    },
+    [],
+  );
+
   const hasRole = useCallback(
     (minimumRole: string): boolean => {
       if (!user) return false;
@@ -190,6 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       requestPasswordReset,
+      confirmPasswordReset,
       createOrganization,
       hasRole,
     }),
@@ -200,6 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       requestPasswordReset,
+      confirmPasswordReset,
       createOrganization,
       hasRole,
     ],

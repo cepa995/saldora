@@ -137,7 +137,16 @@
     "inviteNotFound": "Позивница није пронађена. Линк је можда неисправан.",
     "inviteAcceptedSuccess": "Позивница прихваћена! Преусмеравање на пријаву...",
     "acceptingInvite": "Прихватање...",
-    "acceptInvite": "Прихвати позивницу"
+    "acceptInvite": "Прихвати позивницу",
+    "newPassword": "Нова лозинка",
+    "newPasswordPlaceholder": "Унесите нову лозинку",
+    "resetPassword": "Ресетуј лозинку",
+    "resettingPassword": "Ресетовање...",
+    "passwordResetConfirmTitle": "Поставите нову лозинку",
+    "passwordResetConfirmSubtitle": "Унесите нову лозинку испод.",
+    "passwordResetSuccess": "Ваша лозинка је успешно ресетована.",
+    "resetLinkExpired": "Овај линк за ресетовање је неважећи или је истекао. Затражите нови.",
+    "passwordResetDone": "Лозинка ресетована"
   },
   "dashboard": {
     "welcome": "Добро дошли, {name}!",
