@@ -1,5 +1,6 @@
 """FastAPI dependencies for injection."""
 
+from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -15,6 +16,14 @@ from app.models.user import User
 # This tells FastAPI to look for a Bearer token in the Authorization header.
 # tokenUrl is for the Swagger UI login form.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+# Role hierarchy: higher number = more permissions
+ROLE_HIERARCHY: dict[str, int] = {
+    "admin": 4,
+    "manager": 3,
+    "operator": 2,
+    "viewer": 1,
+}
 
 
 async def get_current_user(
@@ -54,3 +63,32 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def require_role(minimum_role: str) -> Callable:
+    """Create a dependency that enforces a minimum role level and org membership.
+
+    Args:
+        minimum_role: The minimum role required (admin, manager, operator, viewer).
+
+    Returns:
+        A FastAPI dependency that returns the authenticated user if they have
+        sufficient permissions, otherwise raises 403.
+    """
+    min_level = ROLE_HIERARCHY[minimum_role]
+
+    async def _check_role(user: User = Depends(get_current_user)) -> User:
+        if user.organization_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User must belong to an organization",
+            )
+        user_level = ROLE_HIERARCHY.get(user.role, 0)
+        if user_level < min_level:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires {minimum_role} role or higher",
+            )
+        return user
+
+    return _check_role

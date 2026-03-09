@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { use } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/contexts/AuthContext';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
@@ -23,8 +24,11 @@ export default function InvoiceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { hasRole } = useAuth();
   const t = useTranslations('detail');
   const tCommon = useTranslations('common');
+  const canWrite = hasRole('operator');
+  const canDelete = hasRole('manager');
   const {
     invoice,
     isLoading,
@@ -50,7 +54,7 @@ export default function InvoiceDetailPage({
   const [isReviewingIntent, setIsReviewingIntent] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
-  const isProcessing = invoice?.status === 'processing';
+  const isProcessing = invoice?.status === 'processing' || !canWrite;
   const canVerify = invoice?.status === 'review';
 
   // Load accounting intent for verified invoices
@@ -287,7 +291,7 @@ export default function InvoiceDetailPage({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {canVerify && (
+            {canWrite && canVerify && (
               <button
                 onClick={handleVerify}
                 disabled={isVerifying}
@@ -296,7 +300,7 @@ export default function InvoiceDetailPage({
                 {isVerifying ? t('verifying') : t('verify')}
               </button>
             )}
-            {hasChanges && (
+            {canWrite && hasChanges && (
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -327,16 +331,18 @@ export default function InvoiceDetailPage({
                   >
                     {tCommon('export')}
                   </button>
-                  <button
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      setShowDeleteConfirm(true);
-                    }}
-                    disabled={isDeleting}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-                  >
-                    {isDeleting ? tCommon('deleting') : t('deleteInvoice')}
-                  </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        setShowDeleteConfirm(true);
+                      }}
+                      disabled={isDeleting}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    >
+                      {isDeleting ? tCommon('deleting') : t('deleteInvoice')}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

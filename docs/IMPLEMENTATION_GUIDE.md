@@ -1474,6 +1474,137 @@ This milestone is complete. It established the database module, core models (Use
 
 ---
 
+## Milestone 11: Invoice Template Learning & LLM Cost Optimization
+
+**Goal:** Reduce LLM API costs by 80-95% through automatic invoice layout template caching — after the first LLM extraction for a seller's invoice format, future invoices with the same structure are processed using learned coordinate/regex templates without calling the LLM.
+
+Most accounting agencies work with 50-100 recurring suppliers. After an initial learning period of 2-3 months, the vast majority of invoices can be processed at zero LLM cost. This milestone implements the template learning pipeline, extraction engine, and cost analytics described in SRS Section 9.9.
+
+### Issues
+
+#### 11.1 — Invoice template model and storage
+
+**Description:** Create the `InvoiceTemplate` database model, Alembic migration, and CRUD operations for storing learned invoice layout templates.
+
+**Requirements covered:** SRS 9.9.3
+
+**Tasks:**
+- Create `InvoiceTemplate` model in `apps/api/app/models/invoice_template.py`:
+  - Fields: `id`, `organization_id`, `seller_pib`, `layout_fingerprint`, `field_mappings` (JSONB), `sample_invoice_id`, `usage_count`, `success_rate`, `is_active`, `last_used_at`, timestamps
+  - Indexes: `(organization_id, seller_pib)`, `layout_fingerprint`
+- Create Alembic migration for `invoice_templates` table
+- Create Pydantic schemas for template CRUD
+- Create template service: `get_by_seller_and_fingerprint()`, `create_from_extraction()`, `update_stats()`, `deactivate()`
+- Register model in `__init__.py`
+
+**Acceptance:** Templates can be created, retrieved by seller PIB + fingerprint, and updated with usage statistics. Migration runs cleanly on fresh and existing databases.
+
+---
+
+#### 11.2 — Layout fingerprinting and template matching
+
+**Description:** Implement the algorithm that generates a structural fingerprint from OCR output and matches incoming invoices against stored templates.
+
+**Requirements covered:** SRS 9.9.2
+
+**Tasks:**
+- Create `packages/ml/fakturaai_ml/templates/fingerprint.py`:
+  - `generate_fingerprint(ocr_output) -> str` — extract structural elements (label text, relative positions, table headers), normalize, hash with SHA-256
+  - Structural elements: sorted label strings (lowered, trimmed), quantized text block positions, table column signatures
+  - Values (amounts, dates, names) must NOT affect the fingerprint
+- Create `packages/ml/fakturaai_ml/templates/matcher.py`:
+  - `find_matching_template(seller_pib, fingerprint, org_id) -> InvoiceTemplate | None`
+  - Exact fingerprint match: return template directly
+  - Same seller, different fingerprint: compute similarity score (Jaccard on structural elements)
+  - Similarity threshold: 0.85 (configurable)
+- Handle edge cases: multi-page invoices (fingerprint first page), minor margin variations
+- Unit tests for fingerprint determinism, value invariance, and structural sensitivity
+
+**Acceptance:** Same layout with different values produces the same fingerprint. Different layouts produce different fingerprints. Similarity scoring works for near-matches (e.g., same seller adds a footer).
+
+---
+
+#### 11.3 — Template-based field extraction (LLM bypass)
+
+**Description:** Implement the extraction engine that uses stored templates to extract invoice fields without calling the LLM, and integrate it into the processing pipeline.
+
+**Requirements covered:** SRS 9.9.4
+
+**Tasks:**
+- Create `packages/ml/fakturaai_ml/templates/extractor.py`:
+  - `extract_with_template(ocr_output, template) -> ExtractionResult`
+  - Coordinate-based extraction: locate field values at stored bounding box positions relative to known labels
+  - Pattern-based extraction: apply stored regex patterns to text near expected positions
+  - Per-field confidence scoring based on regex match quality + position accuracy
+  - Overall confidence: weighted average of field confidences
+- Three-tier fallback chain:
+  1. Coordinate extraction (primary)
+  2. Pattern extraction (secondary, if coordinate confidence < 0.70)
+  3. LLM fallback (if overall template confidence < 0.70)
+- Integrate into `packages/ml/fakturaai_ml/pipeline.py`:
+  - After OCR, before LLM: check for matching template
+  - If template extraction succeeds (confidence >= threshold), skip LLM
+  - Log `template_used`, `template_id`, `llm_called` on each processed invoice
+- Add `template_used` and `llm_called` fields to Invoice model (or processing metadata)
+
+**Acceptance:** Template extraction produces correct field values for known layouts. LLM is not called when template confidence exceeds threshold. Fallback to LLM works for low-confidence template results. Cost savings are visible in processing logs.
+
+---
+
+#### 11.4 — Automatic template learning from LLM extractions
+
+**Description:** After a successful LLM extraction, automatically learn and store a template for future reuse.
+
+**Requirements covered:** SRS 9.9.5
+
+**Tasks:**
+- Create `packages/ml/fakturaai_ml/templates/learner.py`:
+  - `learn_template(ocr_output, extraction_result, invoice) -> InvoiceTemplate | None`
+  - Trigger: LLM extraction with overall confidence >= 0.85
+  - Only learn if no existing template matches the fingerprint for this seller
+  - For each extracted field: record bounding box region, nearby label text, regex pattern
+  - Minimum 5 fields mapped to create a template
+- Template refinement on successful use:
+  - Increment `usage_count`, update `success_rate`
+  - Optionally refine coordinate ranges from new observations
+- Auto-deactivation after repeated failures:
+  - Track consecutive failures per template
+  - After 3 failures (configurable), set `is_active = False`
+  - Next LLM extraction for same layout creates replacement template
+- Integrate learning step at end of pipeline (after successful LLM extraction)
+
+**Acceptance:** Templates are automatically created after first LLM extraction per layout. No duplicate templates for same seller + layout. Templates are deactivated after 3 consecutive failures.
+
+---
+
+#### 11.5 — Template analytics dashboard and cost tracking
+
+**Description:** Add cost tracking, template management API, and frontend analytics showing template coverage and LLM cost savings.
+
+**Requirements covered:** SRS 9.9.6
+
+**Tasks:**
+- Backend:
+  - Add `template_used`, `llm_called`, `estimated_llm_cost` fields to invoice processing metadata
+  - Create `GET /api/v1/analytics/template-stats` endpoint returning:
+    - Total invoices processed (current month)
+    - Template hit rate (% without LLM)
+    - Estimated cost savings
+    - Top templates by usage count
+    - Templates with low success rates
+  - Create `GET /api/v1/templates` (admin, list org templates)
+  - Create `DELETE /api/v1/templates/{id}` (admin, deactivate template)
+  - Create `POST /api/v1/templates/{id}/relearn` (admin, force re-learn)
+- Frontend:
+  - Add "AI Cost Savings" card to dashboard: template hit rate, estimated savings this month
+  - Add template management section to Settings (admin only): list templates, view stats, deactivate, force re-learn
+  - Add translations for all 3 locales
+- Billing integration: template hits count toward usage quota but at $0 LLM cost
+
+**Acceptance:** Dashboard shows accurate template hit rate and estimated savings. Admin can view, deactivate, and force re-learn templates. Cost tracking per invoice is accurate.
+
+---
+
 ## Summary
 
 | Milestone | Issues | Key Deliverable |
@@ -1488,8 +1619,9 @@ This milestone is complete. It established the database module, core models (Use
 | **M8: Frontend Application** | 8.1–8.11 | Dashboard, upload, invoice list, review, settings, SEF inbox, billing, i18n, responsive, landing page |
 | **M9: CI/CD & Production** | 9.1–9.10 | CI pipeline, E2E tests, security, monitoring, K8s deployment, ZZPL compliance, API keys, OAuth, data retention |
 | **M10: Multi-Country Tax ID** | 10.1–10.4 | OIB/JIB/EU VAT validators, LLM prompt for multi-country, country-aware confidence scoring, tests |
+| **M11: Template Learning & LLM Cost Optimization** | 11.1–11.5 | Invoice layout fingerprinting, template-based extraction (LLM bypass), auto-learning from LLM outputs, cost analytics dashboard |
 
-**Total: 61 issues across 10 milestones.**
+**Total: 66 issues across 11 milestones.**
 
 ### Parallelization Opportunities
 
@@ -1502,11 +1634,12 @@ This milestone is complete. It established the database module, core models (Use
 - **M8.11** (landing page) is independent and can be built any time
 - **M9.8** (API keys) and **M9.9** (OAuth) can be built in parallel
 - **M10** can start after M3 (PIB validation exists). **10.1** (validators) and **10.2** (LLM prompt) can be built in parallel. **10.3** (confidence scoring) depends on 10.1. **10.4** (tests) can start with 10.1
+- **M11** can start after M3 (OCR pipeline + LLM extraction exist). **11.1** (model) and **11.2** (fingerprinting) can be built in parallel. **11.3** (extraction) depends on both. **11.4** (learning) depends on 11.3. **11.5** (analytics) depends on 11.3. Best done after M8 is complete (needs dashboard UI)
 
 ### Estimated Issue Sizing
 
 | Size | Description | Issues |
 |------|-------------|--------|
-| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4 |
-| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3 |
-| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1 |
+| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4, 11.1 |
+| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3, 11.4, 11.5 |
+| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1, 11.2, 11.3 |

@@ -1,5 +1,35 @@
 """API routers package."""
 
-from app.routers import auth, billing, export, invoices, rules, sef, webhooks
+from app.routers import (
+    analytics,
+    audit_logs,
+    auth,
+    billing,
+    export,
+    invitations,
+    invoices,
+    join_requests,
+    organizations,
+    rules,
+    sef,
+    team,
+    users,
+    webhooks,
+)
 
-__all__ = ["auth", "billing", "export", "invoices", "rules", "sef", "webhooks"]
+__all__ = [
+    "analytics",
+    "audit_logs",
+    "auth",
+    "billing",
+    "export",
+    "invitations",
+    "invoices",
+    "join_requests",
+    "organizations",
+    "rules",
+    "sef",
+    "team",
+    "users",
+    "webhooks",
+]

@@ -2,11 +2,17 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { FileUpload } from '@/components';
+import { useAuth } from '@/contexts/AuthContext';
+import { AccessDenied, FileUpload } from '@/components';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
+  const { hasRole } = useAuth();
   const [hasFiles, setHasFiles] = useState(false);
+
+  if (!hasRole('operator')) {
+    return <AccessDenied />;
+  }
 
   return (
     <div>

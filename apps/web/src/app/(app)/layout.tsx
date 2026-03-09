@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 import { AppSidebar } from '@/components/AppSidebar';
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { isCollapsed } = useSidebar();
   const router = useRouter();
   const t = useTranslations('common');
@@ -16,10 +17,12 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
+    } else if (!isLoading && isAuthenticated && !user?.organizationId) {
+      router.push('/register/organization');
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, user?.organizationId, router]);
 
-  if (isLoading || !isAuthenticated) {
+  if (isLoading || !isAuthenticated || !user?.organizationId) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -73,7 +76,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <AppLayoutInner>{children}</AppLayoutInner>
+      <NotificationProvider>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </NotificationProvider>
     </SidebarProvider>
   );
 }

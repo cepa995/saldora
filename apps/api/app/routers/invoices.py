@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.accounting_intent import AccountingIntent
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
@@ -50,7 +50,7 @@ async def upload_invoice(
     file: Annotated[UploadFile, File(description="Invoice document (PDF, PNG, JPG)")],
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> ProcessingStatus:
@@ -284,7 +284,7 @@ async def _process_single_file(
 async def upload_batch(
     files: list[UploadFile],
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> list[ProcessingStatus]:
@@ -752,7 +752,7 @@ async def update_invoice(
     update_data: InvoiceUpdate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> InvoiceResponse:
     """Update invoice fields after OCR extraction.
 
@@ -897,7 +897,7 @@ async def delete_invoice(
     invoice_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("manager")),
 ) -> None:
     """Delete an invoice and its associated document from storage.
 
@@ -1046,7 +1046,7 @@ async def verify_invoice(
     invoice_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("operator")),
 ) -> InvoiceResponse:
     """Mark invoice as verified after human review.
 
@@ -1207,7 +1207,7 @@ async def review_accounting_intent(
     invoice_id: UUID,
     body: AccountingIntentReviewRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("manager")),
 ) -> AccountingIntentResponse:
     """Mark an accounting intent as reviewed.
 

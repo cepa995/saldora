@@ -30,18 +30,14 @@ interface RegisterData {
   password: string;
   firstName?: string;
   lastName?: string;
-  organizationName?: string;
 }
 
-interface UserResponse {
-  id: string;
-  email: string;
-  first_name: string | null;
-  last_name: string | null;
-  organization_id: string;
-  role: string;
-  email_verified: boolean;
-}
+const ROLE_HIERARCHY: Record<string, number> = {
+  admin: 4,
+  manager: 3,
+  operator: 2,
+  viewer: 1,
+};
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -51,6 +47,8 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
+  createOrganization: (name: string, pib?: string) => Promise<void>;
+  hasRole: (minimumRole: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -103,25 +101,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
       setTokens(tokens);
-      setUser(extractUserFromToken(tokens.access_token));
-      router.push("/dashboard");
+      const loggedInUser = extractUserFromToken(tokens.access_token);
+      setUser(loggedInUser);
+
+      // Redirect based on whether user has an organization
+      if (loggedInUser?.organizationId) {
+        router.push("/dashboard");
+      } else {
+        router.push("/register/organization");
+      }
     },
     [router],
   );
 
   const register = useCallback(
     async (data: RegisterData) => {
-      await apiClient<UserResponse>("/api/v1/auth/register", {
+      const tokens = await apiClient<AuthTokens>("/api/v1/auth/register", {
         method: "POST",
         body: JSON.stringify({
           email: data.email,
           password: data.password,
           first_name: data.firstName,
           last_name: data.lastName,
-          organization_name: data.organizationName,
         }),
       });
-      router.push("/login?registered=true");
+      setTokens(tokens);
+      setUser(extractUserFromToken(tokens.access_token));
+      router.push("/register/organization");
+    },
+    [router],
+  );
+
+  const createOrganization = useCallback(
+    async (name: string, pib?: string) => {
+      const tokens = await apiClient<AuthTokens>(
+        "/api/v1/auth/create-organization",
+        {
+          method: "POST",
+          body: JSON.stringify({ name, pib: pib || null }),
+        },
+      );
+      setTokens(tokens);
+      setUser(extractUserFromToken(tokens.access_token));
+      router.push("/dashboard");
     },
     [router],
   );
@@ -149,6 +171,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result.message;
   }, []);
 
+  const hasRole = useCallback(
+    (minimumRole: string): boolean => {
+      if (!user) return false;
+      const userLevel = ROLE_HIERARCHY[user.role] ?? 0;
+      const requiredLevel = ROLE_HIERARCHY[minimumRole] ?? 999;
+      return userLevel >= requiredLevel;
+    },
+    [user],
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -158,8 +190,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       requestPasswordReset,
+      createOrganization,
+      hasRole,
     }),
-    [user, isLoading, login, register, logout, requestPasswordReset],
+    [
+      user,
+      isLoading,
+      login,
+      register,
+      logout,
+      requestPasswordReset,
+      createOrganization,
+      hasRole,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

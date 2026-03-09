@@ -8,7 +8,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.user import User
 from app.schemas.automation_rule import (
@@ -40,7 +40,7 @@ async def list_templates(
 async def create_rule(
     body: AutomationRuleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("manager")),
 ) -> AutomationRule:
     """Create an automation rule for the current organization.
 
@@ -140,7 +140,7 @@ async def update_rule(
     rule_id: UUID,
     body: AutomationRuleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("manager")),
 ) -> AutomationRule:
     """Update an automation rule.
 
@@ -177,7 +177,7 @@ async def update_rule(
 async def delete_rule(
     rule_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("manager")),
 ) -> None:
     """Delete an automation rule.
 

@@ -39,32 +39,30 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(
     user_id: str,
-    organization_id: str,
+    organization_id: str | None,
     email: str = "",
     first_name: str | None = None,
     last_name: str | None = None,
-    role: str = "member",
+    role: str = "viewer",
 ) -> str:
-    """
-    Create a JWT access token
+    """Create a JWT access token.
 
-    Arguments:
-        user_id (str): user_id from the DB
-        organization_id (str): organization_id from organization
-        user belongs to
-        email (str): user email
-        first_name (str | None): user first name
-        last_name (str | None): user last name
-        role (str): user role in organization
+    Args:
+        user_id: User ID from the DB.
+        organization_id: Organization ID (None if user has no org yet).
+        email: User email.
+        first_name: User first name.
+        last_name: User last name.
+        role: User role in organization.
 
     Returns:
-        JWT token (str)
+        Encoded JWT token.
     """
     expires = datetime.now(UTC) + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
     payload = {
         "sub": user_id,  # Subject (who the token is for)
-        "org": organization_id,  # Organization (multi-tenancy)
+        "org": organization_id or "",  # Organization (multi-tenancy)
         "email": email,
         "first_name": first_name or "",
         "last_name": last_name or "",

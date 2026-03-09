@@ -112,9 +112,9 @@ function RecentInvoiceRowSkeleton() {
   return (
     <div className="px-5 sm:px-6 py-3.5 border-b border-gray-50">
       {/* Desktop */}
-      <div className="hidden sm:flex items-center gap-4">
+      <div className="hidden sm:grid grid-cols-[minmax(80px,auto)_1fr_auto_auto_auto] items-center gap-4">
         <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
-        <div className="h-4 w-32 bg-gray-200 rounded animate-pulse flex-1" />
+        <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
         <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse" />
         <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
         <div className="h-4 w-16 bg-gray-100 rounded animate-pulse" />
@@ -144,18 +144,18 @@ function RecentInvoiceRow({ invoice }: { invoice: InvoiceResponse }) {
       className="block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group"
     >
       {/* Desktop row */}
-      <div className="hidden sm:flex items-center gap-4">
-        <span className="text-sm font-medium text-gray-900 w-24 truncate">
+      <div className="hidden sm:grid grid-cols-[minmax(80px,auto)_1fr_auto_auto_auto] items-center gap-4">
+        <span className="text-sm font-medium text-gray-900 truncate">
           {invoice.invoice_number ?? '—'}
         </span>
-        <span className="text-sm text-gray-600 flex-1 truncate">
+        <span className="text-sm text-gray-600 truncate min-w-0">
           {invoice.seller?.name ?? '—'}
         </span>
         <StatusBadge status={invoice.status} />
-        <span className="text-sm font-semibold text-gray-900 tabular-nums w-28 text-right">
+        <span className="text-sm font-semibold text-gray-900 tabular-nums text-right whitespace-nowrap">
           {formatAmountSr(invoice.total_amount, invoice.currency)}
         </span>
-        <span className="text-xs text-gray-500 w-20 text-right">
+        <span className="text-xs text-gray-500 text-right whitespace-nowrap">
           {formatRelativeTime(invoice.created_at)}
         </span>
       </div>

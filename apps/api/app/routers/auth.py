@@ -1,5 +1,7 @@
 """Authentication router - login, register, token refresh."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError
@@ -15,32 +17,41 @@ from app.auth import (
 )
 from app.config import get_settings
 from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.join_request import JoinRequest
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.auth import RefreshRequest, TokenResponse, UserCreate, UserResponse
+from app.routers.organizations import _generate_unique_slug
+from app.schemas.auth import (
+    CreateOrganizationRequest,
+    RefreshRequest,
+    TokenResponse,
+    UserCreate,
+)
 from app.services import audit
 
 router = APIRouter()
 settings = get_settings()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> User:
-    """
-    API Endpoint for User Registration
+) -> TokenResponse:
+    """Register a new user account (without an organization).
 
-    Arguments:
-        user_data (UserCreate): registration data inserted by the user
-        request (Request): HTTP request for audit context.
-        db (AsyncSession): DB session which is being injected via get_db
-        dependency
+    After registration, the user must create or join an organization
+    via the /auth/create-organization or /join-requests endpoints.
+
+    Args:
+        user_data: Registration data (email, password, name).
+        request: HTTP request for audit context.
+        db: Database session.
 
     Returns:
-        Newly created user (User) model
+        JWT tokens for the newly created user.
     """
     # 1. Check email uniqueness
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -50,31 +61,23 @@ async def register(
             detail="Email already registered",
         )
 
-    # 2. Create organization
-    org = Organization(
-        name=user_data.organization_name or f"{user_data.email.split('@')[0]}'s organization"
-    )
-    db.add(org)
-    await db.flush()  # Assigns org.id without committing
-
-    # 3. Create user
+    # 2. Create user without organization
     user = User(
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         first_name=user_data.first_name,
         last_name=user_data.last_name,
-        organization_id=org.id,
-        role="admin",  # First user in org is admin
+        organization_id=None,
+        role="viewer",
     )
     db.add(user)
     await db.flush()
 
-    # 4. Audit log (same transaction)
+    # 3. Audit log
     await audit.log(
         db=db,
         action="user.register",
         request=request,
-        organization_id=org.id,
         user_id=user.id,
         entity_type="user",
         entity_id=user.id,
@@ -82,9 +85,113 @@ async def register(
     )
 
     await db.commit()
-    await db.refresh(user)  # Reload to get server-generated fields (id, created_at)
+    await db.refresh(user)
 
-    return user
+    # 4. Issue tokens so user can proceed to org setup
+    access_token = create_access_token(
+        str(user.id),
+        None,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+    )
+    refresh_token = create_refresh_token(str(user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
+    )
+
+
+@router.post("/create-organization", response_model=TokenResponse)
+async def create_organization(
+    body: CreateOrganizationRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TokenResponse:
+    """Create a new organization for a user who doesn't have one yet.
+
+    The user becomes the admin of the new organization. Returns fresh
+    tokens with the organization claim embedded.
+
+    Args:
+        body: Organization name and optional PIB.
+        request: HTTP request for audit context.
+        db: Database session.
+        user: Authenticated user (must not already belong to an org).
+
+    Returns:
+        Fresh JWT tokens with organization_id claim.
+    """
+    if user.organization_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User already belongs to an organization",
+        )
+
+    # Block if user has a pending join request
+    pending = await db.execute(
+        select(JoinRequest)
+        .where(
+            JoinRequest.user_id == user.id,
+            JoinRequest.status == "pending",
+        )
+        .limit(1)
+    )
+    if pending.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You have a pending join request. Cancel it before creating an organization.",
+        )
+
+    # Validate PIB if provided
+    if body.pib:
+        _validate_pib(body.pib)
+
+    # Create organization
+    org_slug = await _generate_unique_slug(db, body.name)
+    org = Organization(name=body.name, slug=org_slug, pib=body.pib)
+    db.add(org)
+    await db.flush()
+
+    # Assign user to org as admin
+    user.organization_id = org.id
+    user.role = "admin"
+    await db.flush()
+
+    # Audit
+    await audit.log(
+        db=db,
+        action="organization.create",
+        request=request,
+        organization_id=org.id,
+        user_id=user.id,
+        entity_type="organization",
+        entity_id=org.id,
+        new_values={"name": body.name, "pib": body.pib},
+    )
+
+    await db.commit()
+
+    # Issue fresh tokens with org claim
+    access_token = create_access_token(
+        str(user.id),
+        str(org.id),
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role="admin",
+    )
+    refresh_token = create_refresh_token(str(user.id))
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.jwt_access_token_expire_minutes * 60,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -138,9 +245,10 @@ async def login(
     await db.commit()
 
     # 4. Generate tokens
+    org_id = str(user.organization_id) if user.organization_id else None
     access_token = create_access_token(
         str(user.id),
-        str(user.organization_id),
+        org_id,
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -161,8 +269,7 @@ async def refresh(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """
-    Refresh access token using refresh token.
+    """Refresh access token using refresh token.
 
     Validates the refresh JWT, looks up the user, and issues
     a new access + refresh token pair (token rotation).
@@ -207,9 +314,10 @@ async def refresh(
     await db.commit()
 
     # 5. Issue new token pair (rotation)
+    org_id = str(user.organization_id) if user.organization_id else None
     access_token = create_access_token(
         str(user.id),
-        str(user.organization_id),
+        org_id,
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
@@ -233,6 +341,39 @@ async def logout() -> dict[str, str]:
     # 1. Add refresh token to blacklist
     # 2. Clear session
     return {"message": "Logged out successfully"}
+
+
+def _validate_pib(pib: str) -> None:
+    """Validate Serbian PIB format using ISO 7064 Mod 11,10 checksum.
+
+    Args:
+        pib: PIB string to validate.
+
+    Raises:
+        HTTPException: If PIB is invalid.
+    """
+    cleaned = re.sub(r"[\s\-./]", "", pib.strip())
+
+    if not cleaned.isdigit():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PIB must contain only digits")
+
+    if len(cleaned) != 9:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PIB must be exactly 9 digits")
+
+    if cleaned[0] == "0":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PIB cannot start with 0")
+
+    # Mod 11,10 checksum
+    product = 10
+    for i in range(8):
+        s = (product + int(cleaned[i])) % 10
+        if s == 0:
+            s = 10
+        product = (s * 2) % 11
+    check_digit = (11 - product) % 10
+
+    if int(cleaned[8]) != check_digit:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PIB is not valid (check digit)")
 
 
 @router.post("/password-reset/request")

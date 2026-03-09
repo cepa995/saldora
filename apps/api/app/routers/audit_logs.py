@@ -3,12 +3,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import require_role
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.audit import AuditLogListResponse, AuditLogResponse
@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("", response_model=AuditLogListResponse)
 async def list_audit_logs(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role("admin")),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
     entity_type: str | None = None,
@@ -48,13 +48,6 @@ async def list_audit_logs(
     Returns:
         Paginated list of audit log entries.
     """
-    # Admin-only access
-    if user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view audit logs",
-        )
-
     # Multi-tenant isolation
     conditions = [AuditLog.organization_id == user.organization_id]
 

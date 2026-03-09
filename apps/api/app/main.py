@@ -8,7 +8,22 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.middleware import RequestContextMiddleware
-from app.routers import analytics, audit_logs, auth, billing, export, invoices, rules, sef, webhooks
+from app.routers import (
+    analytics,
+    audit_logs,
+    auth,
+    billing,
+    export,
+    invitations,
+    invoices,
+    join_requests,
+    organizations,
+    rules,
+    sef,
+    team,
+    users,
+    webhooks,
+)
 
 settings = get_settings()
 
@@ -105,6 +120,11 @@ app.include_router(audit_logs.router, prefix="/api/v1/audit-logs", tags=["Audit 
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(rules.router, prefix="/api/v1/rules", tags=["Automation Rules"])
 app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
+app.include_router(organizations.router, prefix="/api/v1/organizations", tags=["Organizations"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(team.router, prefix="/api/v1/team", tags=["Team"])
+app.include_router(invitations.router, prefix="/api/v1/invitations", tags=["Invitations"])
+app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["Join Requests"])
 app.include_router(sef.router, prefix="/api/v1/sef", tags=["SEF"])
 
 

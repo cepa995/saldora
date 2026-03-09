@@ -172,6 +172,36 @@ def delete_document(key: str) -> None:
     logger.info("Deleted %s", key)
 
 
+def upload_logo(
+    organization_id: UUID,
+    content: bytes,
+    content_type: str,
+) -> str:
+    """Upload an organization logo to S3.
+
+    Args:
+        organization_id: UUID of the organization.
+        content: Raw image bytes.
+        content_type: MIME type (image/png, image/jpeg).
+
+    Returns:
+        The S3 object key where the logo was stored.
+    """
+    ext = _get_extension(content_type)
+    key = f"organizations/{organization_id}/logo{ext}"
+
+    client = get_s3_client()
+    client.put_object(
+        Bucket=settings.storage_bucket,
+        Key=key,
+        Body=content,
+        ContentType=content_type,
+    )
+
+    logger.info("Uploaded logo for org %s (%d bytes)", organization_id, len(content))
+    return key
+
+
 def _get_extension(content_type: str) -> str:
     """Map MIME type to file extension, falling back to ``.bin``."""
     return _MIME_TO_EXT.get(content_type, ".bin")

@@ -12,7 +12,7 @@ from httpx import AsyncClient
 
 
 async def test_register_success(client: AsyncClient):
-    """Happy path: new user gets 201 with correct response shape."""
+    """Happy path: new user gets 201 with token response."""
     response = await client.post(
         "/api/v1/auth/register",
         json={
@@ -20,15 +20,14 @@ async def test_register_success(client: AsyncClient):
             "password": "securepass123",
             "first_name": "Test",
             "last_name": "User",
-            "organization_name": "Test Corp",
         },
     )
 
     assert response.status_code == 201
     data = response.json()
-    assert data["email"] == "new@example.com"
-    assert data["role"] == "admin"  # First user in org is admin
-    assert data["email_verified"] is False
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
     # Password must NEVER appear in the response
     assert "password" not in data
     assert "password_hash" not in data
