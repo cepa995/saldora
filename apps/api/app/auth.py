@@ -95,6 +95,28 @@ def create_refresh_token(user_id: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_password_reset_token(user_id: str, email: str) -> str:
+    """Create a short-lived JWT for password reset.
+
+    Args:
+        user_id: User's database ID.
+        email: User's email (embedded for auditing).
+
+    Returns:
+        Encoded JWT token valid for 1 hour.
+    """
+    expires = datetime.now(UTC) + timedelta(hours=1)
+
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": expires,
+        "type": "password_reset",
+    }
+
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
 def decode_token(token: str) -> str:
     """
     Decode and validate a JKWT token.

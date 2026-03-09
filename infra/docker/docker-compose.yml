@@ -69,6 +69,8 @@ services:
       STORAGE_SECRET_KEY: minioadmin
       STORAGE_BUCKET: fakturaai-documents
       ENVIRONMENT: development
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      FRONTEND_URL: http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:

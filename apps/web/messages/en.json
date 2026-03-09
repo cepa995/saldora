@@ -137,7 +137,16 @@
     "inviteNotFound": "Invitation not found. The link may be invalid.",
     "inviteAcceptedSuccess": "Invitation accepted! Redirecting to sign in...",
     "acceptingInvite": "Accepting...",
-    "acceptInvite": "Accept invitation"
+    "acceptInvite": "Accept invitation",
+    "newPassword": "New password",
+    "newPasswordPlaceholder": "Enter new password",
+    "resetPassword": "Reset password",
+    "resettingPassword": "Resetting...",
+    "passwordResetConfirmTitle": "Set new password",
+    "passwordResetConfirmSubtitle": "Enter your new password below.",
+    "passwordResetSuccess": "Your password has been reset successfully.",
+    "resetLinkExpired": "This reset link is invalid or has expired. Please request a new one.",
+    "passwordResetDone": "Password reset complete"
   },
   "dashboard": {
     "welcome": "Welcome, {name}!",
