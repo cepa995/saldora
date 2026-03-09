@@ -53,6 +53,11 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
     currency: Mapped[str] = mapped_column(String(3), default="RSD")
 
+    # Exchange rate conversion (for non-RSD invoices)
+    exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(15, 6))
+    exchange_rate_date: Mapped[date | None] = mapped_column(Date)
+    total_amount_rsd: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
+
     # Line items
     line_items: Mapped[list | None] = mapped_column(JSON)
 

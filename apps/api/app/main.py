@@ -13,6 +13,7 @@ from app.routers import (
     audit_logs,
     auth,
     billing,
+    exchange_rates,
     export,
     invitations,
     invoices,
@@ -126,6 +127,7 @@ app.include_router(team.router, prefix="/api/v1/team", tags=["Team"])
 app.include_router(invitations.router, prefix="/api/v1/invitations", tags=["Invitations"])
 app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["Join Requests"])
 app.include_router(sef.router, prefix="/api/v1/sef", tags=["SEF"])
+app.include_router(exchange_rates.router, prefix="/api/v1/exchange-rates", tags=["Exchange Rates"])
 
 
 @app.get("/health")

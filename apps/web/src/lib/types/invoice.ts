@@ -83,6 +83,9 @@ export interface InvoiceResponse {
   tax_amount: string | null;
   total_amount: string | null;
   currency: string;
+  exchange_rate: string | null;
+  exchange_rate_date: string | null;
+  total_amount_rsd: string | null;
   line_items: LineItem[];
   tax_groups: TaxGroup[] | null;
   field_confidences: FieldConfidence[];

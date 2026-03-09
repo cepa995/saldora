@@ -3,6 +3,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 
 # Redis configuration
 REDIS_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
@@ -39,6 +40,15 @@ app.conf.update(
     # Retry settings
     task_acks_late=True,  # Acknowledge after task completion
     task_reject_on_worker_lost=True,  # Requeue if worker crashes
+    # Beat schedule for periodic tasks
+    beat_schedule={
+        "fetch-nbs-exchange-rates": {
+            "task": "ocr_worker.tasks.fetch_nbs_exchange_rates",
+            "schedule": crontab(
+                hour=8, minute=30, day_of_week="1-5"
+            ),  # Business days at 08:30
+        },
+    },
 )
 
 # Optional: Configure task priorities

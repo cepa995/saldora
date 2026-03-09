@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@fakturaai.rs"
     frontend_url: str = "http://localhost:3000"
 
+    # NBS (National Bank of Serbia) Exchange Rates
+    nbs_api_url: str = "https://kurs.resenje.org/api/v1"
+    nbs_cache_ttl: int = 86400  # 24 hours
+    nbs_request_timeout: int = 10
+    nbs_supported_currencies: list[str] = ["EUR", "USD", "CHF", "GBP"]
+
     # SEF (eFaktura)
     sef_api_base_url: str = "https://efaktura.mfin.gov.rs/api/v1"
     sef_environment: str = "test"
