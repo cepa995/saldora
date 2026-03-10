@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
@@ -31,6 +32,7 @@ const SORTABLE_COLUMNS: { key: SortColumn; labelKey: string }[] = [
 export default function InvoicesPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
+  const orgPath = useOrgPath();
   const t = useTranslations('invoices');
   const tCommon = useTranslations('common');
   const tStatus = useTranslations('status');
@@ -114,7 +116,7 @@ export default function InvoicesPage() {
         </div>
         {canWrite && (
           <Link
-            href="/upload"
+            href={orgPath("/upload")}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm shadow-violet-200"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -297,6 +299,7 @@ export default function InvoicesPage() {
           <EmptyState
             hasFilters={!!(filters.status || filters.search || filters.date_from || filters.date_to)}
             canUpload={canWrite}
+            uploadHref={orgPath("/upload")}
           />
         ) : (
           <>
@@ -356,7 +359,7 @@ export default function InvoicesPage() {
                   {invoices.map((invoice) => (
                     <tr
                       key={invoice.id}
-                      onClick={() => router.push(`/invoices/${invoice.id}`)}
+                      onClick={() => router.push(orgPath(`/invoices/${invoice.id}`))}
                       className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -414,7 +417,7 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <Link
-                          href={`/invoices/${invoice.id}`}
+                          href={orgPath(`/invoices/${invoice.id}`)}
                           className="text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors"
                         >
                           {t('view')}
@@ -431,7 +434,7 @@ export default function InvoicesPage() {
               {invoices.map((invoice) => (
                 <Link
                   key={invoice.id}
-                  href={`/invoices/${invoice.id}`}
+                  href={orgPath(`/invoices/${invoice.id}`)}
                   className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
                 >
                   <input
@@ -626,7 +629,7 @@ function SkeletonTable() {
   );
 }
 
-function EmptyState({ hasFilters, canUpload = true }: { hasFilters: boolean; canUpload?: boolean }) {
+function EmptyState({ hasFilters, canUpload = true, uploadHref }: { hasFilters: boolean; canUpload?: boolean; uploadHref: string }) {
   const t = useTranslations('invoices');
 
   return (
@@ -649,7 +652,7 @@ function EmptyState({ hasFilters, canUpload = true }: { hasFilters: boolean; can
       </p>
       {!hasFilters && canUpload && (
         <Link
-          href="/upload"
+          href={uploadHref}
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

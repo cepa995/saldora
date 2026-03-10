@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useOrgPath } from "@/lib/navigation";
 import { ScriptToggle } from "./ScriptToggle";
 
 interface NavItem {
@@ -236,6 +237,7 @@ export function AppSidebar() {
     useSidebar();
   const t = useTranslations("nav");
   const { pendingJoinRequests } = useNotifications();
+  const orgPath = useOrgPath();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -310,7 +312,7 @@ export function AppSidebar() {
             className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
           >
             <Link
-              href="/dashboard"
+              href={orgPath("/dashboard")}
               className="flex items-center justify-center py-2"
             >
               {collapsed ? (
@@ -339,7 +341,7 @@ export function AppSidebar() {
               <div className={mobile ? "space-y-0.5 px-2" : "space-y-1"}>
                 {visibleItems.map((item) =>
                   renderNavLink(
-                    item.href,
+                    orgPath(item.href),
                     item.icon,
                     t(item.labelKey),
                     collapsed,
@@ -356,7 +358,7 @@ export function AppSidebar() {
         <div className={`${mobile ? "px-2 pb-4 space-y-0.5" : "px-2 pb-4 space-y-2"} border-t ${mobile ? "border-gray-200" : "border-gray-100"} pt-2`}>
           {/* Billing */}
           {hasRole("admin") && renderNavLink(
-            "/billing",
+            orgPath("/billing"),
             BILLING_ICON,
             t("billing"),
             collapsed,
@@ -365,7 +367,7 @@ export function AppSidebar() {
 
           {/* Settings */}
           {renderNavLink(
-            "/settings",
+            orgPath("/settings"),
             SETTINGS_ICON,
             t("settings"),
             collapsed,
@@ -500,7 +502,7 @@ export function AppSidebar() {
             />
           </svg>
         </button>
-        <Link href="/dashboard" className="flex items-center mx-auto">
+        <Link href={orgPath("/dashboard")} className="flex items-center mx-auto">
           <span className="text-base font-bold gradient-text">FakturaAI</span>
         </Link>
         <div className="w-10" />

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, InputHTMLAttributes 
 import { useRouter } from 'next/navigation';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { usePollingStatus, ProcessingStatusResponse } from '@/hooks/usePollingStatus';
 import {
@@ -98,6 +99,7 @@ export function FileUpload({
 }: FileUploadProps) {
   const t = useTranslations('upload');
   const router = useRouter();
+  const { user } = useAuth();
   const uploadedFiles = useUploadFiles();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -119,11 +121,11 @@ export function FileUpload({
       const jobId = uploadedFiles[0].jobId;
       const timer = setTimeout(() => {
         clearUploadFiles();
-        router.push(`/invoices/${jobId}`);
+        router.push(user?.orgSlug ? `/${user.orgSlug}/invoices/${jobId}` : `/invoices/${jobId}`);
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [uploadedFiles, router]);
+  }, [uploadedFiles, router, user?.orgSlug]);
 
   const pollableJobIds = useMemo(
     () =>
@@ -539,6 +541,7 @@ export function FileUpload({
                         currentStatus={toPipelineStatus(uf.status)}
                         errorMessage={uf.error}
                         invoiceId={uf.jobId}
+                        orgSlug={user?.orgSlug ?? undefined}
                       />
 
                       {/* Progress bar for queued/processing */}

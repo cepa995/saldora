@@ -5,6 +5,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
@@ -25,6 +26,7 @@ export default function InvoiceDetailPage({
 }) {
   const { id } = use(params);
   const { hasRole } = useAuth();
+  const orgPath = useOrgPath();
   const t = useTranslations('detail');
   const tCommon = useTranslations('common');
   const canWrite = hasRole('operator');
@@ -239,7 +241,7 @@ export default function InvoiceDetailPage({
           </svg>
         </div>
         <p className="text-sm text-gray-500 mb-4">{error}</p>
-        <Link href="/invoices" className="text-sm font-medium text-violet-600 hover:text-violet-700">
+        <Link href={orgPath("/invoices")} className="text-sm font-medium text-violet-600 hover:text-violet-700">
           {t('backToList')}
         </Link>
       </div>
@@ -263,7 +265,7 @@ export default function InvoiceDetailPage({
       <div className="space-y-3">
         {/* Back link */}
         <Link
-          href="/invoices"
+          href={orgPath("/invoices")}
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors w-full justify-center sm:justify-start sm:w-auto"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

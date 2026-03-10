@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useTeam } from '@/hooks/useTeam';
 import { updateProfile, changePassword } from '@/lib/api/users';
@@ -29,6 +30,7 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
   const t = useTranslations('settings');
   const { user } = useAuth();
+  const orgPath = useOrgPath();
 
   const isAdmin = user?.role === 'admin';
   const { pendingJoinRequests } = useNotifications();
@@ -37,7 +39,7 @@ export default function SettingsPage() {
   const activeTab = visibleTabs.find((tab) => tab.key === tabParam)?.key ?? 'profile';
 
   function switchTab(tab: SettingsTab) {
-    router.push(`/settings?tab=${tab}`, { scroll: false });
+    router.push(orgPath(`/settings?tab=${tab}`), { scroll: false });
   }
 
   return (

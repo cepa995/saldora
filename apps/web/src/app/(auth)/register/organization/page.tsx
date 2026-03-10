@@ -39,12 +39,12 @@ export default function OrganizationSetupPage() {
   // Redirect if user already has an org
   useEffect(() => {
     if (!isLoading && isAuthenticated && user?.organizationId) {
-      router.push("/dashboard");
+      router.push(user?.orgSlug ? `/${user.orgSlug}/dashboard` : "/dashboard");
     }
     if (!isLoading && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isLoading, isAuthenticated, user?.organizationId, router]);
+  }, [isLoading, isAuthenticated, user?.organizationId, user?.orgSlug, router]);
 
   const stepIndicator = (
     <div className="flex items-center justify-center gap-2 mb-8">

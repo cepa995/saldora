@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { AccessDenied } from '@/components';
 import { useRuleList } from '@/hooks/useRuleList';
 import {
@@ -1500,6 +1501,7 @@ function ExecutionHistoryModal({
   t: TranslationFn;
   onClose: () => void;
 }) {
+  const execOrgPath = useOrgPath();
   const [executions, setExecutions] = useState<RuleExecutionResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1571,7 +1573,7 @@ function ExecutionHistoryModal({
                         <span>{exec.execution_time_ms}ms</span>
                       )}
                       <Link
-                        href={`/invoices/${exec.invoice_id}`}
+                        href={execOrgPath(`/invoices/${exec.invoice_id}`)}
                         className="text-violet-600 hover:text-violet-700 font-medium"
                       >
                         {t('invoiceLink')}

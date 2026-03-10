@@ -44,6 +44,7 @@ def create_access_token(
     first_name: str | None = None,
     last_name: str | None = None,
     role: str = "viewer",
+    org_slug: str | None = None,
 ) -> str:
     """Create a JWT access token.
 
@@ -54,6 +55,7 @@ def create_access_token(
         first_name: User first name.
         last_name: User last name.
         role: User role in organization.
+        org_slug: Organization URL slug.
 
     Returns:
         Encoded JWT token.
@@ -63,6 +65,7 @@ def create_access_token(
     payload = {
         "sub": user_id,  # Subject (who the token is for)
         "org": organization_id or "",  # Organization (multi-tenancy)
+        "org_slug": org_slug or "",  # Organization slug (URL routing)
         "email": email,
         "first_name": first_name or "",
         "last_name": last_name or "",

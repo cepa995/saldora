@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
@@ -137,10 +138,10 @@ function RecentInvoiceRowSkeleton() {
 
 /* -- Recent Invoice Row ------------------------------------------------- */
 
-function RecentInvoiceRow({ invoice }: { invoice: InvoiceResponse }) {
+function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; basePath: string }) {
   return (
     <Link
-      href={`/invoices/${invoice.id}`}
+      href={`${basePath}/invoices/${invoice.id}`}
       className="block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group"
     >
       {/* Desktop row */}
@@ -185,6 +186,7 @@ function RecentInvoiceRow({ invoice }: { invoice: InvoiceResponse }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const orgPath = useOrgPath();
   const { data, isLoading, error, refresh } = useDashboard();
   const t = useTranslations('dashboard');
   const tCommon = useTranslations('common');
@@ -280,7 +282,7 @@ export default function DashboardPage() {
               </>
             ) : data && data.recentInvoices.length > 0 ? (
               data.recentInvoices.map((invoice) => (
-                <RecentInvoiceRow key={invoice.id} invoice={invoice} />
+                <RecentInvoiceRow key={invoice.id} invoice={invoice} basePath={orgPath("")} />
               ))
             ) : (
               <div className="py-12 text-center">
@@ -290,7 +292,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-medium text-gray-900">{t('noInvoices')}</p>
                 <p className="text-xs text-gray-500 mt-1">{t('noInvoicesSubtitle')}</p>
                 <Link
-                  href="/upload"
+                  href={orgPath("/upload")}
                   className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors"
                 >
                   <UploadIcon className="w-4 h-4" />
@@ -303,7 +305,7 @@ export default function DashboardPage() {
           {data && data.recentInvoices.length > 0 && (
             <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50">
               <Link
-                href="/invoices"
+                href={orgPath("/invoices")}
                 className="text-sm text-violet-600 hover:text-violet-700 font-medium inline-flex items-center gap-1.5 transition-colors group"
               >
                 {t('viewAllInvoices')}
@@ -319,7 +321,7 @@ export default function DashboardPage() {
 
           <div className="space-y-3">
             <Link
-              href="/upload"
+              href={orgPath("/upload")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-violet-500/25 hover:scale-[1.02] transition-all duration-200"
             >
               <UploadIcon className="w-5 h-5" />
@@ -327,7 +329,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link
-              href="/invoices"
+              href={orgPath("/invoices")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             >
               <ListIcon className="w-5 h-5 text-gray-500" />
@@ -335,7 +337,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link
-              href="/invoices"
+              href={orgPath("/invoices")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             >
               <DownloadIcon className="w-5 h-5 text-gray-500" />

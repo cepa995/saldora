@@ -192,6 +192,7 @@ async def create_organization(
         first_name=user.first_name,
         last_name=user.last_name,
         role="admin",
+        org_slug=org_slug,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -254,6 +255,12 @@ async def login(
 
     # 4. Generate tokens
     org_id = str(user.organization_id) if user.organization_id else None
+    org_slug = None
+    if user.organization_id:
+        slug_result = await db.execute(
+            select(Organization.slug).where(Organization.id == user.organization_id)
+        )
+        org_slug = slug_result.scalar_one_or_none()
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -261,6 +268,7 @@ async def login(
         first_name=user.first_name,
         last_name=user.last_name,
         role=user.role,
+        org_slug=org_slug,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -323,6 +331,12 @@ async def refresh(
 
     # 5. Issue new token pair (rotation)
     org_id = str(user.organization_id) if user.organization_id else None
+    org_slug = None
+    if user.organization_id:
+        slug_result = await db.execute(
+            select(Organization.slug).where(Organization.id == user.organization_id)
+        )
+        org_slug = slug_result.scalar_one_or_none()
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -330,6 +344,7 @@ async def refresh(
         first_name=user.first_name,
         last_name=user.last_name,
         role=user.role,
+        org_slug=org_slug,
     )
     new_refresh_token = create_refresh_token(str(user.id))
 
