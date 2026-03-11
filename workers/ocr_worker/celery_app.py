@@ -48,6 +48,10 @@ app.conf.update(
                 hour=8, minute=30, day_of_week="1-5"
             ),  # Business days at 08:30
         },
+        "aggregate-daily-usage": {
+            "task": "ocr_worker.tasks.aggregate_daily_usage",
+            "schedule": crontab(hour=2, minute=0),  # Daily at 02:00
+        },
     },
 )
 

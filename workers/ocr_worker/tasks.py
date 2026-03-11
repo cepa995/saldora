@@ -556,6 +556,85 @@ def fetch_nbs_exchange_rates() -> dict[str, Any]:
     return {"synced": count}
 
 
+@app.task(name="ocr_worker.tasks.aggregate_daily_usage")
+def aggregate_daily_usage() -> dict[str, Any]:
+    """Daily rollup: reconcile usage_records with actual invoice counts.
+
+    For each organization with activity this month, ensures the usage_record's
+    invoices_count matches the actual database count. Corrects any drift from
+    missed increments.
+
+    Returns:
+        Dict with organizations_updated count.
+    """
+    from datetime import UTC, datetime
+
+    from ocr_worker.database import get_session, text
+
+    logger.info("Starting daily usage aggregation...")
+
+    now = datetime.now(UTC)
+    period_start = now.date().replace(day=1)
+    if now.month == 12:
+        next_month = now.date().replace(year=now.year + 1, month=1, day=1)
+    else:
+        next_month = now.date().replace(month=now.month + 1, day=1)
+    from datetime import timedelta
+
+    period_end = next_month - timedelta(days=1)
+
+    session = get_session()
+    updated = 0
+    try:
+        # Get actual invoice counts per org for this month
+        rows = session.execute(
+            text("""
+                SELECT organization_id, COUNT(*) as invoice_count
+                FROM invoices
+                WHERE EXTRACT(YEAR FROM created_at) = :year
+                  AND EXTRACT(MONTH FROM created_at) = :month
+                GROUP BY organization_id
+            """),
+            {"year": now.year, "month": now.month},
+        ).fetchall()
+
+        for row in rows:
+            org_id = row[0]
+            actual_count = row[1]
+
+            # Upsert usage record with actual count
+            session.execute(
+                text("""
+                    INSERT INTO usage_records (id, organization_id, period_start, period_end,
+                        invoices_count, api_calls_count, storage_bytes, created_at, updated_at)
+                    VALUES (gen_random_uuid(), :org_id, :period_start, :period_end,
+                        :count, 0, 0, NOW(), NOW())
+                    ON CONFLICT (organization_id, period_start)
+                    DO UPDATE SET
+                        invoices_count = :count,
+                        updated_at = NOW()
+                """),
+                {
+                    "org_id": str(org_id),
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                    "count": actual_count,
+                },
+            )
+            updated += 1
+
+        session.commit()
+        logger.info("Usage aggregation complete: %d organizations updated", updated)
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to aggregate daily usage")
+        raise
+    finally:
+        session.close()
+
+    return {"organizations_updated": updated}
+
+
 def _send_webhook(url: str, resource_id: str, data: dict[str, Any]) -> None:
     """Send webhook notification."""
     import httpx

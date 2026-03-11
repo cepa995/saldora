@@ -17,6 +17,7 @@ from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
 from app.models.sef_connection import SefConnection
 from app.models.sef_invoice import SefInvoice
+from app.models.usage_record import UsageRecord
 from app.models.user import User
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "RuleExecution",
     "SefConnection",
     "SefInvoice",
+    "UsageRecord",
     "User",
 ]

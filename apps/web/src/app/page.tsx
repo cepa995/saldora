@@ -1652,31 +1652,60 @@ function PricingSection() {
       name: "Starter",
       description: "Za samostalne računovođe",
       price: annual ? 24 : 29,
+      monthlyPrice: 29,
       period: annual ? "/mesec, plaćeno godišnje" : "/mesec",
-      features: ["100 faktura mesečno", "PDF i slike", "Excel export", "Email podrška"],
+      features: [
+        "100 faktura mesečno",
+        "2 korisnika",
+        "OCR obrada",
+        "Excel/CSV/JSON izvoz",
+        "MiniMax XML izvoz",
+        "NBS kursna lista",
+      ],
+      overage: "Prekoračenje: €0,10 po fakturi",
       cta: "Započni besplatno",
       popular: false,
       icon: "🚀",
       color: "violet",
     },
     {
-      name: "Professional",
+      name: "Pro",
       description: "Za računovodstvene agencije",
-      price: annual ? 41 : 49,
+      price: annual ? 66 : 79,
+      monthlyPrice: 79,
       period: annual ? "/mesec, plaćeno godišnje" : "/mesec",
-      features: ["500 faktura mesečno", "Svi formati", "Svi export formati", "API pristup", "Prioritetna podrška", "PIB verifikacija"],
+      features: [
+        "400 faktura mesečno",
+        "5 korisnika",
+        "OCR obrada",
+        "Svi formati izvoza",
+        "Računovodstvena klasifikacija",
+        "SEF integracija",
+        "MiniMax direktan uvoz",
+        "NBS kursna lista",
+      ],
+      overage: "Prekoračenje: €0,07 po fakturi",
       cta: "Započni besplatno",
       popular: true,
       icon: "⭐",
       color: "indigo",
     },
     {
-      name: "Enterprise",
-      description: "Za velike organizacije",
-      price: annual ? 82 : 99,
+      name: "Agency",
+      description: "Za velike agencije",
+      price: annual ? 165 : 199,
+      monthlyPrice: 199,
       period: annual ? "/mesec, plaćeno godišnje" : "/mesec",
-      features: ["Neograničeno faktura", "Dedicated podrška", "Custom integracije", "SLA garancija", "On-premise opcija"],
-      cta: "Kontaktirajte nas",
+      features: [
+        "1.500 faktura mesečno",
+        "15 korisnika",
+        "Sve Pro funkcionalnosti",
+        "Pravila automatizacije",
+        "Revizijski izvoz",
+        "Prioritetna podrška",
+      ],
+      overage: "Prekoračenje: €0,05 po fakturi",
+      cta: "Započni besplatno",
       popular: false,
       icon: "🏢",
       color: "gray",
@@ -1764,7 +1793,7 @@ function PricingSection() {
                   </div>
                   {annual && (
                     <p className={`text-sm mt-2 ${plan.popular ? "text-emerald-400" : "text-emerald-600"}`}>
-                      Ušteda €{((plan.popular ? 49 : plan.name === "Starter" ? 29 : 99) - plan.price) * 12}/godišnje
+                      Ušteda €{(plan.monthlyPrice - plan.price) * 12}/godišnje
                     </p>
                   )}
                 </div>
@@ -1780,6 +1809,13 @@ function PricingSection() {
                     </li>
                   ))}
                 </ul>
+
+                {/* Overage info */}
+                {plan.overage && (
+                  <p className={`text-xs mb-6 ${plan.popular ? "text-gray-500" : "text-gray-400"}`}>
+                    {plan.overage}
+                  </p>
+                )}
 
                 {/* CTA Button */}
                 <a

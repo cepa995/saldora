@@ -12,6 +12,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from httpx import AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import decode_token
@@ -87,6 +88,17 @@ def _get_org_id(headers: dict) -> str:
     token = headers["Authorization"].removeprefix("Bearer ")
     payload = decode_token(token)
     return payload["org"]
+
+
+async def _set_org_plan(test_engine, org_id: str, plan: str) -> None:
+    """Update organization plan directly in the database."""
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        await session.execute(
+            text("UPDATE organizations SET plan = :plan WHERE id = :org_id"),
+            {"plan": plan, "org_id": org_id},
+        )
+        await session.commit()
 
 
 async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
@@ -564,9 +576,11 @@ def test_templates_fuel_non_deductible():
 # ===========================================================================
 
 
-async def test_create_rule(client: AsyncClient):
+async def test_create_rule(client: AsyncClient, test_engine):
     """POST /api/v1/rules creates a rule."""
     headers = await _register_and_login(client, email="rule-create@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
     resp = await client.post(
         "/api/v1/rules/",
         headers=headers,
@@ -594,9 +608,11 @@ async def test_create_rule(client: AsyncClient):
     assert data["execution_count"] == 0
 
 
-async def test_list_rules(client: AsyncClient):
+async def test_list_rules(client: AsyncClient, test_engine):
     """GET /api/v1/rules returns org rules."""
     headers = await _register_and_login(client, email="rule-list@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     # Create two rules
     for name in ("Rule A", "Rule B"):
@@ -618,9 +634,11 @@ async def test_list_rules(client: AsyncClient):
     assert len(data["items"]) == 2
 
 
-async def test_list_rules_filter_type(client: AsyncClient):
+async def test_list_rules_filter_type(client: AsyncClient, test_engine):
     """GET /api/v1/rules?rule_type=X filters by type."""
     headers = await _register_and_login(client, email="rule-filter@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     await client.post(
         "/api/v1/rules/",
@@ -652,9 +670,11 @@ async def test_list_rules_filter_type(client: AsyncClient):
     assert data["items"][0]["rule_type"] == "KONTO_ASSIGNMENT"
 
 
-async def test_get_rule(client: AsyncClient):
+async def test_get_rule(client: AsyncClient, test_engine):
     """GET /api/v1/rules/{id} returns a single rule."""
     headers = await _register_and_login(client, email="rule-get@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     create_resp = await client.post(
         "/api/v1/rules/",
@@ -673,9 +693,11 @@ async def test_get_rule(client: AsyncClient):
     assert resp.json()["name"] == "Get Test Rule"
 
 
-async def test_update_rule(client: AsyncClient):
+async def test_update_rule(client: AsyncClient, test_engine):
     """PATCH /api/v1/rules/{id} updates rule fields."""
     headers = await _register_and_login(client, email="rule-update@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     create_resp = await client.post(
         "/api/v1/rules/",
@@ -702,9 +724,11 @@ async def test_update_rule(client: AsyncClient):
     assert data["is_active"] is False
 
 
-async def test_delete_rule(client: AsyncClient):
+async def test_delete_rule(client: AsyncClient, test_engine):
     """DELETE /api/v1/rules/{id} removes the rule."""
     headers = await _register_and_login(client, email="rule-delete@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     create_resp = await client.post(
         "/api/v1/rules/",
@@ -726,10 +750,12 @@ async def test_delete_rule(client: AsyncClient):
     assert get_resp.status_code == 404
 
 
-async def test_rule_org_isolation(client: AsyncClient):
+async def test_rule_org_isolation(client: AsyncClient, test_engine):
     """Rules from one org are not visible to another org."""
     headers_a = await _register_and_login(client, email="org-a-rules@example.com")
     headers_b = await _register_and_login(client, email="org-b-rules@example.com")
+    for h in (headers_a, headers_b):
+        await _set_org_plan(test_engine, _get_org_id(h), "agency")
 
     # Create rule in org A
     create_resp = await client.post(
@@ -753,18 +779,22 @@ async def test_rule_org_isolation(client: AsyncClient):
     assert list_resp.json()["count"] == 0
 
 
-async def test_get_templates(client: AsyncClient):
+async def test_get_templates(client: AsyncClient, test_engine):
     """GET /api/v1/rules/templates returns templates."""
     headers = await _register_and_login(client, email="rule-templates@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
     resp = await client.get("/api/v1/rules/templates", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 9
 
 
-async def test_rule_not_found(client: AsyncClient):
+async def test_rule_not_found(client: AsyncClient, test_engine):
     """GET /api/v1/rules/{nonexistent} returns 404."""
     headers = await _register_and_login(client, email="rule-404@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
     resp = await client.get(f"/api/v1/rules/{uuid4()}", headers=headers)
     assert resp.status_code == 404
 
@@ -778,6 +808,7 @@ async def test_rule_modifies_konta_on_verify(client: AsyncClient, test_engine):
     """A KONTO_ASSIGNMENT rule modifies suggested_konta during verification."""
     headers = await _register_and_login(client, email="pipe-konto@example.com")
     org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     # Create a rule targeting seller PIB
     await client.post(
@@ -830,6 +861,7 @@ async def test_rule_flag_review_on_verify(client: AsyncClient, test_engine):
     """A FLAG_FOR_REVIEW rule adds review reasons during verification."""
     headers = await _register_and_login(client, email="pipe-flag@example.com")
     org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     # Create a rule to flag all invoices for review
     await client.post(
@@ -875,6 +907,7 @@ async def test_rule_vat_treatment_override(client: AsyncClient, test_engine):
     """A VAT_TREATMENT rule overrides the default treatment."""
     headers = await _register_and_login(client, email="pipe-vat@example.com")
     org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     # Create rule to set NON_DEDUCTIBLE for specific supplier
     await client.post(
@@ -918,6 +951,7 @@ async def test_no_rules_produces_empty_applied(client: AsyncClient, test_engine)
     """Invoice verified without rules has empty applied_rules."""
     headers = await _register_and_login(client, email="pipe-empty@example.com")
     org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
 
     invoice_id = await _insert_invoice(test_engine, org_id)
 
