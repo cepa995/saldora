@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { fetchInvoices } from '@/lib/api/invoices';
+import { useClient } from '@/contexts/ClientContext';
 import type { InvoiceResponse } from '@/lib/types/invoice';
 
 interface DashboardData {
@@ -34,6 +35,7 @@ interface UseDashboardReturn {
  *   refresh - Function to re-trigger all fetches.
  */
 export function useDashboard(): UseDashboardReturn {
+  const { selectedClientId } = useClient();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,13 +53,14 @@ export function useDashboard(): UseDashboardReturn {
       setError(null);
 
       try {
+        const base = selectedClientId ? { client_id: selectedClientId } : {};
         const [recentResult, processingResult, reviewResult, verifiedResult, exportedResult] =
           await Promise.all([
-            fetchInvoices({ per_page: 5, sort: 'created_at', order: 'desc' }),
-            fetchInvoices({ status: 'processing', per_page: 1 }),
-            fetchInvoices({ status: 'review', per_page: 1 }),
-            fetchInvoices({ status: 'verified', per_page: 1 }),
-            fetchInvoices({ status: 'exported', per_page: 1 }),
+            fetchInvoices({ ...base, per_page: 5, sort: 'created_at', order: 'desc' }),
+            fetchInvoices({ ...base, status: 'processing', per_page: 1 }),
+            fetchInvoices({ ...base, status: 'review', per_page: 1 }),
+            fetchInvoices({ ...base, status: 'verified', per_page: 1 }),
+            fetchInvoices({ ...base, status: 'exported', per_page: 1 }),
           ]);
 
         if (cancelled) return;
@@ -87,7 +90,7 @@ export function useDashboard(): UseDashboardReturn {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, selectedClientId]);
 
   return { data, isLoading, error, refresh };
 }

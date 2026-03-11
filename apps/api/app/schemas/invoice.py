@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.client import ClientSummary
+
 
 class CompanyInfo(BaseModel):
     """Company information extracted from invoice."""
@@ -150,6 +152,10 @@ class InvoiceResponse(BaseModel):
         default=None,
         description="PDV book type: KPR (received) or KIR (issued), None if no intent exists",
     )
+
+    # Client (Agency feature)
+    client_id: UUID | None = None
+    client: ClientSummary | None = Field(default=None, description="Assigned client info")
 
     # Document
     document_url: str | None = None

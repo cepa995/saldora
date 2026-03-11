@@ -14,6 +14,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.accounting_intent import AccountingIntent
+    from app.models.client import Client
     from app.models.organization import Organization
 
 
@@ -30,6 +31,9 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     # Ownership
     organization_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id")
+    )
+    client_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clients.id"), nullable=True, index=True
     )
 
     # Status
@@ -80,6 +84,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
 
     # Relationships
     organization: Mapped[Organization] = relationship(back_populates="invoices")
+    client: Mapped[Client | None] = relationship(back_populates="invoices")
     accounting_intent: Mapped[AccountingIntent | None] = relationship(
         back_populates="invoice",
         uselist=False,

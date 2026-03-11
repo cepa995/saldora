@@ -37,6 +37,7 @@ export async function fetchInvoices(
   if (filters.accounting_review !== undefined)
     params.set('accounting_review', String(filters.accounting_review));
   if (filters.book_type) params.set('book_type', filters.book_type);
+  if (filters.client_id) params.set('client_id', filters.client_id);
 
   const query = params.toString();
   const endpoint = query ? `/api/v1/invoices?${query}` : '/api/v1/invoices';

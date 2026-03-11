@@ -27,10 +27,12 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import QuotaCheck, check_invoice_quota, get_current_user, require_role
 from app.models.accounting_intent import AccountingIntent
+from app.models.client import Client
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.schemas.accounting_intent import AccountingIntentResponse, AccountingIntentReviewRequest
+from app.schemas.client import ClientSummary
 from app.schemas.invoice import (
     CompanyInfo,
     FieldConfidence,
@@ -486,6 +488,7 @@ def _build_invoice_response(
     document_url: str | None = None,
     accounting_review_needed: bool | None = None,
     pdv_book_type: str | None = None,
+    client_summary: ClientSummary | None = None,
 ) -> InvoiceResponse:
     """Convert an Invoice model to an InvoiceResponse schema.
 
@@ -580,6 +583,8 @@ def _build_invoice_response(
         field_warnings=field_warnings,
         accounting_review_needed=accounting_review_needed,
         pdv_book_type=pdv_book_type,
+        client_id=invoice.client_id,
+        client=client_summary,
         document_url=document_url,
         raw_ocr_text=invoice.raw_ocr_text,
         raw_llm_output=invoice.raw_llm_output,
@@ -648,7 +653,15 @@ async def get_invoice(
         except Exception:
             logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
 
-    return _build_invoice_response(invoice, document_url)
+    # Load client summary if assigned
+    client_summary = None
+    if invoice.client_id:
+        client_result = await db.execute(select(Client).where(Client.id == invoice.client_id))
+        client = client_result.scalar_one_or_none()
+        if client:
+            client_summary = ClientSummary(id=client.id, name=client.name, pib=client.pib)
+
+    return _build_invoice_response(invoice, document_url, client_summary=client_summary)
 
 
 ALLOWED_SORT_COLUMNS = {
@@ -676,6 +689,7 @@ async def list_invoices(
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
     accounting_review: bool | None = Query(default=None),
     book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
+    client_id: UUID | None = Query(default=None, description="Filter by client ID"),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -694,6 +708,7 @@ async def list_invoices(
         order: Sort direction (asc or desc).
         accounting_review: Filter by accounting review status (true = needs review).
         book_type: Filter by PDV book type (KPR or KIR).
+        client_id: Filter by assigned client (Agency feature).
 
     Returns:
         Paginated list of invoices with metadata.
@@ -772,6 +787,10 @@ async def list_invoices(
             )
         )
 
+    # Client filter (Agency feature)
+    if client_id:
+        conditions.append(Invoice.client_id == client_id)
+
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)
 
@@ -797,6 +816,7 @@ async def list_invoices(
     # Batch-load accounting review flags and book types for the returned invoices
     review_map: dict[str, bool] = {}
     book_type_map: dict[str, str | None] = {}
+    client_map: dict[str, ClientSummary] = {}
     if invoices:
         invoice_ids = [inv.id for inv in invoices]
         intent_result = await db.execute(
@@ -811,12 +831,22 @@ async def list_invoices(
             review_map[inv_id] = row.requires_review
             book_type_map[inv_id] = row.book_type
 
+        # Batch-load client summaries for invoices with client_id
+        distinct_client_ids = {inv.client_id for inv in invoices if inv.client_id}
+        if distinct_client_ids:
+            client_result = await db.execute(
+                select(Client).where(Client.id.in_(distinct_client_ids))
+            )
+            for c in client_result.scalars():
+                client_map[str(c.id)] = ClientSummary(id=c.id, name=c.name, pib=c.pib)
+
     # Build responses (no presigned URLs in list view — too expensive)
     data = [
         _build_invoice_response(
             inv,
             accounting_review_needed=review_map.get(str(inv.id)),
             pdv_book_type=book_type_map.get(str(inv.id)),
+            client_summary=client_map.get(str(inv.client_id)) if inv.client_id else None,
         )
         for inv in invoices
     ]
@@ -1351,3 +1381,71 @@ async def review_accounting_intent(
     await db.refresh(intent)
 
     return AccountingIntentResponse.model_validate(intent)
+
+
+@router.patch("/{invoice_id}/client", response_model=InvoiceResponse)
+async def assign_client(
+    invoice_id: UUID,
+    request: Request,
+    client_id: UUID | None = Query(description="Client ID to assign, or null to unassign"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> InvoiceResponse:
+    """Assign or unassign a client to an invoice.
+
+    Args:
+        invoice_id: UUID of the invoice.
+        request: HTTP request for audit context.
+        client_id: Client UUID to assign, or None to unassign.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Updated invoice with client summary.
+    """
+    invoice = await _get_invoice_or_404(invoice_id, db, user)
+
+    client_summary = None
+    if client_id is not None:
+        # Validate client belongs to same organization
+        result = await db.execute(
+            select(Client).where(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+        client = result.scalar_one_or_none()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Klijent nije pronađen",
+            )
+        client_summary = ClientSummary(id=client.id, name=client.name, pib=client.pib)
+
+    old_client_id = invoice.client_id
+    invoice.client_id = client_id
+
+    await audit.log(
+        db=db,
+        action="invoice.assign_client",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        old_values={"client_id": str(old_client_id) if old_client_id else None},
+        new_values={"client_id": str(client_id) if client_id else None},
+    )
+
+    await db.commit()
+    await db.refresh(invoice)
+
+    # Generate presigned URL
+    document_url = None
+    if invoice.document_path:
+        try:
+            document_url = await asyncio.to_thread(get_presigned_url, invoice.document_path)
+        except Exception:
+            logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
+
+    return _build_invoice_response(invoice, document_url, client_summary=client_summary)

@@ -16,6 +16,7 @@
    - 4.9 [Poslovna logika i pravila validacije](#49-poslovna-logika-i-pravila-validacije)
    - 4.10 [Sloj računovodstvene namere](#410-sloj-računovodstvene-namere)
    - 4.11 [Motor za automatizaciju pravila](#411-motor-za-automatizaciju-pravila)
+   - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -122,6 +123,7 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | Grupna obrada | Istovremena obrada više faktura | P1 |
 | Upravljanje korisnicima | Višekorisnički nalozi sa kontrolom pristupa na osnovu uloga | P1 |
 | Kontrolna tabla i analitika | Statistike korišćenja i istorija obrade | P1 |
+| Upravljanje klijentima | Upravljanje klijentima i filtriranje faktura po klijentu (Agency plan) | P1 |
 | API pristup | RESTful API za integracije sa trećim sistemima | P2 |
 | Prilagođene integracije | Webhookovi i prilagođeni šabloni izvoza | P2 |
 
@@ -135,7 +137,9 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 
 #### 2.3.2 Računovodstvena agencija
 - Obrađuje 500-5000 faktura mesečno
-- Upravlja sa više klijenata
+- Upravlja sa više klijenata putem funkcije Upravljanje klijentima (kreiranje, izmena, deaktivacija)
+- Fakture se automatski dodeljuju klijentima na osnovu PIB-a posle OCR ekstrakcije
+- Selektor klijenata u bočnom meniju za kontekstualno filtriranje faktura
 - Zahteva grupnu obradu
 - Potreban API pristup za integracije
 
@@ -1407,6 +1411,47 @@ Sistem TREBALO BI da pruži unapred pripremljene šablone pravila za česte srps
 | `large_invoice_review` | Prag pregleda faktura visokih vrednosti |
 | `new_supplier_review` | Prva faktura od novog dobavljača |
 | `foreign_supplier_review` | Pregled dobavljača van Srbije |
+
+### 4.12 Upravljanje klijentima (Agencija)
+
+Ovaj odeljak definiše funkcionalnost Upravljanja klijentima koja je dostupna isključivo organizacijama na Agency planu. Omogućava računovodstvenim agencijama da upravljaju kompanijama klijenata i filtriraju fakture po klijentu.
+
+**Kontrola pristupa:** Celokupna funkcionalnost Upravljanja klijentima je zaštićena oznakom funkcionalnosti `CLIENT_MANAGEMENT`, koja MORA biti omogućena samo za Agency plan.
+
+#### FZ-4.12.1 CRUD operacije za klijente
+| ID | FZ-4.12.1 |
+|----|-----------|
+| **Opis** | Sistem MORA da omogući korisnicima na Agency planu kreiranje, pregled, izmenu i deaktivaciju klijenata |
+| **Kreiranje** | Naziv (obavezno), PIB (obavezno, jedinstven po organizaciji, validiran format), kontakt e-pošta, adresa, napomene |
+| **Pregled** | Paginirana lista sa pretragom po nazivu ili PIB-u; podržava `?search=` i `?page=`/`?page_size=` parametre upita |
+| **Izmena** | Sva polja klijenta osim `organization_id` i `id` |
+| **Deaktivacija** | Postavlja `is_active = false`; podaci klijenta se zadržavaju za reviziju; fakture ostaju povezane |
+| **Autorizacija** | Samo korisnici u organizacijama sa omogućenom `CLIENT_MANAGEMENT` oznakom funkcionalnosti |
+
+#### FZ-4.12.2 Auto-dodela faktura na osnovu PIB-a
+| ID | FZ-4.12.2 |
+|----|-----------|
+| **Opis** | Posle OCR ekstrakcije, sistem MORA automatski dodeliti fakturu odgovarajućem klijentu na osnovu PIB-a prodavca |
+| **Logika poklapanja** | Uporedi ekstraktovani `seller.pib` sa PIB-ovima svih aktivnih klijenata u istoj organizaciji |
+| **Poklapanje pronađeno** | Postavi `invoice.client_id` na ID poklopljenog klijenta |
+| **Nema poklapanja** | Ostavi `invoice.client_id` kao NULL; faktura ostaje nedodeljena |
+| **Tajming** | Dodela se dešava tokom post-OCR obrade, pre čuvanja fakture |
+
+#### FZ-4.12.3 Filtriranje faktura po klijentu
+| ID | FZ-4.12.3 |
+|----|-----------|
+| **Opis** | Sistem MORA da podržava filtriranje faktura po `client_id` |
+| **Parametar upita** | `GET /invoices?client_id={uuid}` vraća samo fakture dodeljene tom klijentu |
+| **Bez filtera** | Kada je `client_id` izostavljen, vraćaju se sve fakture organizacije |
+| **Autorizacija** | Klijent MORA pripadati organizaciji korisnika koji šalje zahtev |
+
+#### FZ-4.12.4 Selektor klijenata u bočnom meniju
+| ID | FZ-4.12.4 |
+|----|-----------|
+| **Opis** | Sistem MORA da obezbedi selektor klijenata u bočnom meniju za korisnike na Agency planu |
+| **Ponašanje** | Izborom klijenta filtriraju se lista faktura i kontrolna tabla na fakture tog klijenta |
+| **Podrazumevano** | "Svi klijenti" prikazuje sve fakture svih klijenata |
+| **Vidljivost** | Selektor je vidljiv samo kada je `CLIENT_MANAGEMENT` oznaka funkcionalnosti omogućena |
 
 ---
 

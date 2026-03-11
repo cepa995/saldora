@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchInvoices, deleteInvoice, verifyInvoice } from '@/lib/api/invoices';
+import { useClient } from '@/contexts/ClientContext';
 import type {
   InvoiceResponse,
   InvoiceStatus,
@@ -44,6 +45,7 @@ interface UseInvoiceListReturn {
  * Manages invoice list state including filters, sorting, pagination, and selection.
  */
 export function useInvoiceList(): UseInvoiceListReturn {
+  const { selectedClientId } = useClient();
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
@@ -57,11 +59,12 @@ export function useInvoiceList(): UseInvoiceListReturn {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const load = useCallback(async (f: InvoiceFilters) => {
+  const load = useCallback(async (f: InvoiceFilters, clientId?: string | null) => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await fetchInvoices(f);
+      const filtersWithClient = clientId ? { ...f, client_id: clientId } : f;
+      const result = await fetchInvoices(filtersWithClient);
       setInvoices(result.data);
       setPagination(result.pagination);
     } catch {
@@ -72,8 +75,8 @@ export function useInvoiceList(): UseInvoiceListReturn {
   }, []);
 
   useEffect(() => {
-    load(filters);
-  }, [filters, load]);
+    load(filters, selectedClientId);
+  }, [filters, selectedClientId, load]);
 
   const setStatus = useCallback((status: InvoiceStatus | undefined) => {
     setFilters((prev) => ({ ...prev, status, page: 1 }));
@@ -145,7 +148,7 @@ export function useInvoiceList(): UseInvoiceListReturn {
     try {
       await Promise.all(ids.map((id) => verifyInvoice(id)));
       setSelectedIds(new Set());
-      load(filters);
+      load(filters, selectedClientId);
     } catch (err: unknown) {
       const apiErr = err as { message?: string; status?: number };
       if (apiErr?.status === 400 && apiErr.message?.includes("'verified'")) {
@@ -156,22 +159,22 @@ export function useInvoiceList(): UseInvoiceListReturn {
         setError(apiErr?.message || 'Greška pri verifikaciji faktura');
       }
     }
-  }, [selectedIds, filters, load]);
+  }, [selectedIds, filters, selectedClientId, load]);
 
   const batchDelete = useCallback(async () => {
     const ids = Array.from(selectedIds);
     try {
       await Promise.all(ids.map((id) => deleteInvoice(id)));
       setSelectedIds(new Set());
-      load(filters);
+      load(filters, selectedClientId);
     } catch {
       setError('Greška pri brisanju faktura');
     }
-  }, [selectedIds, filters, load]);
+  }, [selectedIds, filters, selectedClientId, load]);
 
   const refresh = useCallback(() => {
-    load(filters);
-  }, [filters, load]);
+    load(filters, selectedClientId);
+  }, [filters, selectedClientId, load]);
 
   return {
     invoices,

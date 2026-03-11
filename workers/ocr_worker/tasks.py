@@ -130,6 +130,9 @@ def process_invoice(
 
         _save_extraction_result(invoice_id, result_dict)
 
+        # Auto-assign client based on PIB matching (Agency feature)
+        _auto_assign_client(invoice_id, result_dict)
+
         # Stage: complete (100%)
         publish_progress(invoice_id, "complete", 100)
 
@@ -387,6 +390,86 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     except Exception:
         session.rollback()
         raise
+    finally:
+        session.close()
+
+
+def _auto_assign_client(invoice_id: str, result: dict[str, Any]) -> None:
+    """Auto-assign invoice to a client based on PIB matching.
+
+    Checks buyer PIB first (most common for agencies), then seller PIB.
+    Only assigns if client_id is currently NULL (won't overwrite manual assignments).
+
+    Args:
+        invoice_id: UUID of the invoice.
+        result: Extraction result dictionary.
+    """
+    from ocr_worker.database import get_session, text
+
+    invoice_data = result.get("invoice", {})
+    buyer = invoice_data.get("buyer") or {}
+    seller = invoice_data.get("seller") or {}
+
+    pibs_to_check = []
+    if buyer.get("pib"):
+        pibs_to_check.append(buyer["pib"])
+    if seller.get("pib"):
+        pibs_to_check.append(seller["pib"])
+
+    if not pibs_to_check:
+        return
+
+    session = get_session()
+    try:
+        # Get organization_id for this invoice
+        row = session.execute(
+            text("SELECT organization_id, client_id FROM invoices WHERE id = :id"),
+            {"id": invoice_id},
+        ).fetchone()
+
+        if not row or row[1] is not None:
+            # Invoice not found or already has a client assigned
+            return
+
+        org_id = str(row[0])
+
+        # Try each PIB (buyer first, then seller)
+        for pib in pibs_to_check:
+            client_row = session.execute(
+                text("""
+                    SELECT id FROM clients
+                    WHERE organization_id = :org_id
+                      AND pib = :pib
+                      AND is_active = true
+                    LIMIT 1
+                """),
+                {"org_id": org_id, "pib": pib},
+            ).fetchone()
+
+            if client_row:
+                session.execute(
+                    text("""
+                        UPDATE invoices
+                        SET client_id = :client_id, updated_at = NOW()
+                        WHERE id = :invoice_id AND client_id IS NULL
+                    """),
+                    {"client_id": str(client_row[0]), "invoice_id": invoice_id},
+                )
+                session.commit()
+                logger.info(
+                    "Auto-assigned invoice %s to client %s (PIB: %s)",
+                    invoice_id,
+                    client_row[0],
+                    pib,
+                )
+                return
+
+        logger.debug(
+            "No client match for invoice %s PIBs: %s", invoice_id, pibs_to_check
+        )
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to auto-assign client for invoice %s", invoice_id)
     finally:
         session.close()
 

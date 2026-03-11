@@ -7,7 +7,7 @@
 
 ## Overview
 
-This guide breaks the FakturaAI SRS into **9 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
+This guide breaks the FakturaAI SRS into **12 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
 
 > **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
@@ -32,7 +32,11 @@ M1: Foundation & Authentication [COMPLETED]
  │
  ├──► M9: CI/CD, Security & Production
  │
- └──► M10: Multi-Country Tax ID Validation (after M3+M4, before production launch)
+ ├──► M10: Multi-Country Tax ID Validation (after M3+M4, before production launch)
+ │
+ ├──► M11: Invoice Template Learning & LLM Cost Optimization (after M3, best after M8)
+ │
+ └──► M12: Client Management for Agencies (after M4+M8, requires multi-tenant foundation)
 ```
 
 ### Requirement Coverage
@@ -1605,6 +1609,119 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 
 ---
 
+## Milestone 12: Client Management for Agencies
+
+**Goal:** Enable accounting agencies to manage multiple clients (legal entities) within a single organization, with per-client invoice scoping, automatic client assignment during OCR processing, and frontend context switching. This supports the common Serbian accounting workflow where one agency handles bookkeeping for dozens of clients, each with their own PIB, invoices, and reporting needs.
+
+### Issues
+
+#### 12.1 — Client model, migration, and feature gating
+
+**Description:** Create the `Client` database model representing a legal entity managed by an accounting agency, add the Alembic migration, and implement feature gating so that client management is only available on qualifying subscription plans.
+
+**Requirements covered:** SRS 4.10 (multi-client management)
+
+**Tasks:**
+- Create `Client` model in `apps/api/app/models/client.py`:
+  - Fields: `id`, `organization_id` (FK), `name`, `pib`, `mb` (maticni broj), `address`, `city`, `is_active`, timestamps
+  - Indexes: `(organization_id, pib)` unique, `organization_id`
+- Create Alembic migration `0004_add_clients_table`
+- Add `CLIENT_MANAGEMENT` feature flag to `plans.py` — enabled for Professional and Enterprise tiers, disabled for Starter
+- Create feature gate dependency (`require_feature("CLIENT_MANAGEMENT")`) for use in router endpoints
+- Register model in `__init__.py`
+
+**Acceptance:** Migration runs cleanly on fresh and existing databases. Client model supports all required fields. Feature gate correctly blocks access on Starter plan and allows access on Professional/Enterprise plans.
+
+---
+
+#### 12.2 — Client CRUD API and schemas
+
+**Description:** Implement Pydantic schemas and REST API endpoints for full client lifecycle management (list, create, get, update, delete).
+
+**Requirements covered:** SRS 4.10.1 (client CRUD)
+
+**Tasks:**
+- Create Pydantic schemas in `apps/api/app/schemas/client.py`:
+  - `ClientCreate`: `name`, `pib`, `mb` (optional), `address` (optional), `city` (optional)
+  - `ClientUpdate`: all fields optional
+  - `ClientResponse`: full model with `id`, timestamps, `invoice_count`
+  - `ClientListResponse`: paginated list with `items[]`, `total`, `page`, `per_page`
+- Create `apps/api/app/routers/clients.py` with endpoints:
+  - `GET /api/v1/clients` — list clients for organization (paginated, searchable by name/PIB)
+  - `POST /api/v1/clients` — create client (validate PIB uniqueness within org)
+  - `GET /api/v1/clients/{id}` — get client details with invoice count
+  - `PUT /api/v1/clients/{id}` — update client
+  - `DELETE /api/v1/clients/{id}` — soft-delete (set `is_active = False`)
+- All endpoints gated behind `CLIENT_MANAGEMENT` feature flag
+- All endpoints scoped to authenticated user's `organization_id`
+- Register router in `apps/api/app/main.py`
+
+**Acceptance:** All CRUD endpoints work correctly, respect organization isolation, enforce PIB uniqueness within the organization, and return 403 when the feature is not available on the current plan.
+
+---
+
+#### 12.3 — Invoice-client relationship and auto-assignment
+
+**Description:** Link invoices to clients via an optional `client_id` foreign key, enable filtering invoices by client, and implement automatic client assignment during OCR processing based on buyer PIB matching.
+
+**Requirements covered:** SRS 4.10.2 (invoice-client linking), SRS 4.10.3 (auto-assignment)
+
+**Tasks:**
+- Add `client_id` (nullable FK to `clients.id`) to `Invoice` model, with Alembic migration
+- Update invoice list endpoint to accept optional `client_id` query parameter for filtering
+- Enrich invoice response schema with `client` object (id, name, pib) when `client_id` is set
+- Add `POST /api/v1/invoices/{id}/assign-client` endpoint for manual client assignment
+- Update OCR worker post-processing to auto-assign `client_id`:
+  - After extraction, match buyer PIB against organization's active clients
+  - If exactly one match found, set `client_id` automatically
+  - If no match or multiple matches, leave `client_id` null (user assigns manually)
+- Index `(organization_id, client_id)` on invoices table for efficient filtering
+
+**Acceptance:** Invoices can be filtered by client. Manual assignment works. Auto-assignment correctly matches buyer PIB to existing clients during OCR processing. Invoices with unknown buyer PIB remain unassigned.
+
+---
+
+#### 12.4 — Frontend client context, sidebar selector, and CRUD page
+
+**Description:** Add client management UI to the frontend including a client context provider, sidebar client selector for scoping views, a full CRUD management page, and scoped dashboard/invoice views.
+
+**Requirements covered:** SRS 4.10.4 (client UI)
+
+**Tasks:**
+- Create `ClientContext` provider with `selectedClientId` state, persisted to localStorage
+- Add client selector dropdown to sidebar (below organization name):
+  - "Svi klijenti" (All clients) option — shows all invoices
+  - List of active clients — selecting one scopes all views to that client
+- Create clients management page at `/{orgSlug}/clients`:
+  - Table with columns: Naziv, PIB, MB, Grad, Status, Broj faktura
+  - Create/Edit modal with form validation (PIB format, required fields)
+  - Deactivate action with confirmation dialog
+- Update `useInvoiceList` and `useDashboard` hooks to pass `client_id` filter when a client is selected
+- Add Serbian translations for all client-related labels:
+  - "Klijenti", "Novi klijent", "PIB klijenta", "Matični broj", "Svi klijenti", etc.
+
+**Acceptance:** Sidebar shows client selector on plans with client management enabled. Selecting a client scopes invoice list and dashboard metrics. Clients page supports full CRUD with Serbian labels. Context persists across page navigation.
+
+---
+
+#### 12.5 — Tests and documentation
+
+**Description:** Comprehensive test coverage for client management and documentation updates.
+
+**Tasks:**
+- Backend tests:
+  - Feature gate tests: verify 403 on Starter plan, 200 on Professional/Enterprise
+  - Client CRUD tests: create, read, update, soft-delete, PIB uniqueness enforcement
+  - Auto-assignment tests: buyer PIB match, no match, multiple match scenarios
+  - Organization isolation tests: clients from org A not visible to org B
+- Update `docs/SRS.md` with Section 4.10 (Client Management for Agencies)
+- Update `docs/IMPLEMENTATION_GUIDE.md` (this document) with Milestone 12
+- Update `docs/APPLICATION_WORKFLOW.md` with client context flow
+
+**Acceptance:** All tests pass. Feature gate, CRUD, auto-assignment, and isolation are fully covered. Documentation reflects the new client management capability.
+
+---
+
 ## Summary
 
 | Milestone | Issues | Key Deliverable |
@@ -1620,8 +1737,9 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 | **M9: CI/CD & Production** | 9.1–9.10 | CI pipeline, E2E tests, security, monitoring, K8s deployment, ZZPL compliance, API keys, OAuth, data retention |
 | **M10: Multi-Country Tax ID** | 10.1–10.4 | OIB/JIB/EU VAT validators, LLM prompt for multi-country, country-aware confidence scoring, tests |
 | **M11: Template Learning & LLM Cost Optimization** | 11.1–11.5 | Invoice layout fingerprinting, template-based extraction (LLM bypass), auto-learning from LLM outputs, cost analytics dashboard |
+| **M12: Client Management for Agencies** | 12.1–12.5 | Client model with feature gating, CRUD API, invoice-client auto-assignment via PIB, frontend client context and scoping, tests |
 
-**Total: 66 issues across 11 milestones.**
+**Total: 71 issues across 12 milestones.**
 
 ### Parallelization Opportunities
 
@@ -1635,11 +1753,12 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 - **M9.8** (API keys) and **M9.9** (OAuth) can be built in parallel
 - **M10** can start after M3 (PIB validation exists). **10.1** (validators) and **10.2** (LLM prompt) can be built in parallel. **10.3** (confidence scoring) depends on 10.1. **10.4** (tests) can start with 10.1
 - **M11** can start after M3 (OCR pipeline + LLM extraction exist). **11.1** (model) and **11.2** (fingerprinting) can be built in parallel. **11.3** (extraction) depends on both. **11.4** (learning) depends on 11.3. **11.5** (analytics) depends on 11.3. Best done after M8 is complete (needs dashboard UI)
+- **M12** can start after M4 (invoice CRUD) and M8 (frontend). **12.1** (model + feature gate) is the foundation. **12.2** (CRUD API) depends on 12.1. **12.3** (invoice-client linking) depends on 12.2. **12.4** (frontend) depends on 12.2 and can partially overlap with 12.3. **12.5** (tests) can start with 12.1 and grows with each issue
 
 ### Estimated Issue Sizing
 
 | Size | Description | Issues |
 |------|-------------|--------|
-| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4, 11.1 |
-| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3, 11.4, 11.5 |
-| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1, 11.2, 11.3 |
+| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4, 11.1, 12.1, 12.5 |
+| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3, 11.4, 11.5, 12.2 |
+| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1, 11.2, 11.3, 12.3, 12.4 |

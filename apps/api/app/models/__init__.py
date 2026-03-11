@@ -7,6 +7,7 @@ from app.models.audit_export import AuditExport
 from app.models.audit_log import AuditLog
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.base import Base
+from app.models.client import Client
 from app.models.correction_log import CorrectionLog
 from app.models.exchange_rate import ExchangeRate
 from app.models.export_template import ExportTemplate
@@ -26,6 +27,7 @@ __all__ = [
     "AuditLog",
     "AutomationRule",
     "Base",
+    "Client",
     "CorrectionLog",
     "ExchangeRate",
     "ExportTemplate",
