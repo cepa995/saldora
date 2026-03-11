@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import QuotaCheck, check_invoice_quota, get_current_user, require_role
 from app.models.accounting_intent import AccountingIntent
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
@@ -62,7 +62,7 @@ async def upload_invoice(
     file: Annotated[UploadFile, File(description="Invoice document (PDF, PNG, JPG)")],
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("operator")),
+    quota: QuotaCheck = Depends(check_invoice_quota()),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> ProcessingStatus:
@@ -71,6 +71,8 @@ async def upload_invoice(
     Accepts PDF, PNG, JPG, TIFF, WEBP formats up to 20MB.
     Returns a processing status with job ID for tracking.
     """
+    user = quota.user
+
     # Validate file type
     if file.content_type not in [
         "application/pdf",
@@ -296,7 +298,7 @@ async def _process_single_file(
 async def upload_batch(
     files: list[UploadFile],
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("operator")),
+    quota: QuotaCheck = Depends(check_invoice_quota()),
     priority: str = Query(default="normal", pattern="^(normal|high)$"),
     callback_url: str | None = None,
 ) -> list[ProcessingStatus]:
@@ -306,6 +308,28 @@ async def upload_batch(
     Each file is processed independently — invalid files are
     reported as failed without blocking valid ones.
     """
+    user = quota.user
+
+    # Check batch fits within remaining quota
+    if quota.invoice_limit is not None and quota.monthly_usage + len(files) > quota.invoice_limit:
+        from app.dependencies import _next_plan_tier
+
+        remaining = max(0, quota.invoice_limit - quota.monthly_usage)
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "detail": (
+                    f"Možete otpremiti još {remaining} faktura ovog meseca "
+                    f"({quota.plan_name} plan: {quota.invoice_limit} mesečno). "
+                    f"Nadogradite plan za nastavak."
+                ),
+                "code": "invoice_limit_exceeded",
+                "plan": quota.plan_name,
+                "limit": quota.invoice_limit,
+                "usage": quota.monthly_usage,
+                "required_plan": _next_plan_tier(quota.plan_name),
+            },
+        )
     if len(files) > MAX_BATCH_FILES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

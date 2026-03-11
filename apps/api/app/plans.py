@@ -68,13 +68,13 @@ _PRO_FEATURES: frozenset[Feature] = _BASE_FEATURES | frozenset(
         Feature.ACCOUNTING_INTENT,
         Feature.SEF_INTEGRATION,
         Feature.MINIMAX_DIRECT_PUSH,
+        Feature.AUDIT_EXPORT,
     }
 )
 
 _AGENCY_FEATURES: frozenset[Feature] = _PRO_FEATURES | frozenset(
     {
         Feature.AUTOMATION_RULES,
-        Feature.AUDIT_EXPORT,
     }
 )
 

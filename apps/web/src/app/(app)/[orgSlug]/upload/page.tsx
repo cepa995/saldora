@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied, FileUpload } from '@/components';
+import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 
 export default function UploadPage() {
   const t = useTranslations('upload');
   const { hasRole } = useAuth();
   const [hasFiles, setHasFiles] = useState(false);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
 
   if (!hasRole('operator')) {
     return <AccessDenied />;
@@ -27,7 +29,14 @@ export default function UploadPage() {
       </div>
 
       {/* Upload Component */}
-      <FileUpload onFileCountChange={(count) => setHasFiles(count > 0)} />
+      <FileUpload
+        onFileCountChange={(count) => setHasFiles(count > 0)}
+        onPlanError={setPlanError}
+      />
+
+      {planError && (
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
+      )}
 
       {/* Info Section — hidden once files are present */}
       {!hasFiles && (

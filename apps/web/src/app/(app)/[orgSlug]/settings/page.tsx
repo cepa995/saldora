@@ -13,6 +13,8 @@ import { createInvitation, fetchInvitations, revokeInvitation, type InvitationIn
 import { fetchJoinRequests, approveJoinRequest, rejectJoinRequest, type JoinRequestInfo } from '@/lib/api/join-requests';
 import { uploadLogo, deleteLogo } from '@/lib/api/organizations';
 import { Toast, type ToastType } from '@/components/Toast';
+import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
+import { isPlanError } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/formatters';
 import { useNotifications } from '@/contexts/NotificationContext';
 
@@ -477,6 +479,7 @@ function TeamTab() {
   const { members, isLoading, error, refresh } = useTeam();
   const { refreshJoinRequests } = useNotifications();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('operator');
@@ -505,9 +508,13 @@ function TeamTab() {
       showToast(t('inviteSent'), 'success');
       fetchInvitations().then(setPendingInvitations).catch(() => {});
     } catch (err) {
-      const message = err && typeof err === 'object' && 'message' in err
-        ? String(err.message) : 'Error';
-      showToast(message, 'error');
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        const message = err && typeof err === 'object' && 'message' in err
+          ? String(err.message) : 'Error';
+        showToast(message, 'error');
+      }
     } finally {
       setIsSendingInvite(false);
     }
@@ -796,6 +803,10 @@ function TeamTab() {
 
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+
+      {planError && (
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
       )}
     </div>
   );

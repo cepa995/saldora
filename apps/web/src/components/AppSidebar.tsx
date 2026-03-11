@@ -23,6 +23,7 @@ interface NavItem {
     | "billing";
   icon: React.ReactNode;
   minRole?: string;
+  planBadge?: "PRO" | "AGENCY";
 }
 
 interface NavGroup {
@@ -80,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/sef-inbox",
         labelKey: "sefInbox",
+        planBadge: "PRO",
         icon: (
           <svg
             className="w-5 h-5"
@@ -125,6 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/rules",
         labelKey: "rules",
         minRole: "manager",
+        planBadge: "AGENCY",
         icon: (
           <svg
             className="w-5 h-5"
@@ -165,6 +168,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/revizija",
         labelKey: "audit",
         minRole: "admin",
+        planBadge: "PRO",
         icon: (
           <svg
             className="w-5 h-5"
@@ -260,6 +264,7 @@ export function AppSidebar() {
     collapsed: boolean,
     mobile: boolean,
     badge?: number,
+    planBadge?: "PRO" | "AGENCY",
   ) {
     const active = isActive(href);
     return (
@@ -292,7 +297,12 @@ export function AppSidebar() {
           ) : null}
         </span>
         {!collapsed && label}
-        {!collapsed && badge ? (
+        {!collapsed && planBadge && (
+          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-600">
+            {planBadge}
+          </span>
+        )}
+        {!collapsed && !planBadge && badge ? (
           <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full">
             {badge}
           </span>
@@ -346,6 +356,8 @@ export function AppSidebar() {
                     t(item.labelKey),
                     collapsed,
                     mobile,
+                    undefined,
+                    item.planBadge,
                   ),
                 )}
               </div>

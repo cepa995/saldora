@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgPath } from "@/lib/navigation";
 import { useSefInbox } from "@/hooks/useSefInbox";
+import { UpgradeModal } from "@/components/UpgradeModal";
 import {
   formatDateSr,
   formatAmountSr,
@@ -74,6 +75,7 @@ export default function SefInboxPage() {
     filters,
     isLoading,
     error,
+    planError,
     selectedIds,
     syncStatus,
     setStatus,
@@ -155,6 +157,10 @@ export default function SefInboxPage() {
 
   const totalPages = pagination.total_pages;
   const currentPage = pagination.page;
+
+  if (planError) {
+    return <UpgradeModal error={planError} onClose={() => window.history.back()} />;
+  }
 
   return (
     <div className="space-y-6">

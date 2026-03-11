@@ -6,6 +6,8 @@ import {
   deleteRule as deleteRuleApi,
   toggleRuleActive,
 } from '@/lib/api/rules';
+import { isPlanError } from '@/lib/api-client';
+import type { PlanErrorInfo } from '@/components/UpgradeModal';
 import type {
   AutomationRuleResponse,
   RuleFilters,
@@ -17,6 +19,7 @@ interface UseRuleListReturn {
   count: number;
   isLoading: boolean;
   error: string | null;
+  planError: PlanErrorInfo | null;
   filters: RuleFilters;
   setRuleType: (ruleType: RuleType | undefined) => void;
   setActiveFilter: (isActive: boolean | undefined) => void;
@@ -33,17 +36,23 @@ export function useRuleList(): UseRuleListReturn {
   const [count, setCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
   const [filters, setFilters] = useState<RuleFilters>({});
 
   const load = useCallback(async (f: RuleFilters) => {
     setIsLoading(true);
     setError(null);
+    setPlanError(null);
     try {
       const result = await fetchRules(f);
       setRules(result.items);
       setCount(result.count);
-    } catch {
-      setError('Greška pri učitavanju pravila');
+    } catch (err) {
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        setError('Greška pri učitavanju pravila');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +79,9 @@ export function useRuleList(): UseRuleListReturn {
       try {
         await deleteRuleApi(id);
         load(filters);
-      } catch {
-        setError('Greška pri brisanju pravila');
+      } catch (err) {
+        if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+        else setError('Greška pri brisanju pravila');
       }
     },
     [filters, load],
@@ -84,8 +94,9 @@ export function useRuleList(): UseRuleListReturn {
         setRules((prev) =>
           prev.map((r) => (r.id === id ? updated : r)),
         );
-      } catch {
-        setError('Greška pri ažuriranju pravila');
+      } catch (err) {
+        if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+        else setError('Greška pri ažuriranju pravila');
       }
     },
     [],
@@ -96,6 +107,7 @@ export function useRuleList(): UseRuleListReturn {
     count,
     isLoading,
     error,
+    planError,
     filters,
     setRuleType,
     setActiveFilter,

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components';
+import { Toast } from '@/components/Toast';
 import { useBilling } from '@/hooks/useBilling';
 import { createCheckout, fetchBillingConfig } from '@/lib/api/billing';
-import { initializePaddle, openCheckout } from '@/lib/paddle';
+import { initPaddle, getPaddle, openCheckout } from '@/lib/paddle';
 
 /* -- Plan tier data ------------------------------------------------------ */
 
@@ -43,6 +44,7 @@ const PLANS = [
       'pricingFeatureAccounting',
       'pricingFeatureSef',
       'pricingFeatureMinimaxPush',
+      'pricingFeatureAuditExport',
       'pricingFeatureNbs',
     ],
     popular: true,
@@ -59,7 +61,6 @@ const PLANS = [
     features: [
       'pricingFeatureAllPro',
       'pricingFeatureAutomation',
-      'pricingFeatureAuditExport',
       'pricingFeaturePriority',
     ],
     popular: false,
@@ -151,44 +152,24 @@ export default function BillingPage() {
   const t = useTranslations('billing');
   const tLanding = useTranslations('landing');
   const tCommon = useTranslations('common');
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' } | null>(null);
   const [annual, setAnnual] = useState(true);
   const [upgrading, setUpgrading] = useState(false);
-  const paddleInitialized = useRef(false);
 
   const isAdmin = user?.role === 'admin';
 
-  // Load Paddle.js script and initialize on mount
+  // Initialize Paddle SDK on mount
   useEffect(() => {
-    if (paddleInitialized.current) return;
+    if (getPaddle()) return;
 
-    function loadAndInit() {
-      fetchBillingConfig()
-        .then((config) => {
-          if (!config.paddle_client_token) return;
-
-          // Load Paddle.js if not already present
-          if (window.Paddle) {
-            initializePaddle(config.paddle_client_token, config.paddle_environment);
-            paddleInitialized.current = true;
-            return;
-          }
-
-          const script = document.createElement('script');
-          script.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
-          script.async = true;
-          script.onload = () => {
-            initializePaddle(config.paddle_client_token, config.paddle_environment);
-            paddleInitialized.current = true;
-          };
-          document.head.appendChild(script);
-        })
-        .catch(() => {
-          // Paddle not configured — upgrade buttons will show fallback toast
-        });
-    }
-
-    loadAndInit();
+    fetchBillingConfig()
+      .then((config) => {
+        if (!config.paddle_client_token) return;
+        return initPaddle(config.paddle_client_token, config.paddle_environment);
+      })
+      .catch(() => {
+        // Paddle not configured — upgrade buttons will show fallback toast
+      });
   }, []);
 
   // Non-admin guard
@@ -207,11 +188,10 @@ export default function BillingPage() {
         customerEmail: checkout.customer_email ?? undefined,
         customerId: checkout.customer_id ?? undefined,
         customData: checkout.custom_data,
-        successUrl: `${window.location.origin}/billing?success=true`,
+        successUrl: `${window.location.origin}${window.location.pathname}?success=true`,
       });
     } catch {
-      setToast(t('comingSoonDesc'));
-      setTimeout(() => setToast(null), 4000);
+      setToast({ message: t('comingSoonDesc'), type: 'info' });
     } finally {
       setUpgrading(false);
     }
@@ -494,29 +474,7 @@ export default function BillingPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm px-5 py-3.5 bg-gray-900 text-white text-sm rounded-xl shadow-2xl border border-gray-700/50 animate-[slideUp_0.3s_ease-out]">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center shrink-0 mt-0.5">
-              <svg
-                className="w-4 h-4 text-violet-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div>
-              <p className="font-medium mb-0.5">{t('comingSoonTitle')}</p>
-              <p className="text-gray-400 text-xs">{toast}</p>
-            </div>
-          </div>
-        </div>
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
     </div>
   );

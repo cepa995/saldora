@@ -16,9 +16,10 @@ from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_feature, require_role
 from app.models.sef_invoice import SefInvoice
 from app.models.user import User
+from app.plans import Feature
 from app.schemas.sef import (
     SefInvoiceResponse,
     SefListResponse,
@@ -29,7 +30,7 @@ from app.services.sef.process import process_sef_invoice
 from app.services.sef.sync import get_sync_status, sync_sef_invoices
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_feature(Feature.SEF_INTEGRATION))])
 
 
 def _serialize_sef_invoice(inv: SefInvoice) -> SefInvoiceResponse:

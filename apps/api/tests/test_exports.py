@@ -95,8 +95,16 @@ def _mock_invoice(**kwargs) -> SimpleNamespace:
 # ---------------------------------------------------------------------------
 
 
-async def _auth_headers(client: AsyncClient) -> dict[str, str]:
-    """Register a user, create an organization, and return Authorization headers."""
+async def _auth_headers(client: AsyncClient, plan: str = "agency") -> dict[str, str]:
+    """Register a user, create an organization, set plan, and return Authorization headers.
+
+    Args:
+        client: Test HTTP client.
+        plan: Plan tier to assign (default: agency for full feature access).
+
+    Returns:
+        Authorization headers dict.
+    """
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
@@ -113,6 +121,26 @@ async def _auth_headers(client: AsyncClient) -> dict[str, str]:
         headers={"Authorization": f"Bearer {reg_token}"},
     )
     token = org_resp.json()["access_token"]
+
+    # Upgrade org plan so all export features are accessible
+    if plan != "free":
+        from app.database import get_db
+        from app.main import app as fastapi_app
+
+        db_gen = fastapi_app.dependency_overrides[get_db]()
+        db = await db_gen.__anext__()
+        from sqlalchemy import text
+
+        await db.execute(
+            text("UPDATE organizations SET plan = :plan WHERE name = 'Export Org'"),
+            {"plan": plan},
+        )
+        await db.commit()
+        try:
+            await db_gen.__anext__()
+        except StopAsyncIteration:
+            pass
+
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -134,6 +162,24 @@ async def _auth_headers_alt(client: AsyncClient) -> dict[str, str]:
         headers={"Authorization": f"Bearer {reg_token}"},
     )
     token = org_resp.json()["access_token"]
+
+    # Upgrade to agency for full feature access
+    from app.database import get_db
+    from app.main import app as fastapi_app
+
+    db_gen = fastapi_app.dependency_overrides[get_db]()
+    db = await db_gen.__anext__()
+    from sqlalchemy import text
+
+    await db.execute(
+        text("UPDATE organizations SET plan = 'agency' WHERE name = 'Other Export Org'"),
+    )
+    await db.commit()
+    try:
+        await db_gen.__anext__()
+    except StopAsyncIteration:
+        pass
+
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -1262,6 +1308,19 @@ class TestAuditExportEndpoint:
             headers={"Authorization": f"Bearer {reg_token}"},
         )
         admin_headers = {"Authorization": f"Bearer {org_resp.json()['access_token']}"}
+
+        # Set plan to agency (audit export requires AUDIT_EXPORT feature)
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+        session_factory = async_sessionmaker(
+            test_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        async with session_factory() as session:
+            await session.execute(
+                text("UPDATE organizations SET plan = 'agency' WHERE name = 'Audit Org'")
+            )
+            await session.commit()
 
         # Admin should NOT get 403
         from unittest.mock import AsyncMock, patch

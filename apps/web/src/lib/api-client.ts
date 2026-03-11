@@ -5,6 +5,14 @@ export interface ApiError {
   status: number;
   message: string;
   detail?: string;
+  planError?: {
+    detail: string;
+    code: string;
+    plan: string;
+    limit?: number;
+    usage?: number;
+    required_plan?: string;
+  };
 }
 
 let getAccessTokenFn: (() => string | null) | null = null;
@@ -24,15 +32,50 @@ export function registerAuthHandlers(handlers: {
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    const detail = body?.detail;
+
+    // Detect structured plan enforcement errors (402/403 with code field)
+    const isPlan =
+      (response.status === 402 || response.status === 403) &&
+      detail &&
+      typeof detail === "object" &&
+      typeof detail.code === "string";
+
     const error: ApiError = {
       status: response.status,
-      message: body?.detail || response.statusText,
-      detail: typeof body?.detail === "string" ? body.detail : undefined,
+      message: isPlan ? detail.detail : (typeof detail === "string" ? detail : response.statusText),
+      detail: isPlan ? detail.detail : (typeof detail === "string" ? detail : undefined),
     };
+
+    if (isPlan) {
+      error.planError = {
+        detail: detail.detail,
+        code: detail.code,
+        plan: detail.plan,
+        limit: detail.limit,
+        usage: detail.usage,
+        required_plan: detail.required_plan,
+      };
+    }
+
     throw error;
   }
   if (response.status === 204) return undefined as T;
   return response.json();
+}
+
+/**
+ * Check if an error is a plan enforcement error (quota or feature gate).
+ */
+export function isPlanError(
+  err: unknown,
+): err is ApiError & { planError: NonNullable<ApiError["planError"]> } {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "planError" in err &&
+    (err as ApiError).planError != null
+  );
 }
 
 export async function apiClient<T>(

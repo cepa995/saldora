@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, isPlanError } from '@/lib/api-client';
+import type { PlanErrorInfo } from '@/components/UpgradeModal';
 import { usePollingStatus, ProcessingStatusResponse } from '@/hooks/usePollingStatus';
 import {
   useUploadFiles,
@@ -60,6 +61,7 @@ interface FileUploadProps {
   onUploadStart?: () => void;
   onUploadComplete?: (results: BatchUploadResult[]) => void;
   onError?: (error: string) => void;
+  onPlanError?: (error: PlanErrorInfo) => void;
   onFileCountChange?: (count: number) => void;
   disabled?: boolean;
 }
@@ -94,6 +96,7 @@ export function FileUpload({
   onUploadStart,
   onUploadComplete,
   onError,
+  onPlanError,
   onFileCountChange,
   disabled = false,
 }: FileUploadProps) {
@@ -290,6 +293,13 @@ export function FileUpload({
 
       onUploadComplete?.(results);
     } catch (error) {
+      if (isPlanError(error)) {
+        setUploadFiles((prev) =>
+          prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'pending' as const } : f))
+        );
+        onPlanError?.(error.planError as PlanErrorInfo);
+        return;
+      }
       const errorMsg =
         error && typeof error === 'object' && 'message' in error
           ? String((error as { message: string }).message)

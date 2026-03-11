@@ -8,9 +8,10 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_feature, require_role
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.user import User
+from app.plans import Feature
 from app.schemas.automation_rule import (
     AutomationRuleCreate,
     AutomationRuleListResponse,
@@ -21,7 +22,7 @@ from app.schemas.automation_rule import (
 from app.services.rules_engine import get_rule_templates
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_feature(Feature.AUTOMATION_RULES))])
 
 
 @router.get("/templates")
