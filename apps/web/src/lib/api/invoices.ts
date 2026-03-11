@@ -101,6 +101,26 @@ export async function updateInvoice(
 }
 
 /**
+ * Assign or unassign a client to an invoice.
+ *
+ * Args:
+ *   invoiceId - UUID of the invoice.
+ *   clientId - UUID of the client, or null to unassign.
+ * Returns:
+ *   Updated invoice response.
+ */
+export async function assignClientToInvoice(
+  invoiceId: string,
+  clientId: string | null,
+): Promise<InvoiceResponse> {
+  const params = clientId ? `?client_id=${clientId}` : '';
+  return apiClient<InvoiceResponse>(
+    `/api/v1/invoices/${invoiceId}/client${params}`,
+    { method: 'PATCH' },
+  );
+}
+
+/**
  * Fetch accounting intent for a verified invoice.
  *
  * Args:
