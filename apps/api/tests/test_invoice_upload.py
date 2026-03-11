@@ -33,7 +33,7 @@ def _make_png(width: int = 800, height: int = 600) -> bytes:
 
 
 async def _auth_headers(client: AsyncClient) -> dict[str, str]:
-    """Register a user, create an organization, and return Authorization headers."""
+    """Register a user, create an organization (agency plan), and return Authorization headers."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
@@ -50,6 +50,22 @@ async def _auth_headers(client: AsyncClient) -> dict[str, str]:
         headers={"Authorization": f"Bearer {reg_token}"},
     )
     token = org_resp.json()["access_token"]
+
+    # Upgrade to agency plan so upload tests aren't limited by free quota
+    from app.database import get_db
+    from app.main import app as fastapi_app
+
+    db_gen = fastapi_app.dependency_overrides[get_db]()
+    db = await db_gen.__anext__()
+    from sqlalchemy import text
+
+    await db.execute(text("UPDATE organizations SET plan = 'agency' WHERE name = 'Test Org'"))
+    await db.commit()
+    try:
+        await db_gen.__anext__()
+    except StopAsyncIteration:
+        pass
+
     return {"Authorization": f"Bearer {token}"}
 
 

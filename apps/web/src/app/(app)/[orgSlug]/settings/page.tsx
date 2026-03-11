@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrgPath } from '@/lib/navigation';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useTeam } from '@/hooks/useTeam';
 import { updateProfile, changePassword } from '@/lib/api/users';
@@ -12,6 +13,8 @@ import { createInvitation, fetchInvitations, revokeInvitation, type InvitationIn
 import { fetchJoinRequests, approveJoinRequest, rejectJoinRequest, type JoinRequestInfo } from '@/lib/api/join-requests';
 import { uploadLogo, deleteLogo } from '@/lib/api/organizations';
 import { Toast, type ToastType } from '@/components/Toast';
+import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
+import { isPlanError } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/formatters';
 import { useNotifications } from '@/contexts/NotificationContext';
 
@@ -29,6 +32,7 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
   const t = useTranslations('settings');
   const { user } = useAuth();
+  const orgPath = useOrgPath();
 
   const isAdmin = user?.role === 'admin';
   const { pendingJoinRequests } = useNotifications();
@@ -37,7 +41,7 @@ export default function SettingsPage() {
   const activeTab = visibleTabs.find((tab) => tab.key === tabParam)?.key ?? 'profile';
 
   function switchTab(tab: SettingsTab) {
-    router.push(`/settings?tab=${tab}`, { scroll: false });
+    router.push(orgPath(`/settings?tab=${tab}`), { scroll: false });
   }
 
   return (
@@ -475,6 +479,7 @@ function TeamTab() {
   const { members, isLoading, error, refresh } = useTeam();
   const { refreshJoinRequests } = useNotifications();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('operator');
@@ -503,9 +508,13 @@ function TeamTab() {
       showToast(t('inviteSent'), 'success');
       fetchInvitations().then(setPendingInvitations).catch(() => {});
     } catch (err) {
-      const message = err && typeof err === 'object' && 'message' in err
-        ? String(err.message) : 'Error';
-      showToast(message, 'error');
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        const message = err && typeof err === 'object' && 'message' in err
+          ? String(err.message) : 'Error';
+        showToast(message, 'error');
+      }
     } finally {
       setIsSendingInvite(false);
     }
@@ -794,6 +803,10 @@ function TeamTab() {
 
       {toast && (
         <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+
+      {planError && (
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
       )}
     </div>
   );

@@ -12,11 +12,12 @@ from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, require_feature, require_role
 from app.models.audit_export import AuditExport
 from app.models.export_template import ExportTemplate
 from app.models.invoice import Invoice
 from app.models.minimax_config import MiniMaxConfig
+from app.plans import Feature
 from app.schemas.export import (
     AuditExportRequest,
     AuditExportResponse,
@@ -502,7 +503,11 @@ async def delete_export_template(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/audit", response_model=AuditExportResponse)
+@router.post(
+    "/audit",
+    response_model=AuditExportResponse,
+    dependencies=[Depends(require_feature(Feature.AUDIT_EXPORT))],
+)
 async def create_audit_export(
     request: AuditExportRequest,
     db: AsyncSession = Depends(get_db),
@@ -594,7 +599,10 @@ async def create_audit_export(
     )
 
 
-@router.get("/audit/preview")
+@router.get(
+    "/audit/preview",
+    dependencies=[Depends(require_feature(Feature.AUDIT_EXPORT))],
+)
 async def preview_audit_export(
     date_from: str,
     date_to: str,
@@ -630,7 +638,11 @@ async def preview_audit_export(
     return {"invoice_count": count}
 
 
-@router.get("/audit/history", response_model=list[AuditExportResponse])
+@router.get(
+    "/audit/history",
+    response_model=list[AuditExportResponse],
+    dependencies=[Depends(require_feature(Feature.AUDIT_EXPORT))],
+)
 async def list_audit_exports(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role("admin")),
@@ -686,7 +698,11 @@ async def list_audit_exports(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/minimax/push", response_model=MiniMaxPushResponse)
+@router.post(
+    "/minimax/push",
+    response_model=MiniMaxPushResponse,
+    dependencies=[Depends(require_feature(Feature.MINIMAX_DIRECT_PUSH))],
+)
 async def push_to_minimax(
     request: MiniMaxPushRequest,
     db: AsyncSession = Depends(get_db),

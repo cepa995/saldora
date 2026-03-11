@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrgPath } from "@/lib/navigation";
 import {
   fetchSefInvoice,
   processSefInvoice,
@@ -48,6 +49,7 @@ const SEF_STATUS_CONFIG: Record<
 export default function SefInvoiceDetailPage() {
   const params = useParams();
   const { hasRole } = useAuth();
+  const orgPath = useOrgPath();
   const t = useTranslations("sef");
   const tCommon = useTranslations("common");
   const id = params.id as string;
@@ -138,7 +140,7 @@ export default function SefInvoiceDetailPage() {
     return (
       <div className="space-y-6">
         <Link
-          href="/sef-inbox"
+          href={orgPath("/sef-inbox")}
           className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
         >
           <svg
@@ -194,7 +196,7 @@ export default function SefInvoiceDetailPage() {
     <div className="space-y-6">
       {/* Back link */}
       <Link
-        href="/sef-inbox"
+        href={orgPath("/sef-inbox")}
         className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
       >
         <svg
@@ -319,7 +321,7 @@ export default function SefInvoiceDetailPage() {
           )}
           {invoice.status === "processed" && invoice.processed_invoice_id && (
             <Link
-              href={`/invoices/${invoice.processed_invoice_id}`}
+              href={orgPath(`/invoices/${invoice.processed_invoice_id}`)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors"
             >
               <svg
@@ -383,7 +385,7 @@ export default function SefInvoiceDetailPage() {
                 {t("linkedInvoice")}:
               </span>
               <Link
-                href={`/invoices/${invoice.processed_invoice_id}`}
+                href={orgPath(`/invoices/${invoice.processed_invoice_id}`)}
                 className="text-sm font-medium text-violet-600 hover:text-violet-700 transition-colors"
               >
                 {invoice.processed_invoice_id}

@@ -9,6 +9,8 @@ import {
   triggerSefSync,
   fetchSefSyncStatus,
 } from "@/lib/api/sef";
+import { isPlanError } from "@/lib/api-client";
+import type { PlanErrorInfo } from "@/components/UpgradeModal";
 import type {
   SefInvoice,
   SefStatus,
@@ -32,6 +34,7 @@ interface UseSefInboxReturn {
   filters: SefFilters;
   isLoading: boolean;
   error: string | null;
+  planError: PlanErrorInfo | null;
   selectedIds: Set<string>;
   syncStatus: SefSyncStatus | null;
   setStatus: (status: SefStatus | undefined) => void;
@@ -63,6 +66,7 @@ export function useSefInbox(): UseSefInboxReturn {
   const [filters, setFilters] = useState<SefFilters>(DEFAULT_FILTERS);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [syncStatus, setSyncStatus] = useState<SefSyncStatus | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -70,12 +74,17 @@ export function useSefInbox(): UseSefInboxReturn {
   const load = useCallback(async (f: SefFilters) => {
     setIsLoading(true);
     setError(null);
+    setPlanError(null);
     try {
       const result = await fetchSefInbox(f);
       setInvoices(result.data);
       setPagination(result.pagination);
-    } catch {
-      setError("Greška pri učitavanju SEF faktura");
+    } catch (err) {
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        setError("Greška pri učitavanju SEF faktura");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -160,8 +169,9 @@ export function useSefInbox(): UseSefInboxReturn {
       setSelectedIds(new Set());
       load(filters);
       loadSyncStatus();
-    } catch {
-      setError("Greška pri obradi SEF faktura");
+    } catch (err) {
+      if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+      else setError("Greška pri obradi SEF faktura");
     }
   }, [selectedIds, filters, load, loadSyncStatus]);
 
@@ -171,8 +181,9 @@ export function useSefInbox(): UseSefInboxReturn {
       await Promise.all(ids.map((id) => rejectSefInvoice(id)));
       setSelectedIds(new Set());
       load(filters);
-    } catch {
-      setError("Greška pri odbijanju SEF faktura");
+    } catch (err) {
+      if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+      else setError("Greška pri odbijanju SEF faktura");
     }
   }, [selectedIds, filters, load]);
 
@@ -182,8 +193,9 @@ export function useSefInbox(): UseSefInboxReturn {
       await Promise.all(ids.map((id) => archiveSefInvoice(id)));
       setSelectedIds(new Set());
       load(filters);
-    } catch {
-      setError("Greška pri arhiviranju SEF faktura");
+    } catch (err) {
+      if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+      else setError("Greška pri arhiviranju SEF faktura");
     }
   }, [selectedIds, filters, load]);
 
@@ -192,8 +204,9 @@ export function useSefInbox(): UseSefInboxReturn {
       const status = await triggerSefSync();
       setSyncStatus(status);
       load(filters);
-    } catch {
-      setError("Greška pri sinhronizaciji sa SEF sistemom");
+    } catch (err) {
+      if (isPlanError(err)) setPlanError(err.planError as PlanErrorInfo);
+      else setError("Greška pri sinhronizaciji sa SEF sistemom");
     }
   }, [filters, load]);
 
@@ -208,6 +221,7 @@ export function useSefInbox(): UseSefInboxReturn {
     filters,
     isLoading,
     error,
+    planError,
     selectedIds,
     syncStatus,
     setStatus,

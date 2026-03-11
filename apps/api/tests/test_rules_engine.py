@@ -44,7 +44,7 @@ async def _register_and_login(
     email: str = "rules-test@example.com",
     password: str = "securepass123",
 ) -> dict[str, str]:
-    """Register a user, create an organization, and return auth headers."""
+    """Register a user, create an organization (agency plan), and return auth headers."""
     reg_resp = await client.post(
         "/api/v1/auth/register",
         json={
@@ -61,6 +61,24 @@ async def _register_and_login(
         headers={"Authorization": f"Bearer {reg_token}"},
     )
     token = org_resp.json()["access_token"]
+
+    # Upgrade to agency plan (rules require AUTOMATION_RULES feature)
+    from app.database import get_db
+    from app.main import app as fastapi_app
+
+    db_gen = fastapi_app.dependency_overrides[get_db]()
+    db = await db_gen.__anext__()
+    from sqlalchemy import text
+
+    await db.execute(
+        text("UPDATE organizations SET plan = 'agency' WHERE name = 'Rules Test Org'"),
+    )
+    await db.commit()
+    try:
+        await db_gen.__anext__()
+    except StopAsyncIteration:
+        pass
+
     return {"Authorization": f"Bearer {token}"}
 
 

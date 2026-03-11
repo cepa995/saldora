@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrgPath } from "@/lib/navigation";
 import { useSefInbox } from "@/hooks/useSefInbox";
+import { UpgradeModal } from "@/components/UpgradeModal";
 import {
   formatDateSr,
   formatAmountSr,
@@ -63,6 +65,7 @@ const SORTABLE_COLUMNS: { key: SefSortColumn; labelKey: string }[] = [
 export default function SefInboxPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
+  const orgPath = useOrgPath();
   const t = useTranslations("sef");
   const tCommon = useTranslations("common");
   const canWrite = hasRole("operator");
@@ -72,6 +75,7 @@ export default function SefInboxPage() {
     filters,
     isLoading,
     error,
+    planError,
     selectedIds,
     syncStatus,
     setStatus,
@@ -153,6 +157,10 @@ export default function SefInboxPage() {
 
   const totalPages = pagination.total_pages;
   const currentPage = pagination.page;
+
+  if (planError) {
+    return <UpgradeModal error={planError} onClose={() => window.history.back()} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -413,7 +421,7 @@ export default function SefInboxPage() {
                     return (
                       <tr
                         key={invoice.id}
-                        onClick={() => router.push(`/sef-inbox/${invoice.id}`)}
+                        onClick={() => router.push(orgPath(`/sef-inbox/${invoice.id}`))}
                         className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer"
                       >
                         <td
@@ -465,7 +473,7 @@ export default function SefInboxPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Link
-                            href={`/sef-inbox/${invoice.id}`}
+                            href={orgPath(`/sef-inbox/${invoice.id}`)}
                             className="text-xs font-medium text-violet-600 hover:text-violet-700 transition-colors"
                           >
                             {t("view")}
@@ -485,7 +493,7 @@ export default function SefInboxPage() {
                 return (
                   <Link
                     key={invoice.id}
-                    href={`/sef-inbox/${invoice.id}`}
+                    href={orgPath(`/sef-inbox/${invoice.id}`)}
                     className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 transition-colors"
                   >
                     <input

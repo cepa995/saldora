@@ -50,6 +50,7 @@ interface PipelineStepperProps {
   currentStatus: PipelineStatus;
   errorMessage?: string;
   invoiceId?: string;
+  orgSlug?: string;
 }
 
 type StepState = 'completed' | 'active' | 'pending' | 'waiting' | 'error';
@@ -203,7 +204,7 @@ function ConnectorLine({ leftState, rightState }: { leftState: StepState; rightS
   );
 }
 
-export function PipelineStepper({ currentStatus, errorMessage, invoiceId }: PipelineStepperProps) {
+export function PipelineStepper({ currentStatus, errorMessage, invoiceId, orgSlug }: PipelineStepperProps) {
   const t = useTranslations('upload');
   const stepStates = getStepStates(currentStatus);
 
@@ -216,7 +217,7 @@ export function PipelineStepper({ currentStatus, errorMessage, invoiceId }: Pipe
               <StepCircle
                 state={stepStates[i]}
                 index={i}
-                href={i === 3 && invoiceId ? `/invoices/${invoiceId}` : undefined}
+                href={i === 3 && invoiceId ? `${orgSlug ? `/${orgSlug}` : ''}/invoices/${invoiceId}` : undefined}
               />
 
               <span

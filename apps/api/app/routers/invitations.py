@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import hash_password
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import require_role
+from app.dependencies import check_member_quota, require_role
 from app.models.invitation import Invitation
 from app.models.organization import Organization
 from app.models.user import User
@@ -34,6 +34,7 @@ async def create_invitation(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("admin")),
+    _member_check: User = Depends(check_member_quota()),
 ) -> InvitationResponse:
     """Create an invitation to join the organization.
 

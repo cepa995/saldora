@@ -36,6 +36,7 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     payment_provider_customer_id: Mapped[str | None] = mapped_column(String(255))
     payment_provider_subscription_id: Mapped[str | None] = mapped_column(String(255))
     plan: Mapped[str] = mapped_column(String(50), default="free")
+    subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     settings: Mapped[dict] = mapped_column(JSONB, server_default="{}", default=dict)
     logo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 

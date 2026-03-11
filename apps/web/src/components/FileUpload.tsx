@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, InputHTMLAttributes 
 import { useRouter } from 'next/navigation';
 import { useDropzone, FileRejection } from 'react-dropzone';
 import { useTranslations } from 'next-intl';
-import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiClient, isPlanError } from '@/lib/api-client';
+import type { PlanErrorInfo } from '@/components/UpgradeModal';
 import { usePollingStatus, ProcessingStatusResponse } from '@/hooks/usePollingStatus';
 import {
   useUploadFiles,
@@ -59,6 +61,7 @@ interface FileUploadProps {
   onUploadStart?: () => void;
   onUploadComplete?: (results: BatchUploadResult[]) => void;
   onError?: (error: string) => void;
+  onPlanError?: (error: PlanErrorInfo) => void;
   onFileCountChange?: (count: number) => void;
   disabled?: boolean;
 }
@@ -93,11 +96,13 @@ export function FileUpload({
   onUploadStart,
   onUploadComplete,
   onError,
+  onPlanError,
   onFileCountChange,
   disabled = false,
 }: FileUploadProps) {
   const t = useTranslations('upload');
   const router = useRouter();
+  const { user } = useAuth();
   const uploadedFiles = useUploadFiles();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -119,11 +124,11 @@ export function FileUpload({
       const jobId = uploadedFiles[0].jobId;
       const timer = setTimeout(() => {
         clearUploadFiles();
-        router.push(`/invoices/${jobId}`);
+        router.push(user?.orgSlug ? `/${user.orgSlug}/invoices/${jobId}` : `/invoices/${jobId}`);
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [uploadedFiles, router]);
+  }, [uploadedFiles, router, user?.orgSlug]);
 
   const pollableJobIds = useMemo(
     () =>
@@ -288,6 +293,13 @@ export function FileUpload({
 
       onUploadComplete?.(results);
     } catch (error) {
+      if (isPlanError(error)) {
+        setUploadFiles((prev) =>
+          prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'pending' as const } : f))
+        );
+        onPlanError?.(error.planError as PlanErrorInfo);
+        return;
+      }
       const errorMsg =
         error && typeof error === 'object' && 'message' in error
           ? String((error as { message: string }).message)
@@ -539,6 +551,7 @@ export function FileUpload({
                         currentStatus={toPipelineStatus(uf.status)}
                         errorMessage={uf.error}
                         invoiceId={uf.jobId}
+                        orgSlug={user?.orgSlug ?? undefined}
                       />
 
                       {/* Progress bar for queued/processing */}

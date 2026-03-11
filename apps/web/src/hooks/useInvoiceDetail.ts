@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   fetchInvoice,
   updateInvoice,
@@ -32,6 +33,7 @@ interface UseInvoiceDetailReturn {
  */
 export function useInvoiceDetail(id: string): UseInvoiceDetailReturn {
   const router = useRouter();
+  const { user } = useAuth();
   const [invoice, setInvoice] = useState<InvoiceResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +110,7 @@ export function useInvoiceDetail(id: string): UseInvoiceDetailReturn {
     setIsDeleting(true);
     try {
       await deleteInvoice(id);
-      router.push('/invoices');
+      router.push(user?.orgSlug ? `/${user.orgSlug}/invoices` : '/invoices');
       return true;
     } catch {
       setError('Greška pri brisanju fakture');
@@ -116,7 +118,7 @@ export function useInvoiceDetail(id: string): UseInvoiceDetailReturn {
     } finally {
       setIsDeleting(false);
     }
-  }, [id, router]);
+  }, [id, router, user?.orgSlug]);
 
   const discardChanges = useCallback(() => {
     setEditedFields({});

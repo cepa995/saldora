@@ -106,8 +106,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(loggedInUser);
 
       // Redirect based on whether user has an organization
-      if (loggedInUser?.organizationId) {
-        router.push("/dashboard");
+      if (loggedInUser?.organizationId && loggedInUser?.orgSlug) {
+        router.push(`/${loggedInUser.orgSlug}/dashboard`);
       } else {
         router.push("/register/organization");
       }
@@ -143,8 +143,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       );
       setTokens(tokens);
-      setUser(extractUserFromToken(tokens.access_token));
-      router.push("/dashboard");
+      const createdUser = extractUserFromToken(tokens.access_token);
+      setUser(createdUser);
+      router.push(`/${createdUser?.orgSlug}/dashboard`);
     },
     [router],
   );

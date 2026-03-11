@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useOrgPath } from "@/lib/navigation";
 import { ScriptToggle } from "./ScriptToggle";
 
 interface NavItem {
@@ -22,6 +23,7 @@ interface NavItem {
     | "billing";
   icon: React.ReactNode;
   minRole?: string;
+  planBadge?: "PRO" | "AGENCY";
 }
 
 interface NavGroup {
@@ -79,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/sef-inbox",
         labelKey: "sefInbox",
+        planBadge: "PRO",
         icon: (
           <svg
             className="w-5 h-5"
@@ -124,6 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/rules",
         labelKey: "rules",
         minRole: "manager",
+        planBadge: "AGENCY",
         icon: (
           <svg
             className="w-5 h-5"
@@ -164,6 +168,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/revizija",
         labelKey: "audit",
         minRole: "admin",
+        planBadge: "PRO",
         icon: (
           <svg
             className="w-5 h-5"
@@ -236,6 +241,7 @@ export function AppSidebar() {
     useSidebar();
   const t = useTranslations("nav");
   const { pendingJoinRequests } = useNotifications();
+  const orgPath = useOrgPath();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -258,6 +264,7 @@ export function AppSidebar() {
     collapsed: boolean,
     mobile: boolean,
     badge?: number,
+    planBadge?: "PRO" | "AGENCY",
   ) {
     const active = isActive(href);
     return (
@@ -290,7 +297,12 @@ export function AppSidebar() {
           ) : null}
         </span>
         {!collapsed && label}
-        {!collapsed && badge ? (
+        {!collapsed && planBadge && (
+          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-600">
+            {planBadge}
+          </span>
+        )}
+        {!collapsed && !planBadge && badge ? (
           <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full">
             {badge}
           </span>
@@ -310,7 +322,7 @@ export function AppSidebar() {
             className={`flex items-center justify-center shrink-0 ${collapsed ? "px-2" : "px-4"} h-16 border-b border-gray-100`}
           >
             <Link
-              href="/dashboard"
+              href={orgPath("/dashboard")}
               className="flex items-center justify-center py-2"
             >
               {collapsed ? (
@@ -339,11 +351,13 @@ export function AppSidebar() {
               <div className={mobile ? "space-y-0.5 px-2" : "space-y-1"}>
                 {visibleItems.map((item) =>
                   renderNavLink(
-                    item.href,
+                    orgPath(item.href),
                     item.icon,
                     t(item.labelKey),
                     collapsed,
                     mobile,
+                    undefined,
+                    item.planBadge,
                   ),
                 )}
               </div>
@@ -356,7 +370,7 @@ export function AppSidebar() {
         <div className={`${mobile ? "px-2 pb-4 space-y-0.5" : "px-2 pb-4 space-y-2"} border-t ${mobile ? "border-gray-200" : "border-gray-100"} pt-2`}>
           {/* Billing */}
           {hasRole("admin") && renderNavLink(
-            "/billing",
+            orgPath("/billing"),
             BILLING_ICON,
             t("billing"),
             collapsed,
@@ -365,7 +379,7 @@ export function AppSidebar() {
 
           {/* Settings */}
           {renderNavLink(
-            "/settings",
+            orgPath("/settings"),
             SETTINGS_ICON,
             t("settings"),
             collapsed,
@@ -500,7 +514,7 @@ export function AppSidebar() {
             />
           </svg>
         </button>
-        <Link href="/dashboard" className="flex items-center mx-auto">
+        <Link href={orgPath("/dashboard")} className="flex items-center mx-auto">
           <span className="text-base font-bold gradient-text">FakturaAI</span>
         </Link>
         <div className="w-10" />

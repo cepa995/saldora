@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components';
 import { createAuditExport, fetchAuditExportHistory, previewAuditExport } from '@/lib/api/audit-export';
 import { formatDateSr, formatRelativeTime, formatFileSize } from '@/lib/formatters';
+import { isPlanError } from '@/lib/api-client';
+import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 import type { AuditExportResponse } from '@/lib/types/audit-export';
 
 // ── Status badge styles ─────────────────────────────────────────────
@@ -207,6 +209,7 @@ export default function RevizijPage() {
   // Feedback
   const [error, setError] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
 
   // Fetch preview count when dates change
   useEffect(() => {
@@ -232,8 +235,12 @@ export default function RevizijPage() {
     try {
       const data = await fetchAuditExportHistory();
       setHistory(data);
-    } catch {
-      setHistoryError(t('errorHistory'));
+    } catch (err) {
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        setHistoryError(t('errorHistory'));
+      }
     } finally {
       setHistoryLoading(false);
     }
@@ -248,6 +255,11 @@ export default function RevizijPage() {
   // Admin guard
   if (!isAdmin) {
     return <AccessDenied />;
+  }
+
+  // Plan gate — block entire page
+  if (planError) {
+    return <UpgradeModal error={planError} onClose={() => window.history.back()} />;
   }
 
   function validate(): boolean {
@@ -280,8 +292,12 @@ export default function RevizijPage() {
       setTimeout(() => setToast(null), 4000);
       setReason('');
       await loadHistory();
-    } catch {
-      setError(t('errorGenerate'));
+    } catch (err) {
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        setError(t('errorGenerate'));
+      }
     } finally {
       setGenerating(false);
     }
@@ -561,6 +577,11 @@ export default function RevizijPage() {
           </svg>
           {toast}
         </div>
+      )}
+
+      {/* Upgrade modal */}
+      {planError && (
+        <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
       )}
     </div>
   );
