@@ -28,6 +28,7 @@ class Feature(StrEnum):
     MINIMAX_DIRECT_PUSH = "minimax_direct_push"
     AUTOMATION_RULES = "automation_rules"
     AUDIT_EXPORT = "audit_export"
+    CLIENT_MANAGEMENT = "client_management"
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ _PRO_FEATURES: frozenset[Feature] = _BASE_FEATURES | frozenset(
 _AGENCY_FEATURES: frozenset[Feature] = _PRO_FEATURES | frozenset(
     {
         Feature.AUTOMATION_RULES,
+        Feature.CLIENT_MANAGEMENT,
     }
 )
 

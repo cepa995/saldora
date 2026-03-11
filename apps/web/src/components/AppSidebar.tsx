@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useClient } from "@/contexts/ClientContext";
 import { useOrgPath } from "@/lib/navigation";
 import { ScriptToggle } from "./ScriptToggle";
 
@@ -17,6 +18,7 @@ interface NavItem {
     | "invoices"
     | "sefInbox"
     | "upload"
+    | "clients"
     | "rules"
     | "templates"
     | "audit"
@@ -123,6 +125,27 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "groupTools",
     items: [
+      {
+        href: "/clients",
+        labelKey: "clients",
+        minRole: "operator",
+        planBadge: "AGENCY",
+        icon: (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
+        ),
+      },
       {
         href: "/rules",
         labelKey: "rules",
@@ -241,6 +264,7 @@ export function AppSidebar() {
     useSidebar();
   const t = useTranslations("nav");
   const { pendingJoinRequests } = useNotifications();
+  const { clients, selectedClientId, selectClient, isAgency } = useClient();
   const orgPath = useOrgPath();
 
   // Close mobile menu on route change
@@ -331,6 +355,24 @@ export function AppSidebar() {
                 <span className="text-lg font-bold gradient-text">FakturaAI</span>
               )}
             </Link>
+          </div>
+        )}
+
+        {/* Client selector (Agency only) */}
+        {isAgency && !collapsed && !mobile && clients.length > 0 && (
+          <div className="px-3 py-2 border-b border-gray-100">
+            <select
+              value={selectedClientId || ""}
+              onChange={(e) => selectClient(e.target.value || null)}
+              className="w-full px-2.5 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 truncate"
+            >
+              <option value="">{t("allClients")}</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 

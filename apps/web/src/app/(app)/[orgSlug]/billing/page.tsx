@@ -190,8 +190,12 @@ export default function BillingPage() {
         customData: checkout.custom_data,
         successUrl: `${window.location.origin}${window.location.pathname}?success=true`,
       });
-    } catch {
-      setToast({ message: t('comingSoonDesc'), type: 'info' });
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : t('comingSoonDesc');
+      setToast({ message, type: 'error' });
     } finally {
       setUpgrading(false);
     }

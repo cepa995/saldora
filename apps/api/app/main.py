@@ -13,6 +13,7 @@ from app.routers import (
     audit_logs,
     auth,
     billing,
+    clients,
     exchange_rates,
     export,
     invitations,
@@ -120,6 +121,7 @@ app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"]
 app.include_router(audit_logs.router, prefix="/api/v1/audit-logs", tags=["Audit Logs"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(rules.router, prefix="/api/v1/rules", tags=["Automation Rules"])
+app.include_router(clients.router, prefix="/api/v1/clients", tags=["Clients"])
 app.include_router(billing.router, prefix="/api/v1/billing", tags=["Billing"])
 app.include_router(organizations.router, prefix="/api/v1/organizations", tags=["Organizations"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])

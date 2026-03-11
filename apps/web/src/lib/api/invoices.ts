@@ -37,6 +37,7 @@ export async function fetchInvoices(
   if (filters.accounting_review !== undefined)
     params.set('accounting_review', String(filters.accounting_review));
   if (filters.book_type) params.set('book_type', filters.book_type);
+  if (filters.client_id) params.set('client_id', filters.client_id);
 
   const query = params.toString();
   const endpoint = query ? `/api/v1/invoices?${query}` : '/api/v1/invoices';
@@ -97,6 +98,26 @@ export async function updateInvoice(
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+}
+
+/**
+ * Assign or unassign a client to an invoice.
+ *
+ * Args:
+ *   invoiceId - UUID of the invoice.
+ *   clientId - UUID of the client, or null to unassign.
+ * Returns:
+ *   Updated invoice response.
+ */
+export async function assignClientToInvoice(
+  invoiceId: string,
+  clientId: string | null,
+): Promise<InvoiceResponse> {
+  const params = clientId ? `?client_id=${clientId}` : '';
+  return apiClient<InvoiceResponse>(
+    `/api/v1/invoices/${invoiceId}/client${params}`,
+    { method: 'PATCH' },
+  );
 }
 
 /**

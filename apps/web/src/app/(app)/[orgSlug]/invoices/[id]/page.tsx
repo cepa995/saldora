@@ -5,6 +5,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useClient } from '@/contexts/ClientContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -14,7 +15,7 @@ import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { ExportDialog } from '@/components/ExportDialog';
 import { formatAmountSr } from '@/lib/formatters';
-import { fetchAccountingIntent, reviewAccountingIntent } from '@/lib/api/invoices';
+import { assignClientToInvoice, fetchAccountingIntent, reviewAccountingIntent } from '@/lib/api/invoices';
 import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
@@ -26,6 +27,7 @@ export default function InvoiceDetailPage({
 }) {
   const { id } = use(params);
   const { hasRole } = useAuth();
+  const { isAgency, clients } = useClient();
   const orgPath = useOrgPath();
   const t = useTranslations('detail');
   const tCommon = useTranslations('common');
@@ -45,7 +47,9 @@ export default function InvoiceDetailPage({
     verify,
     remove,
     discardChanges,
+    refresh,
   } = useInvoiceDetail(id);
+  const [isAssigningClient, setIsAssigningClient] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -156,6 +160,22 @@ export default function InvoiceDetailPage({
       setIsReviewingIntent(false);
     }
   }, [id, t]);
+
+  const handleClientAssign = useCallback(async (clientId: string | null) => {
+    setIsAssigningClient(true);
+    try {
+      await assignClientToInvoice(id, clientId);
+      refresh();
+      setToast({
+        message: clientId ? t('clientAssigned') : t('clientUnassigned'),
+        type: 'success',
+      });
+    } catch {
+      setToast({ message: t('clientAssignError'), type: 'error' });
+    } finally {
+      setIsAssigningClient(false);
+    }
+  }, [id, refresh, t]);
 
   const handleDelete = useCallback(async () => {
     setShowDeleteConfirm(false);
@@ -291,6 +311,23 @@ export default function InvoiceDetailPage({
               </>
             )}
           </div>
+
+          {/* Client selector (Agency only) */}
+          {isAgency && canWrite && (
+            <select
+              value={invoice.client_id ?? ''}
+              onChange={(e) => handleClientAssign(e.target.value || null)}
+              disabled={isAssigningClient || isProcessing}
+              className="hidden sm:block text-sm border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50 max-w-[200px] truncate"
+            >
+              <option value="">{t('noClient')}</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.pib})
+                </option>
+              ))}
+            </select>
+          )}
 
           <div className="flex items-center gap-2 shrink-0">
             {canWrite && canVerify && (

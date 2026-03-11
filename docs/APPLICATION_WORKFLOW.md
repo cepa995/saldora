@@ -683,7 +683,90 @@ Each log entry records: who (user), what (action), when (timestamp), where (IP a
 
 ---
 
-## 15. Key Design Decisions
+## 15. Client Management (Agency Feature)
+
+**Goal:** Enable accounting agencies to manage multiple client companies within a single organization and automatically associate invoices with the correct client.
+
+Client Management is available exclusively on the Agency plan (€199/mo). Organizations on lower plans receive a 403 error when attempting to access client endpoints.
+
+### 15.1 Client Setup
+
+Agency administrators create client companies via the Clients page. Each client record includes:
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Client company name |
+| **PIB** | Tax identification number (unique within the organization) |
+| **MB** | Matični broj (company registration number) |
+| **Address** | Street address, city, postal code |
+| **Contact info** | Email, phone, contact person |
+
+A client's PIB must be unique within the organization — two clients cannot share the same PIB.
+
+### 15.2 Auto-Assignment
+
+When an invoice is processed through OCR and field extraction, the system automatically attempts to match the invoice to a client:
+
+```
+Invoice processed ──► Extract buyer PIB and seller PIB
+                              │
+                              ▼
+                    Check buyer PIB against active clients
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+                  Match              No match
+                    │                   │
+                    ▼                   ▼
+              Assign client     Check seller PIB against active clients
+                                        │
+                                ┌───────┴───────┐
+                                │               │
+                              Match          No match
+                                │               │
+                                ▼               ▼
+                          Assign client    No client assigned
+```
+
+**Priority:** Buyer PIB is checked first. If no match is found, seller PIB is checked. This order reflects the typical agency workflow where the agency's clients are usually the buyers on incoming invoices.
+
+### 15.3 Client Context Selector
+
+Agency users see a client selector dropdown in the sidebar. Selecting a client scopes the view:
+
+- **Dashboard statistics** — totals, counts, and charts reflect only the selected client's invoices
+- **Invoice list** — filtered to show only invoices assigned to the selected client
+- **Clearing the selector** — returns to the organization-wide view showing all invoices
+
+This allows agency staff to quickly switch between client contexts without navigating away from their current page.
+
+### 15.4 Manual Assignment
+
+Users can manually assign or unassign a client to any invoice via the `PATCH /{invoice_id}/client` endpoint:
+
+| Action | Request |
+|--------|---------|
+| **Assign client** | `PATCH /{invoice_id}/client` with `{ "client_id": "..." }` |
+| **Unassign client** | `PATCH /{invoice_id}/client` with `{ "client_id": null }` |
+
+Manual assignment overrides any auto-assignment. This is useful when:
+- The auto-assignment matched the wrong client
+- An invoice has no extractable PIB but belongs to a known client
+- The user wants to reassign an invoice to a different client
+
+### 15.5 Feature Gating
+
+| Plan | Client Management Access |
+|------|-------------------------|
+| **Starter** (€49/mo) | Not available — 403 Forbidden |
+| **Professional** (€99/mo) | Not available — 403 Forbidden |
+| **Agency** (€199/mo) | Full access — create clients, auto-assignment, context selector |
+
+Attempting to access any client endpoint (`/clients`, `/{invoice_id}/client`) on a non-agency plan returns a 403 error with a clear message indicating that the feature requires an Agency plan upgrade.
+
+---
+
+## 16. Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
@@ -699,4 +782,4 @@ Each log entry records: who (user), what (action), when (timestamp), where (IP a
 
 ---
 
-*This document describes FakturaAI through Milestone 7 (External Integrations). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+*This document describes FakturaAI through Milestone 9 (Client Management). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*

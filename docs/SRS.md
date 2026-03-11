@@ -1,8 +1,8 @@
 # Software Requirements Specification (SRS)
 # FakturaAI - AI-Powered Invoice Processing Platform
 
-**Version:** 2.2
-**Date:** February 2026
+**Version:** 2.5
+**Date:** March 2026
 **Status:** Draft
 
 ---
@@ -16,6 +16,7 @@
    - 4.9 [Business Logic & Validation Rules](#49-business-logic--validation-rules)
    - 4.10 [Accounting Intent Layer](#410-accounting-intent-layer)
    - 4.11 [Automation Rules Engine](#411-automation-rules-engine)
+   - 4.12 [Client Management (Agency)](#412-client-management-agency)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
@@ -124,6 +125,7 @@ FakturaAI operates as a standalone web application with the following integratio
 | Batch Processing | Process multiple invoices simultaneously | P1 |
 | User Management | Multi-user accounts with role-based access | P1 |
 | Dashboard & Analytics | Usage statistics and processing history | P1 |
+| Client Management | Manage clients and scope invoices per client (Agency plan) | P1 |
 | API Access | RESTful API for third-party integrations | P2 |
 | Custom Integrations | Webhooks and custom export templates | P2 |
 
@@ -137,7 +139,9 @@ FakturaAI operates as a standalone web application with the following integratio
 
 #### 2.3.2 Accounting Agency
 - Processes 500-5000 invoices/month
-- Manages multiple clients
+- Manages multiple clients via Client Management (create, update, soft-delete)
+- Invoices auto-assigned to clients via PIB matching after OCR
+- Sidebar client selector for context-based invoice scoping
 - Requires batch processing
 - Needs API access for integration
 
@@ -1626,6 +1630,47 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 | `new_supplier_review` | First invoice from new supplier |
 | `foreign_supplier_review` | Non-Serbian supplier review |
 
+### 4.12 Client Management (Agency)
+
+This section defines the Client Management feature available exclusively to organizations on the Agency plan. It enables accounting agencies to manage their client companies and scope invoices per client.
+
+**Feature Gate:** The entire Client Management feature is gated behind the `CLIENT_MANAGEMENT` feature flag, which MUST be enabled only for the Agency plan.
+
+#### FR-4.12.1 Client CRUD
+| ID | FR-4.12.1 |
+|----|-----------|
+| **Description** | System MUST allow Agency-plan users to create, list, update, and soft-delete clients |
+| **Create** | Name (required), PIB (required, unique per organization, validated format), contact email, address, notes |
+| **List** | Paginated list with search by name or PIB; supports `?search=` and `?page=`/`?page_size=` query params |
+| **Update** | All client fields except `organization_id` and `id` |
+| **Soft-Delete** | Sets `is_active = false`; client data retained for audit; invoices remain linked |
+| **Authorization** | Only users in organizations with `CLIENT_MANAGEMENT` feature flag enabled |
+
+#### FR-4.12.2 Invoice Auto-Assignment via PIB Matching
+| ID | FR-4.12.2 |
+|----|-----------|
+| **Description** | After OCR extraction, the system MUST automatically assign an invoice to the matching client based on the seller PIB |
+| **Matching Logic** | Compare extracted `seller.pib` against all active clients' PIBs within the same organization |
+| **Match Found** | Set `invoice.client_id` to the matched client's ID |
+| **No Match** | Leave `invoice.client_id` as NULL; invoice remains unassigned |
+| **Timing** | Assignment occurs during the post-OCR processing pipeline, before the invoice is saved |
+
+#### FR-4.12.3 Invoice Scoping by Client
+| ID | FR-4.12.3 |
+|----|-----------|
+| **Description** | System MUST support filtering invoices by `client_id` |
+| **Query Parameter** | `GET /invoices?client_id={uuid}` returns only invoices assigned to that client |
+| **No Filter** | When `client_id` is omitted, all organization invoices are returned |
+| **Authorization** | Client MUST belong to the requesting user's organization |
+
+#### FR-4.12.4 Client Selector in Sidebar
+| ID | FR-4.12.4 |
+|----|-----------|
+| **Description** | System MUST provide a client selector in the sidebar for Agency-plan users |
+| **Behavior** | Selecting a client filters the invoice list and dashboard to that client's invoices |
+| **Default** | "Svi klijenti" (All clients) shows all invoices across all clients |
+| **Visibility** | The selector is only visible when `CLIENT_MANAGEMENT` feature flag is enabled |
+
 ---
 
 ## 5. Non-Functional Requirements
@@ -1828,13 +1873,14 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 ├─────────────────────┤                             ├─────────────────┤
 │ id (PK)             │                             │ id (PK)         │
 │ organization_id(FK) │                             │ organization_id │
-│ status              │                             │ user_id (FK)    │
-│ invoice_number      │                             │ key_hash        │
-│ invoice_date        │                             │ name            │
-│ due_date            │                             │ permissions     │
-│ seller (JSON)       │  ← {pib, mb, name, ...}    │ last_used       │
-│ buyer (JSON)        │  ← {pib, mb, name, ...}    │ expires_at      │
-│ subtotal            │                             └─────────────────┘
+│ client_id (FK)      │  ← nullable                │ user_id (FK)    │
+│ status              │                             │ key_hash        │
+│ invoice_number      │                             │ name            │
+│ invoice_date        │                             │ permissions     │
+│ due_date            │                             │ last_used       │
+│ seller (JSON)       │  ← {pib, mb, name, ...}    │ expires_at      │
+│ buyer (JSON)        │  ← {pib, mb, name, ...}    └─────────────────┘
+│ subtotal            │
 │ tax_rate            │
 │ tax_amount          │
 │ total_amount        │
@@ -1851,6 +1897,21 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 │ processing_time_ms  │
 │ raw_ocr_text        │
 │ raw_llm_output      │
+│ created_at          │
+│ updated_at          │
+└─────────────────────┘
+
+┌─────────────────────┐
+│      clients        │  ← Agency plan only
+├─────────────────────┤
+│ id (PK)             │
+│ organization_id(FK) │
+│ name                │
+│ pib                 │  ← unique per org
+│ contact_email       │
+│ address             │
+│ notes               │
+│ is_active           │
 │ created_at          │
 │ updated_at          │
 └─────────────────────┘
@@ -1922,6 +1983,7 @@ Seller/buyer data, line items, and tax groups are stored as JSON columns directl
 CREATE TABLE invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id),
+    client_id UUID REFERENCES clients(id),  -- nullable; set via PIB matching
 
     status VARCHAR(20) NOT NULL DEFAULT 'processing',
 
@@ -1968,11 +2030,33 @@ CREATE TABLE invoices (
 );
 
 CREATE INDEX idx_invoices_organization ON invoices(organization_id);
+CREATE INDEX idx_invoices_client ON invoices(client_id);
 CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_invoices_date ON invoices(invoice_date);
 ```
 
 **Note:** The `companies` and `documents` tables described in earlier SRS versions have been replaced by inline JSON columns (`seller`, `buyer`) and direct storage fields (`document_hash`, `document_path`, `document_content_type`) on the invoices table. A standalone `companies` table may be reintroduced for APR verification caching in a future milestone.
+
+#### 7.2.4 clients
+```sql
+CREATE TABLE clients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id),
+    name VARCHAR(255) NOT NULL,
+    pib VARCHAR(20) NOT NULL,
+    contact_email VARCHAR(255),
+    address TEXT,
+    notes TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    CONSTRAINT uq_clients_org_pib UNIQUE (organization_id, pib)
+);
+
+CREATE INDEX idx_clients_organization ON clients(organization_id);
+CREATE INDEX idx_clients_pib ON clients(pib);
+```
 
 ---
 
@@ -4087,6 +4171,7 @@ async def fetch_nbs_exchange_rates():
 | Invoice View | Side-by-side document and data |
 | Invoice List | Filterable, sortable table |
 | Export | Format selection, field mapping |
+| Clients | Client list, create/edit client (Agency plan only) |
 | Settings | Profile, team, API keys |
 | Billing | Plan selection, usage, invoices |
 
@@ -4269,6 +4354,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.2 | February 2026 | FakturaAI Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
 | 2.3 | March 2026 | FakturaAI Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
 | 2.4 | March 2026 | FakturaAI Team | Added Invoice Template Learning & LLM Cost Optimization spec (9.9): layout fingerprinting, template storage model, template-based field extraction with three-tier fallback chain, automatic template learning from LLM extractions, cost tracking metrics. |
+| 2.5 | March 2026 | FakturaAI Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
 
 ---
 

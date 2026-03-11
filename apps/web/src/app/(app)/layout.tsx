@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
+import { ClientProvider } from '@/contexts/ClientContext';
 import { AppSidebar } from '@/components/AppSidebar';
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
@@ -51,7 +52,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <NotificationProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
+        <ClientProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </ClientProvider>
       </NotificationProvider>
     </SidebarProvider>
   );
