@@ -312,7 +312,7 @@ export default function InvoiceDetailPage({
             )}
           </div>
 
-          {/* Client selector (Agency only) */}
+          {/* Client selector — desktop (Agency only) */}
           {isAgency && canWrite && (
             <select
               value={invoice.client_id ?? ''}
@@ -394,6 +394,23 @@ export default function InvoiceDetailPage({
             <span className="text-xs text-gray-400">{t('confidence')}</span>
             <ConfidenceBadge confidence={invoice.confidence_score} />
           </div>
+        )}
+
+        {/* Client selector — mobile (Agency only) */}
+        {isAgency && canWrite && (
+          <select
+            value={invoice.client_id ?? ''}
+            onChange={(e) => handleClientAssign(e.target.value || null)}
+            disabled={isAssigningClient || isProcessing}
+            className="sm:hidden w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50"
+          >
+            <option value="">{t('noClient')}</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.pib})
+              </option>
+            ))}
+          </select>
         )}
       </div>
 

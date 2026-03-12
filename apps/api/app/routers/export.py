@@ -35,6 +35,7 @@ from app.schemas.minimax import (
     MiniMaxPushResponse,
     MiniMaxPushResult,
 )
+from app.schemas.pdv_books import PdvBookPreviewResponse, PdvBookRequest
 from app.services.export.audit import AUDIT_URL_EXPIRY, generate_audit_export
 from app.services.export.core import (
     VALID_FIELD_KEYS,
@@ -44,6 +45,11 @@ from app.services.export.core import (
 from app.services.export.csv_gen import generate_csv
 from app.services.export.json_gen import generate_json
 from app.services.export.minimax_xml import generate_minimax_xml
+from app.services.export.pdv_books import (
+    fetch_pdv_book_entries,
+    generate_pdv_book_csv,
+    generate_pdv_book_xlsx,
+)
 from app.services.export.xlsx import generate_xlsx
 from app.services.minimax.client import MiniMaxClient, MiniMaxError
 from app.services.minimax.mapper import map_invoice_to_received
@@ -496,6 +502,103 @@ async def delete_export_template(
 
     await db.delete(template)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# PDV Books (KPR / KIR)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/pdv-books/preview",
+    response_model=PdvBookPreviewResponse,
+    dependencies=[Depends(require_feature(Feature.PDV_BOOKS))],
+)
+async def preview_pdv_book(
+    book_type: str,
+    period: str,
+    client_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("operator")),
+) -> PdvBookPreviewResponse:
+    """Preview entry count for a KPR/KIR book period.
+
+    Args:
+        book_type: KPR or KIR.
+        period: Period in YYYY-MM format.
+        client_id: Optional client filter for agency users.
+
+    Returns:
+        Entry count, period, and book type.
+    """
+    if book_type not in ("KPR", "KIR"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tip knjige mora biti KPR ili KIR",
+        )
+
+    entries = await fetch_pdv_book_entries(
+        db, current_user.organization_id, period, book_type, client_id
+    )
+    return PdvBookPreviewResponse(
+        entry_count=len(entries),
+        period=period,
+        book_type=book_type,
+    )
+
+
+@router.post(
+    "/pdv-books",
+    dependencies=[Depends(require_feature(Feature.PDV_BOOKS))],
+)
+async def generate_pdv_book(
+    request: PdvBookRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("operator")),
+) -> StreamingResponse:
+    """Generate a KPR or KIR book for a given period.
+
+    Streams the file as XLSX or CSV with proper Serbian headers and totals.
+
+    Args:
+        request: Book type, period, format, and optional client filter.
+
+    Returns:
+        StreamingResponse with the generated file.
+    """
+    entries = await fetch_pdv_book_entries(
+        db,
+        current_user.organization_id,
+        request.period,
+        request.book_type,
+        request.client_id,
+    )
+
+    if request.format == "xlsx":
+        buffer = generate_pdv_book_xlsx(entries, request.book_type, request.period)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ext = "xlsx"
+    else:
+        buffer = generate_pdv_book_csv(entries, request.book_type, request.period)
+        content_type = "text/csv; charset=utf-8"
+        ext = "csv"
+
+    filename = f"{request.book_type}_{request.period}.{ext}"
+
+    logger.info(
+        "PDV book generated: type=%s, period=%s, entries=%d, format=%s, user=%s",
+        request.book_type,
+        request.period,
+        len(entries),
+        request.format,
+        current_user.id,
+    )
+
+    return StreamingResponse(
+        buffer,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ---------------------------------------------------------------------------

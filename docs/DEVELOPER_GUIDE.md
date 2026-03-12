@@ -898,7 +898,7 @@
   |--------|--------|------|-----------|
   | Auth | `/api/v1/auth` | `routers/auth.py` | register, login, refresh, logout, password-reset |
   | Invoices | `/api/v1/invoices` | `routers/invoices.py` | upload, batch upload, CRUD, status, verify |
-  | Export | `/api/v1/export` | `routers/export.py` | create export, templates, audit export |
+  | Export | `/api/v1/export` | `routers/export.py` | create export, templates, audit export, PDV books (KPR/KIR) |
   | Webhooks | `/api/v1/webhooks` | `routers/webhooks.py` | Stripe, APR |
 
   **Example: The upload endpoint (with full annotations):**
@@ -1002,6 +1002,8 @@
   POST /api/v1/export                       → Export invoices (XLSX, CSV, JSON)
   GET  /api/v1/export/templates             → List export templates
   POST /api/v1/export/audit                 → Tax audit export (ZIP archive)
+  GET  /api/v1/export/pdv-books/preview     → Preview PDV book entry count (Pro+)
+  POST /api/v1/export/pdv-books             → Generate PDV book (KPR/KIR) as XLSX/CSV (Pro+)
 
   POST /api/v1/webhooks/stripe              → Stripe payment events
   POST /api/v1/webhooks/apr                 → APR data updates
@@ -2102,6 +2104,7 @@
   | Processing status | `app/routers/invoices.py` | Celery result backend |
   | Export (XLSX/CSV/JSON) | `app/routers/export.py` | Models, storage |
   | Audit export | `app/routers/export.py` | Models, storage |
+  | PDV books (KPR/KIR) | `app/routers/export.py`, `app/services/export/pdv_books.py` | AccountingIntent, plans |
   | Stripe webhooks | `app/routers/webhooks.py` | Stripe SDK |
   | APR company lookup | `app/services/apr.py` | httpx, Redis cache |
   | Tests | `tests/` directory | All of the above |

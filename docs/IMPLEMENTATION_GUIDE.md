@@ -7,7 +7,7 @@
 
 ## Overview
 
-This guide breaks the FakturaAI SRS into **12 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
+This guide breaks the FakturaAI SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
 
 > **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
@@ -36,7 +36,9 @@ M1: Foundation & Authentication [COMPLETED]
  │
  ├──► M11: Invoice Template Learning & LLM Cost Optimization (after M3, best after M8)
  │
- └──► M12: Client Management for Agencies (after M4+M8, requires multi-tenant foundation)
+ ├──► M12: Client Management for Agencies (after M4+M8, requires multi-tenant foundation)
+ │
+ └──► M13: PDV Book Generation (after M5+M6+M12, requires AccountingIntent + export infra)
 ```
 
 ### Requirement Coverage
@@ -1722,6 +1724,94 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 
 ---
 
+## Milestone 13: PDV Book Generation (KPR/KIR)
+
+**Goal:** Enable automatic generation of KPR (Knjiga Primljenih Računa) and KIR (Knjiga Izdatih Računa) books — legally required Serbian PDV (VAT) registers. Data already exists in `AccountingIntent.pdv_book_entries` (populated during invoice verification). This milestone adds backend endpoints and a frontend page for generating downloadable KPR/KIR books for a given month, with proper Serbian column headers, totals row, and PP-PDV field summaries. Most Serbian businesses maintain these books manually in Excel, so automatic generation from verified invoices is a major value add.
+
+### Issues
+
+#### 13.1 — PDV book generation service and API endpoints
+
+**Description:** Create the backend service that queries `AccountingIntent.pdv_book_entries` for a given organization, period, and book type, then generates XLSX or CSV exports with proper Serbian column headers, data rows, and a totals row that maps directly to PP-PDV form fields.
+
+**Requirements covered:** SRS 4.8 (PDV book generation), SRS 6.1 (export functionality)
+
+**Tasks:**
+- Create `apps/api/app/services/export/pdv_books.py`:
+  - `fetch_pdv_book_entries()` — query AccountingIntent JSONB for org/period/book_type, optional client_id filter, ordered by sequence
+  - `generate_pdv_book_xlsx()` — XLSX with Serbian column headers, data rows, bold totals row, number formatting
+  - `generate_pdv_book_csv()` — CSV with semicolon delimiter, comma decimal separator, UTF-8 BOM, Excel `sep=;` hint
+  - `_flatten_entry()` — extract pp_pdv_fields into top-level keys
+  - `_compute_totals()` — sum numeric columns
+  - KPR columns: R.br., Datum prijema, Datum fakture, Broj fakture, Naziv dobavljača, PIB dobavljača, Ukupno sa PDV, Osnovica 20%, PDV 20%, Osnovica 10%, PDV 10%, Polje 8/8a/9 PP-PDV
+  - KIR columns: same structure with Kupac headers and Polje 3/4/6/6a PP-PDV
+- Create `apps/api/app/schemas/pdv_books.py`:
+  - `PdvBookRequest` — book_type (KPR/KIR), period (YYYY-MM validated), format (xlsx/csv), client_id (optional)
+  - `PdvBookPreviewResponse` — entry_count, period, book_type
+- Add `PDV_BOOKS` feature to `apps/api/app/plans.py` — enabled for Pro and Agency plans
+- Add endpoints to `apps/api/app/routers/export.py`:
+  - `GET /api/v1/export/pdv-books/preview` — returns entry count for period (feature-gated, operator role)
+  - `POST /api/v1/export/pdv-books` — generates and streams XLSX/CSV file (feature-gated, operator role)
+- Reuse styling from `apps/api/app/services/export/xlsx.py` (HEADER_FONT, HEADER_FILL, THIN_BORDER)
+
+**Acceptance:** Pro/Agency users can preview entry counts and generate KPR/KIR books in XLSX and CSV formats. Free/Starter users get 403. Totals row maps correctly to PP-PDV form fields. CSV uses Serbian locale conventions (semicolon delimiter, comma decimal separator).
+
+---
+
+#### 13.2 — Frontend PDV Books page
+
+**Description:** Create the PDV knjige page with book type selection, period picker, format selector, agency client filter, preview count, and file download.
+
+**Requirements covered:** SRS 4.8 (PDV book UI)
+
+**Tasks:**
+- Create `apps/web/src/app/(app)/[orgSlug]/pdv-knjige/page.tsx`:
+  - Book type toggle: KPR / KIR (segmented control with short/full labels for mobile/desktop)
+  - Period selector: Month + Year dropdowns (default: current month)
+  - Client selector: Only shown for Agency users (from `useClient()` context)
+  - Format selector: XLSX (default) / CSV
+  - Preview count: fetched from preview endpoint, shown as info badge
+  - Generate button: triggers download via Blob URL
+  - Tips & Tricks section: 5 practical tips for PDV book usage
+  - Plan gating: UpgradeModal for non-qualifying plans
+- Create `apps/web/src/lib/api/pdv-books.ts`:
+  - `previewPdvBook()` — JSON preview endpoint
+  - `generatePdvBook()` — binary file download
+- Add "PDV knjige" nav item to `AppSidebar.tsx` in groupTools with book icon and PRO badge
+- Add i18n keys to all 3 message files (en, sr-Latn, sr-Cyrl):
+  - `nav.pdvBooks` — navigation label
+  - `pdvBooks.*` — full namespace with title, description, labels, tips, month names
+
+**Acceptance:** PDV knjige page renders correctly on desktop and mobile. Users can select parameters and generate/download KPR/KIR books. Agency users see client filter. Free users see upgrade prompt.
+
+---
+
+#### 13.3 — Tests
+
+**Description:** Comprehensive test coverage for PDV book generation service and API endpoints.
+
+**Tasks:**
+- Unit tests in `apps/api/tests/test_pdv_books.py`:
+  - `test_flatten_entry_kpr` — KPR entry flattens pp_pdv_fields correctly
+  - `test_flatten_entry_kir` — KIR entry flattens pp_pdv_fields correctly
+  - `test_compute_totals` — column totals sum numeric fields
+  - `test_generate_xlsx_kpr` — XLSX has correct sheet name, headers, data, totals
+  - `test_generate_xlsx_kir` — XLSX KIR has Kupac headers
+  - `test_generate_xlsx_empty` — empty entries produce valid file
+  - `test_generate_csv_kpr` — CSV has semicolons, quoting, sep hint
+  - `test_generate_csv_decimal_comma` — CSV uses comma decimal separator
+- API tests:
+  - `test_free_user_blocked_from_pdv_books` — free plan gets 403
+  - `test_pro_user_can_preview` — pro plan gets 200 with correct response
+  - `test_preview_invalid_book_type` — invalid book type returns 400
+  - `test_generate_empty_xlsx` — empty XLSX generation returns valid file
+  - `test_generate_empty_csv` — empty CSV generation returns valid file
+  - `test_invalid_period_format` — invalid period returns 422
+
+**Acceptance:** All 14 tests pass. Feature gating, generation formats, and edge cases are fully covered.
+
+---
+
 ## Summary
 
 | Milestone | Issues | Key Deliverable |
@@ -1738,8 +1828,9 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 | **M10: Multi-Country Tax ID** | 10.1–10.4 | OIB/JIB/EU VAT validators, LLM prompt for multi-country, country-aware confidence scoring, tests |
 | **M11: Template Learning & LLM Cost Optimization** | 11.1–11.5 | Invoice layout fingerprinting, template-based extraction (LLM bypass), auto-learning from LLM outputs, cost analytics dashboard |
 | **M12: Client Management for Agencies** | 12.1–12.5 | Client model with feature gating, CRUD API, invoice-client auto-assignment via PIB, frontend client context and scoping, tests |
+| **M13: PDV Book Generation (KPR/KIR)** | 13.1–13.3 | PDV book service (XLSX/CSV), preview + generate endpoints, frontend page with period/format/client selection, tests |
 
-**Total: 71 issues across 12 milestones.**
+**Total: 74 issues across 13 milestones.**
 
 ### Parallelization Opportunities
 
@@ -1754,11 +1845,12 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 - **M10** can start after M3 (PIB validation exists). **10.1** (validators) and **10.2** (LLM prompt) can be built in parallel. **10.3** (confidence scoring) depends on 10.1. **10.4** (tests) can start with 10.1
 - **M11** can start after M3 (OCR pipeline + LLM extraction exist). **11.1** (model) and **11.2** (fingerprinting) can be built in parallel. **11.3** (extraction) depends on both. **11.4** (learning) depends on 11.3. **11.5** (analytics) depends on 11.3. Best done after M8 is complete (needs dashboard UI)
 - **M12** can start after M4 (invoice CRUD) and M8 (frontend). **12.1** (model + feature gate) is the foundation. **12.2** (CRUD API) depends on 12.1. **12.3** (invoice-client linking) depends on 12.2. **12.4** (frontend) depends on 12.2 and can partially overlap with 12.3. **12.5** (tests) can start with 12.1 and grows with each issue
+- **M13** can start after M5 (AccountingIntent + pdv_book_entries) and M6 (export infra). **13.1** (service + endpoints) is the foundation. **13.2** (frontend) depends on 13.1. **13.3** (tests) can start with 13.1 and grows with 13.2
 
 ### Estimated Issue Sizing
 
 | Size | Description | Issues |
 |------|-------------|--------|
-| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4, 11.1, 12.1, 12.5 |
-| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3, 11.4, 11.5, 12.2 |
-| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1, 11.2, 11.3, 12.3, 12.4 |
+| **S** | Config changes, small components, simple endpoints | 2.3, 3.6, 6.2, 7.3, 7.5, 7.8, 8.5, 8.7, 8.8, 8.9, 8.11, 9.10, 10.4, 11.1, 12.1, 12.5, 13.3 |
+| **M** | Single service/component, moderate complexity | 2.1, 2.2, 2.4, 3.1, 3.3, 3.7, 4.1, 4.2, 4.5, 4.7, 5.2, 6.1, 6.3, 6.5, 7.4, 7.6, 7.7, 8.1, 8.2, 8.3, 8.6, 8.10, 9.1, 9.3, 9.6, 9.8, 9.9, 10.2, 10.3, 11.4, 11.5, 12.2, 13.2 |
+| **L** | Multi-file, complex logic, significant testing | 3.2, 3.4, 3.5, 4.3, 4.4, 4.6, 5.1, 5.3, 5.4, 6.4, 7.1, 7.2, 8.4, 9.2, 9.4, 9.5, 9.7, 10.1, 11.2, 11.3, 12.3, 12.4, 13.1 |
