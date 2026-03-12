@@ -29,6 +29,7 @@ class Feature(StrEnum):
     AUTOMATION_RULES = "automation_rules"
     AUDIT_EXPORT = "audit_export"
     CLIENT_MANAGEMENT = "client_management"
+    PDV_BOOKS = "pdv_books"
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ _PRO_FEATURES: frozenset[Feature] = _BASE_FEATURES | frozenset(
         Feature.SEF_INTEGRATION,
         Feature.MINIMAX_DIRECT_PUSH,
         Feature.AUDIT_EXPORT,
+        Feature.PDV_BOOKS,
     }
 )
 
