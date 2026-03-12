@@ -7,7 +7,12 @@ import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
+import dynamic from 'next/dynamic';
 import type { InvoiceResponse } from '@/lib/types/invoice';
+
+const MonthlyVolumeChart = dynamic(() => import('@/components/dashboard/MonthlyVolumeChart'), { ssr: false });
+const StatusDonutChart = dynamic(() => import('@/components/dashboard/StatusDonutChart'), { ssr: false });
+const MonthlyTotalsChart = dynamic(() => import('@/components/dashboard/MonthlyTotalsChart'), { ssr: false });
 
 /* -- Inline SVG Icons --------------------------------------------------- */
 
@@ -257,6 +262,21 @@ export default function DashboardPage() {
           </>
         ) : null}
       </div>
+
+      {/* Charts */}
+      {!isLoading && data && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mt-6">
+          <div className="lg:col-span-3">
+            <MonthlyVolumeChart data={data.monthlyVolume} />
+          </div>
+          <div className="lg:col-span-2">
+            <StatusDonutChart data={data.statusDistribution} />
+          </div>
+          <div className="lg:col-span-5">
+            <MonthlyTotalsChart data={data.monthlyTotals} />
+          </div>
+        </div>
+      )}
 
       {/* Recent invoices + Quick actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">

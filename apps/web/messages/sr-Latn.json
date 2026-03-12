@@ -172,7 +172,32 @@
     "noSeller": "Nepoznat prodavac",
     "comingSoonBadge": "Uskoro",
     "quickTip": "Brzi savet",
-    "quickTipText": "Možete učitati do 50 faktura odjednom. Naš AI automatski izvlači sve podatke sa fakture."
+    "quickTipText": "Možete učitati do 50 faktura odjednom. Naš AI automatski izvlači sve podatke sa fakture.",
+    "error": "Greška",
+    "monthlyVolume": "Mesečni obim faktura",
+    "statusDistribution": "Status faktura",
+    "monthlyTotals": "Mesečni iznosi (RSD)",
+    "invoiceCount": "Broj faktura",
+    "totalAmount": "Ukupan iznos",
+    "noChartData": "Nema podataka za prikaz",
+    "total": "ukupno",
+    "periodTotal": "Ukupno (12 mes.)",
+    "avgPerMonth": "Prosek / mesec",
+    "peakMonth": "Najviše u mesecu",
+    "monthShort": {
+      "1": "jan",
+      "2": "feb",
+      "3": "mar",
+      "4": "apr",
+      "5": "maj",
+      "6": "jun",
+      "7": "jul",
+      "8": "avg",
+      "9": "sep",
+      "10": "okt",
+      "11": "nov",
+      "12": "dec"
+    }
   },
   "status": {
     "processing": "Obrada",

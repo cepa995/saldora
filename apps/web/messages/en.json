@@ -172,7 +172,32 @@
     "noSeller": "Unknown seller",
     "comingSoonBadge": "Soon",
     "quickTip": "Quick tip",
-    "quickTipText": "You can upload up to 50 invoices at once. Our AI automatically extracts all data from the invoice."
+    "quickTipText": "You can upload up to 50 invoices at once. Our AI automatically extracts all data from the invoice.",
+    "error": "Error",
+    "monthlyVolume": "Monthly invoice volume",
+    "statusDistribution": "Invoice status",
+    "monthlyTotals": "Monthly totals (RSD)",
+    "invoiceCount": "Invoice count",
+    "totalAmount": "Total amount",
+    "noChartData": "No data to display",
+    "total": "total",
+    "periodTotal": "12-month total",
+    "avgPerMonth": "Avg / month",
+    "peakMonth": "Peak month",
+    "monthShort": {
+      "1": "Jan",
+      "2": "Feb",
+      "3": "Mar",
+      "4": "Apr",
+      "5": "May",
+      "6": "Jun",
+      "7": "Jul",
+      "8": "Aug",
+      "9": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec"
+    }
   },
   "status": {
     "processing": "Processing",
