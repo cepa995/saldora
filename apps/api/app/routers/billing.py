@@ -144,9 +144,7 @@ async def get_usage(
         tier=plan_def.tier.value,
         display_name=plan_def.display_name,
         price_monthly_eur=(
-            float(plan_def.price_monthly_eur)
-            if plan_def.price_monthly_eur is not None
-            else None
+            float(plan_def.price_monthly_eur) if plan_def.price_monthly_eur is not None else None
         ),
         invoice_limit=plan_def.invoice_limit,
         user_limit=plan_def.user_limit,
@@ -207,9 +205,7 @@ async def create_checkout(
             detail="Interval must be 'monthly' or 'annual'",
         )
 
-    result = await db.execute(
-        select(Organization).where(Organization.id == user.organization_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
     org = result.scalar_one_or_none()
     if not org:
         raise HTTPException(
@@ -248,9 +244,7 @@ async def cancel_subscription(
     Returns:
         Confirmation dict.
     """
-    result = await db.execute(
-        select(Organization).where(Organization.id == user.organization_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
     org = result.scalar_one_or_none()
     if not org or not org.payment_provider_subscription_id:
         raise HTTPException(
@@ -267,9 +261,7 @@ async def cancel_subscription(
     from paddle_billing import Client, Environment, Options
 
     env = (
-        Environment.SANDBOX
-        if settings.paddle_environment == "sandbox"
-        else Environment.PRODUCTION
+        Environment.SANDBOX if settings.paddle_environment == "sandbox" else Environment.PRODUCTION
     )
     paddle = Client(settings.paddle_api_key, options=Options(env))
 

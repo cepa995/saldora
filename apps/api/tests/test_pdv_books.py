@@ -1,6 +1,5 @@
 """Tests for PDV book (KPR/KIR) generation endpoints."""
 
-
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
