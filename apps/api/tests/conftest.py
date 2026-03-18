@@ -16,6 +16,7 @@ Why NullPool?
     so there is never a stale loop reference.
 """
 
+import os
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
@@ -27,7 +28,10 @@ from app.database import get_db
 from app.main import app
 from app.models.base import Base
 
-TEST_DATABASE_URL = "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai_test"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai_test",
+)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
