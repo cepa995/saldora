@@ -16,8 +16,11 @@ Why NullPool?
     so there is never a stale loop reference.
 """
 
+import os
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -27,7 +30,10 @@ from app.database import get_db
 from app.main import app
 from app.models.base import Base
 
-TEST_DATABASE_URL = "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai_test"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai_test",
+)
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
@@ -83,3 +89,13 @@ async def client(test_engine) -> AsyncGenerator[AsyncClient, None]:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(table.delete())
         await conn.commit()
+
+
+@pytest.fixture(autouse=True)
+def _mock_emails():
+    """Prevent all email sending during tests.
+
+    Auto-applied to every test so no real Resend API calls are made.
+    """
+    with patch("app.services.email._send_email", return_value=None):
+        yield

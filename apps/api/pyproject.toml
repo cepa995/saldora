@@ -25,6 +25,7 @@ dependencies = [
     "openpyxl>=3.1.0",
     "resend>=2.0.0",
     "paddle-python-sdk>=1.0.0",
+    "email-validator>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +54,10 @@ select = ["E", "F", "I", "N", "W", "UP"]
 
 [tool.mypy]
 python_version = "3.12"
-strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

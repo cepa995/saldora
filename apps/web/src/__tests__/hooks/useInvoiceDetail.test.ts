@@ -3,6 +3,16 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import type { InvoiceResponse } from '@/lib/types/invoice';
 
+const mockPush = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { orgSlug: 'test-org' } }),
+}));
+
 const mockInvoice: InvoiceResponse = {
   id: 'inv-1',
   status: 'review',
@@ -27,6 +37,11 @@ const mockInvoice: InvoiceResponse = {
   field_warnings: {},
   accounting_review_needed: null,
   pdv_book_type: null,
+  exchange_rate: null,
+  exchange_rate_date: null,
+  total_amount_rsd: null,
+  client_id: null,
+  client: null,
   document_url: 'https://example.com/doc.pdf',
   raw_ocr_text: null,
   raw_llm_output: null,
@@ -51,6 +66,7 @@ const mockVerifyInvoice = vi.mocked(verifyInvoice);
 describe('useInvoiceDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPush.mockClear();
     mockFetchInvoice.mockResolvedValue(mockInvoice);
     mockUpdateInvoice.mockResolvedValue({ ...mockInvoice, invoice_number: 'INV-002' });
     mockVerifyInvoice.mockResolvedValue({ ...mockInvoice, status: 'verified' });
