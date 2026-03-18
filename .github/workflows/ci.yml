@@ -114,7 +114,7 @@ jobs:
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
-            --cov-fail-under=60
+            --cov-fail-under=75
 
       - name: Upload coverage artifact
         if: always()

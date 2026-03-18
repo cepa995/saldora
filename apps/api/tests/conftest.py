@@ -18,7 +18,9 @@ Why NullPool?
 
 import os
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -87,3 +89,13 @@ async def client(test_engine) -> AsyncGenerator[AsyncClient, None]:
         for table in reversed(Base.metadata.sorted_tables):
             await conn.execute(table.delete())
         await conn.commit()
+
+
+@pytest.fixture(autouse=True)
+def _mock_emails():
+    """Prevent all email sending during tests.
+
+    Auto-applied to every test so no real Resend API calls are made.
+    """
+    with patch("app.services.email._send_email", return_value=None):
+        yield

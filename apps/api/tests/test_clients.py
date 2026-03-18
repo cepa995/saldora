@@ -385,3 +385,263 @@ async def test_assign_client_to_invoice(client: AsyncClient, test_engine):
     assert resp.status_code == 200
     assert resp.json()["client_id"] == client_id
     assert resp.json()["client"]["name"] == "Assign Client"
+
+
+# ---------------------------------------------------------------------------
+# 404 error paths
+# ---------------------------------------------------------------------------
+
+
+async def test_get_client_not_found(client: AsyncClient, test_engine):
+    """GET /api/v1/clients/{id} with a non-existent UUID returns 404.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    from uuid import uuid4
+
+    headers = await _setup_agency(client, test_engine, "cl-get-404@example.com")
+    non_existent = str(uuid4())
+
+    resp = await client.get(f"/api/v1/clients/{non_existent}", headers=headers)
+    assert resp.status_code == 404
+
+
+async def test_update_client_not_found(client: AsyncClient, test_engine):
+    """PATCH /api/v1/clients/{id} with a non-existent UUID returns 404.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    from uuid import uuid4
+
+    headers = await _setup_agency(client, test_engine, "cl-upd-404@example.com")
+    non_existent = str(uuid4())
+
+    resp = await client.patch(
+        f"/api/v1/clients/{non_existent}",
+        json={"name": "Ghost"},
+        headers=headers,
+    )
+    assert resp.status_code == 404
+
+
+async def test_delete_client_not_found(client: AsyncClient, test_engine):
+    """DELETE /api/v1/clients/{id} with a non-existent UUID returns 404.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    from uuid import uuid4
+
+    headers = await _setup_agency(client, test_engine, "cl-del-404@example.com")
+    non_existent = str(uuid4())
+
+    resp = await client.delete(f"/api/v1/clients/{non_existent}", headers=headers)
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# is_active filter in list
+# ---------------------------------------------------------------------------
+
+
+async def test_list_clients_filter_by_is_active(client: AsyncClient, test_engine):
+    """GET /api/v1/clients/?is_active= filters correctly by active status.
+
+    Creates two clients, soft-deletes one, then verifies the is_active
+    filter returns the correct subset.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    headers = await _setup_agency(client, test_engine, "cl-list-active@example.com")
+
+    # Create two clients
+    await client.post(
+        "/api/v1/clients/",
+        json={"name": "Active One", "pib": "111000111"},
+        headers=headers,
+    )
+    r2 = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Inactive Two", "pib": "222000222"},
+        headers=headers,
+    )
+    client_id_2 = r2.json()["id"]
+
+    # Soft-delete the second client
+    await client.delete(f"/api/v1/clients/{client_id_2}", headers=headers)
+
+    # Filter: only active clients
+    resp_active = await client.get("/api/v1/clients/?is_active=true", headers=headers)
+    assert resp_active.status_code == 200
+    active_pibs = {c["pib"] for c in resp_active.json()["data"]}
+    assert "111000111" in active_pibs
+    assert "222000222" not in active_pibs
+
+    # Filter: only inactive clients
+    resp_inactive = await client.get("/api/v1/clients/?is_active=false", headers=headers)
+    assert resp_inactive.status_code == 200
+    inactive_pibs = {c["pib"] for c in resp_inactive.json()["data"]}
+    assert "222000222" in inactive_pibs
+    assert "111000111" not in inactive_pibs
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+
+
+async def test_list_clients_pagination(client: AsyncClient, test_engine):
+    """GET /api/v1/clients/ respects page and per_page query parameters.
+
+    Creates three clients and verifies that per_page=2 splits them over
+    two pages and that pagination metadata is accurate.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    headers = await _setup_agency(client, test_engine, "cl-paginate@example.com")
+
+    for i in range(3):
+        await client.post(
+            "/api/v1/clients/",
+            json={"name": f"Page Client {i}", "pib": f"33300000{i}"},
+            headers=headers,
+        )
+
+    resp_p1 = await client.get("/api/v1/clients/?page=1&per_page=2", headers=headers)
+    assert resp_p1.status_code == 200
+    data_p1 = resp_p1.json()
+    assert len(data_p1["data"]) == 2
+    assert data_p1["pagination"]["total"] == 3
+    assert data_p1["pagination"]["total_pages"] == 2
+    assert data_p1["pagination"]["per_page"] == 2
+
+    resp_p2 = await client.get("/api/v1/clients/?page=2&per_page=2", headers=headers)
+    assert resp_p2.status_code == 200
+    data_p2 = resp_p2.json()
+    assert len(data_p2["data"]) == 1
+
+    # Ensure pages are disjoint
+    ids_p1 = {c["id"] for c in data_p1["data"]}
+    ids_p2 = {c["id"] for c in data_p2["data"]}
+    assert ids_p1.isdisjoint(ids_p2)
+
+
+# ---------------------------------------------------------------------------
+# Update with PIB conflict
+# ---------------------------------------------------------------------------
+
+
+async def test_update_client_duplicate_pib_conflict(client: AsyncClient, test_engine):
+    """PATCH /api/v1/clients/{id} returns 409 when updating to a PIB already used.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    headers = await _setup_agency(client, test_engine, "cl-upd-pib@example.com")
+
+    # Create two clients with distinct PIBs
+    await client.post(
+        "/api/v1/clients/",
+        json={"name": "Company X", "pib": "444000444"},
+        headers=headers,
+    )
+    r2 = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Company Y", "pib": "555000555"},
+        headers=headers,
+    )
+    client_id_y = r2.json()["id"]
+
+    # Try to update Y's PIB to X's PIB — should conflict
+    resp = await client.patch(
+        f"/api/v1/clients/{client_id_y}",
+        json={"pib": "444000444"},
+        headers=headers,
+    )
+    assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Full-detail create — all optional fields
+# ---------------------------------------------------------------------------
+
+
+async def test_create_client_full_details(client: AsyncClient, test_engine):
+    """Creating a client with all optional fields stores and returns them correctly.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    headers = await _setup_agency(client, test_engine, "cl-full@example.com")
+
+    payload = {
+        "name": "Full Detail Corp",
+        "pib": "666000666",
+        "mb": "12345678",
+        "address": "Knez Mihajlova 10",
+        "city": "Beograd",
+        "postal_code": "11000",
+        "contact_email": "contact@fulldetail.rs",
+        "contact_phone": "+381112345678",
+        "notes": "VIP klijent",
+    }
+    resp = await client.post("/api/v1/clients/", json=payload, headers=headers)
+    assert resp.status_code == 201
+
+    data = resp.json()
+    assert data["mb"] == "12345678"
+    assert data["address"] == "Knez Mihajlova 10"
+    assert data["city"] == "Beograd"
+    assert data["postal_code"] == "11000"
+    assert data["contact_email"] == "contact@fulldetail.rs"
+    assert data["contact_phone"] == "+381112345678"
+    assert data["notes"] == "VIP klijent"
+
+
+# ---------------------------------------------------------------------------
+# Reactivate a soft-deleted client via PATCH
+# ---------------------------------------------------------------------------
+
+
+async def test_reactivate_soft_deleted_client(client: AsyncClient, test_engine):
+    """A soft-deleted client can be reactivated by PATCHing is_active=True.
+
+    Args:
+        client: Async HTTP client fixture.
+        test_engine: SQLAlchemy test engine fixture.
+    """
+    headers = await _setup_agency(client, test_engine, "cl-reactivate@example.com")
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Reactivate Me", "pib": "777000777"},
+        headers=headers,
+    )
+    client_id = create_resp.json()["id"]
+
+    # Soft-delete
+    await client.delete(f"/api/v1/clients/{client_id}", headers=headers)
+
+    # Verify inactive
+    get_resp = await client.get(f"/api/v1/clients/{client_id}", headers=headers)
+    assert get_resp.json()["is_active"] is False
+
+    # Reactivate via PATCH
+    patch_resp = await client.patch(
+        f"/api/v1/clients/{client_id}",
+        json={"is_active": True},
+        headers=headers,
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["is_active"] is True
