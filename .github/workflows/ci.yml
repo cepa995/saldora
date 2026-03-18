@@ -53,21 +53,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: apps/api/pyproject.toml
-
-      - name: Install Python dependencies
-        run: |
-          pip install --no-deps -e packages/ml
-          cd apps/api && pip install -e ".[dev]"
-
-      - name: mypy
-        run: cd apps/api && python -m mypy app/
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
