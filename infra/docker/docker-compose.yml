@@ -7,15 +7,15 @@ services:
     image: postgres:16-alpine
     container_name: saldora-postgres
     environment:
-      POSTGRES_USER: fakturaai
-      POSTGRES_PASSWORD: fakturaai_dev
-      POSTGRES_DB: fakturaai
+      POSTGRES_USER: saldora
+      POSTGRES_PASSWORD: saldora_dev
+      POSTGRES_DB: saldora
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"   # host 5433 → container 5432 (avoids conflict with local postgres)
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fakturaai"]
+      test: ["CMD-SHELL", "pg_isready -U saldora"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,7 +60,7 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: saldora-api
     environment:
-      DATABASE_URL: postgresql+asyncpg://fakturaai:fakturaai_dev@postgres:5432/fakturaai
+      DATABASE_URL: postgresql+asyncpg://saldora:saldora_dev@postgres:5432/saldora
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       STORAGE_ENDPOINT: http://minio:9000
@@ -156,7 +156,7 @@ services:
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
       STORAGE_BUCKET: saldora-documents
-      DATABASE_URL: postgresql://fakturaai:fakturaai_dev@postgres:5432/fakturaai
+      DATABASE_URL: postgresql://saldora:saldora_dev@postgres:5432/saldora
       OCR_PRIMARY_ENGINE: dots
       OCR_FALLBACK_ENGINE: none
       DOTS_OCR_SERVER_URL: http://dots-ocr-server:8000/v1

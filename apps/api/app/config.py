@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # Database
-    database_url: str = "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai"
+    database_url: str = "postgresql+asyncpg://saldora:saldora_dev@localhost:5433/saldora"
     database_pool_size: int = 20
     database_max_overflow: int = 10
 

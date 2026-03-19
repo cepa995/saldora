@@ -17,6 +17,7 @@ from app.models.export_template import ExportTemplate
 from app.models.invitation import Invitation
 from app.models.invoice import Invoice
 from app.models.join_request import JoinRequest
+from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
 from app.models.sef_connection import SefConnection
@@ -39,6 +40,7 @@ __all__ = [
     "ExportTemplate",
     "Invitation",
     "Invoice",
+    "InvoiceLineItem",
     "JoinRequest",
     "MiniMaxConfig",
     "Organization",

@@ -385,6 +385,27 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
                 "raw_llm_output": invoice.get("raw_llm_output"),
             },
         )
+        # Sync denormalized line items for reporting (non-blocking)
+        try:
+            from app.services.line_item_sync import sync_line_items_raw_sql
+
+            org_row = session.execute(
+                text("SELECT organization_id FROM invoices WHERE id = :inv_id"),
+                {"inv_id": invoice_id},
+            ).fetchone()
+            if org_row:
+                sync_line_items_raw_sql(
+                    session=session,
+                    invoice_id=invoice_id,
+                    organization_id=str(org_row[0]),
+                    line_items=line_items or [],
+                    seller=seller,
+                    invoice_date=invoice.get("invoice_date"),
+                    currency=invoice.get("currency", "RSD"),
+                )
+        except Exception as exc:
+            logger.warning(f"Line item sync failed for {invoice_id}: {exc}")
+
         session.commit()
         logger.info(f"Saved extraction result for invoice {invoice_id}")
     except Exception:

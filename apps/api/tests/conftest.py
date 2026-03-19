@@ -32,7 +32,7 @@ from app.models.base import Base
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://fakturaai:fakturaai_dev@localhost:5433/fakturaai_test",
+    "postgresql+asyncpg://saldora:saldora_dev@localhost:5433/saldora_test",
 )
 
 
