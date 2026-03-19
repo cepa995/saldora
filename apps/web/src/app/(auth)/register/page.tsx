@@ -193,43 +193,43 @@ export default function RegisterPage() {
         </div>
 
         {/* Consent checkboxes */}
-        <div className="space-y-3 pt-1">
-          <label className="flex items-start gap-3 cursor-pointer">
+        <div className="space-y-2.5 pt-1">
+          <label className="flex gap-2.5 cursor-pointer">
             <input
               type="checkbox"
               checked={acceptPrivacy}
               onChange={(e) => setAcceptPrivacy(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
             />
-            <span className="text-sm text-gray-600">
+            <span className="text-sm leading-5 text-gray-600">
               {t("acceptPrivacyPrefix")}{" "}
               <Link href="/politika-privatnosti" target="_blank" className="text-violet-600 hover:text-violet-700 underline">
                 {t("privacyPolicyLink")}
-              </Link>{" "}
-              <span className="text-red-500">*</span>
+              </Link>
+              {" "}<span className="text-red-500">*</span>
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex gap-2.5 cursor-pointer">
             <input
               type="checkbox"
               checked={consentAnalytics}
               onChange={(e) => setConsentAnalytics(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
             />
-            <span className="text-sm text-gray-500">
+            <span className="text-sm leading-5 text-gray-500">
               {t("consentAnalytics")}
             </span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
+          <label className="flex gap-2.5 cursor-pointer">
             <input
               type="checkbox"
               checked={consentMarketing}
               onChange={(e) => setConsentMarketing(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
             />
-            <span className="text-sm text-gray-500">
+            <span className="text-sm leading-5 text-gray-500">
               {t("consentMarketing")}
             </span>
           </label>
