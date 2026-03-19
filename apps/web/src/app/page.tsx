@@ -235,6 +235,7 @@ function Navigation() {
     { name: "Kako radi", href: "#kako-radi" },
     { name: "Funkcije", href: "#funkcije" },
     { name: "Cene", href: "#cene" },
+    { name: "Privatnost", href: "/politika-privatnosti" },
   ];
 
   return (
