@@ -65,9 +65,16 @@ _SYSTEM_PROMPT = (  # noqa: E501
     "- For MB (matični broj): typically 8 digits.\n"
     "- Extract ALL line items from tables, "
     "including HTML tables in OCR output.\n"
-    "- For each line item, if the invoice prints a per-item PDV/tax "
-    "amount (e.g. 'Iznos PDV-a', 'PDV' column), extract it into "
-    "tax_amount. If the invoice does not show per-item tax, use null.\n"
+    "- For each line item:\n"
+    "  - unit_price = price per unit BEFORE discount and BEFORE PDV.\n"
+    "  - discount = discount percentage (e.g. 7 for 7%%), null if none.\n"
+    "  - tax_base = poreska osnovica — amount after discount, before PDV "
+    "(often labeled 'Poreska osnovica', 'Osnovica', 'Neto'). "
+    "If not on invoice, use null (we calculate it).\n"
+    "  - total = final amount WITH PDV (often 'Ukupno sa PDV', "
+    "'Iznos sa PDV'). This is what the buyer pays.\n"
+    "  - tax_rate = PDV rate in %% (e.g. 20), null if not shown.\n"
+    "  - tax_amount = PDV amount per item, null if not shown.\n"
     "- Extract EVERY separate PDV line into tax_groups. "
     "Each printed PDV row becomes one tax_group entry with rate, "
     "base_amount (osnovica), and tax_amount (PDV iznos). "
@@ -115,6 +122,8 @@ _JSON_SCHEMA = """\
       "description": "string",
       "quantity": number_or_null,
       "unit_price": number_or_null,
+      "discount": number_or_null,
+      "tax_base": number_or_null,
       "total": number_or_null,
       "tax_rate": number_or_null,
       "tax_amount": number_or_null
@@ -247,6 +256,8 @@ class LLMFieldExtractor:
                     description=item.get("description", ""),
                     quantity=_parse_decimal(item.get("quantity")),
                     unit_price=_parse_decimal(item.get("unit_price")),
+                    discount=_parse_decimal(item.get("discount")),
+                    tax_base=_parse_decimal(item.get("tax_base")),
                     total=_parse_decimal(item.get("total")),
                     tax_rate=_parse_decimal(item.get("tax_rate")),
                     tax_amount=_parse_decimal(item.get("tax_amount")),

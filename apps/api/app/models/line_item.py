@@ -34,6 +34,8 @@ class InvoiceLineItem(Base, UUIDMixin):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     quantity: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
     unit_price: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
+    discount: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    tax_base: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)
     total: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False, default=0)
     tax_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     tax_amount: Mapped[float | None] = mapped_column(Numeric(15, 2), nullable=True)

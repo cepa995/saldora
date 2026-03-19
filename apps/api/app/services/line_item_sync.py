@@ -73,13 +73,15 @@ def sync_line_items_raw_sql(
                 text("""
                     INSERT INTO invoice_line_items (
                         id, invoice_id, organization_id,
-                        description, quantity, unit_price, total,
+                        description, quantity, unit_price,
+                        discount, tax_base, total,
                         tax_rate, tax_amount,
                         seller_name, seller_pib,
                         invoice_date, currency
                     ) VALUES (
                         :id, :invoice_id, :organization_id,
-                        :description, :quantity, :unit_price, :total,
+                        :description, :quantity, :unit_price,
+                        :discount, :tax_base, :total,
                         :tax_rate, :tax_amount,
                         :seller_name, :seller_pib,
                         :invoice_date, :currency
@@ -92,6 +94,8 @@ def sync_line_items_raw_sql(
                     "description": item.get("description") or "",
                     "quantity": item.get("quantity"),
                     "unit_price": item.get("unit_price"),
+                    "discount": item.get("discount"),
+                    "tax_base": item.get("tax_base"),
                     "total": item.get("total") or 0,
                     "tax_rate": item.get("tax_rate"),
                     "tax_amount": item.get("tax_amount"),
@@ -161,6 +165,8 @@ async def sync_line_items_orm(
                     description=item.get("description") or "",
                     quantity=item.get("quantity"),
                     unit_price=item.get("unit_price"),
+                    discount=item.get("discount"),
+                    tax_base=item.get("tax_base"),
                     total=item.get("total") or 0,
                     tax_rate=item.get("tax_rate"),
                     tax_amount=item.get("tax_amount"),

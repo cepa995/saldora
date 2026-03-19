@@ -36,6 +36,8 @@ def upgrade() -> None:
         sa.Column("description", sa.Text, nullable=False, server_default=""),
         sa.Column("quantity", sa.Numeric(15, 4), nullable=True),
         sa.Column("unit_price", sa.Numeric(15, 4), nullable=True),
+        sa.Column("discount", sa.Numeric(5, 2), nullable=True),
+        sa.Column("tax_base", sa.Numeric(15, 2), nullable=True),
         sa.Column("total", sa.Numeric(15, 2), nullable=False, server_default="0"),
         sa.Column("tax_rate", sa.Numeric(5, 2), nullable=True),
         sa.Column("tax_amount", sa.Numeric(15, 2), nullable=True),
