@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import LandingNav from "@/components/LandingNav";
 
 // Icons as inline SVGs
 const DocumentIcon = ({ className = "w-6 h-6" }: { className?: string }) => (
@@ -2227,7 +2228,7 @@ export default function Home() {
   return (
     <main className="relative">
       <AnimatedBackground />
-      <Navigation />
+      <LandingNav />
       <HeroSection />
       <TransformationSection />
       <HowItWorksSection />

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import LandingNav from '@/components/LandingNav';
 import { fetchPrivacyPolicy, type PrivacyPolicy } from '@/lib/api/compliance';
 
 export default function PrivacyPolicyPage() {
   const [policy, setPolicy] = useState<PrivacyPolicy | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     fetchPrivacyPolicy()
@@ -15,46 +15,9 @@ export default function PrivacyPolicyPage() {
       .catch(() => setError('Greška pri učitavanju politike privatnosti'));
   }, []);
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50/50 to-white">
-      {/* Navigation — matches landing page style */}
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-          scrolled
-            ? 'bg-white/90 backdrop-blur-xl shadow-lg shadow-violet-500/5 py-3'
-            : 'bg-transparent py-5'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center">
-              <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-                FakturaAI
-              </span>
-            </Link>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/login"
-                className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:text-violet-600 transition-colors"
-              >
-                Prijavite se
-              </Link>
-              <Link
-                href="/register"
-                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-violet-500/25 transition-all"
-              >
-                Započnite besplatno
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <LandingNav />
 
       {/* Hero section */}
       <div className="pt-32 pb-12 px-6">
