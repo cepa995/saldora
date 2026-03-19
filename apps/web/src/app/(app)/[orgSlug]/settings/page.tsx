@@ -817,18 +817,114 @@ function DataPrivacyTab() {
   const tCommon = useTranslations('common');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [consents, setConsents] = useState<Record<string, boolean>>({});
+  const [consentsLoaded, setConsentsLoaded] = useState(false);
+  const [isToggling, setIsToggling] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletionSubmitted, setDeletionSubmitted] = useState(false);
+
+  // Load consent status on first render
+  if (!consentsLoaded) {
+    setConsentsLoaded(true);
+    import('@/lib/api/compliance').then(({ fetchConsentStatus }) => {
+      fetchConsentStatus()
+        .then((statuses) => {
+          const map: Record<string, boolean> = {};
+          for (const s of statuses) map[s.consent_type] = s.granted;
+          setConsents(map);
+        })
+        .catch(() => {});
+    });
+  }
+
+  async function handleToggleConsent(type: string, granted: boolean) {
+    setIsToggling(type);
+    try {
+      const { grantConsent, revokeConsent } = await import('@/lib/api/compliance');
+      if (granted) {
+        await grantConsent(type, '1.0');
+      } else {
+        await revokeConsent(type);
+      }
+      setConsents((prev) => ({ ...prev, [type]: granted }));
+      setToast({ message: t('consentUpdated'), type: 'success' });
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err
+        ? String(err.message) : t('consentError');
+      setToast({ message, type: 'error' });
+    } finally {
+      setIsToggling(null);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setIsDeleting(true);
+    try {
+      const { createDeletionRequest } = await import('@/lib/api/compliance');
+      await createDeletionRequest();
+      setDeletionSubmitted(true);
+      setShowDeleteConfirm(false);
+      setToast({ message: t('deletionRequestSubmitted'), type: 'success' });
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err
+        ? String(err.message) : t('deletionRequestError');
+      setToast({ message, type: 'error' });
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   function handleExport() {
     setToast({ message: tCommon('comingSoon'), type: 'info' });
   }
 
-  function handleDelete() {
-    setToast({ message: tCommon('comingSoon'), type: 'info' });
-    setShowDeleteConfirm(false);
-  }
+  const consentTypes = [
+    { key: 'basic_processing', label: t('consentBasicProcessing'), description: t('consentBasicProcessingDesc'), disabled: true },
+    { key: 'analytics', label: t('consentAnalytics'), description: t('consentAnalyticsDesc'), disabled: false },
+    { key: 'marketing', label: t('consentMarketing'), description: t('consentMarketingDesc'), disabled: false },
+  ];
 
   return (
     <div className="space-y-6">
+      {/* Consent management */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h2 className="text-base font-semibold text-gray-900 mb-1">{t('consentManagement')}</h2>
+        <p className="text-sm text-gray-500 mb-5">{t('consentManagementDesc')}</p>
+        <div className="space-y-4">
+          {consentTypes.map((ct) => (
+            <div key={ct.key} className="flex items-start justify-between gap-4 py-2">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">{ct.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{ct.description}</p>
+              </div>
+              <button
+                onClick={() => !ct.disabled && handleToggleConsent(ct.key, !consents[ct.key])}
+                disabled={ct.disabled || isToggling === ct.key}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  consents[ct.key] ? 'bg-violet-600' : 'bg-gray-200'
+                } ${ct.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                    consents[ct.key] ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <a
+            href="/politika-privatnosti"
+            target="_blank"
+            className="text-sm text-violet-600 hover:text-violet-700 font-medium transition-colors"
+          >
+            {t('viewPrivacyPolicy')} &rarr;
+          </a>
+        </div>
+      </div>
+
       {/* Export data */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-2">{t('exportData')}</h2>
@@ -845,12 +941,18 @@ function DataPrivacyTab() {
       <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-6">
         <h2 className="text-base font-semibold text-red-700 mb-2">{t('deleteAccount')}</h2>
         <p className="text-sm text-gray-500 mb-4">{t('deleteAccountWarning')}</p>
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="px-5 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors"
-        >
-          {t('deleteAccount')}
-        </button>
+        {deletionSubmitted ? (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm text-amber-800">{t('deletionRequestPending')}</p>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="px-5 py-2 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition-colors"
+          >
+            {t('deleteAccount')}
+          </button>
+        )}
       </div>
 
       {/* Delete confirmation modal */}
@@ -859,7 +961,8 @@ function DataPrivacyTab() {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteAccount')}</h3>
-            <p className="text-sm text-gray-600 mb-6">{t('deleteAccountConfirm')}</p>
+            <p className="text-sm text-gray-600 mb-2">{t('deleteAccountConfirm')}</p>
+            <p className="text-xs text-gray-500 mb-6">{t('deleteAccountRetention')}</p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
@@ -868,10 +971,11 @@ function DataPrivacyTab() {
                 {tCommon('cancel')}
               </button>
               <button
-                onClick={handleDelete}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors disabled:opacity-50"
               >
-                {tCommon('confirm')}
+                {isDeleting ? t('saving') : tCommon('confirm')}
               </button>
             </div>
           </div>
