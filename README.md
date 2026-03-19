@@ -1,10 +1,10 @@
-# FakturaAI
+# Saldora
 
 AI-powered invoice processing platform for the Serbian market.
 
 ## Overview
 
-FakturaAI helps accountants, agencies, and businesses in Serbia automatically extract data from invoices using AI-powered OCR. Supports both Cyrillic and Latin scripts.
+Saldora helps accountants, agencies, and businesses in Serbia automatically extract data from invoices using AI-powered OCR. Supports both Cyrillic and Latin scripts.
 
 ## Project Structure
 
@@ -110,7 +110,7 @@ CELERY_BROKER_URL=redis://localhost:6379/1
 
 # Storage
 STORAGE_ENDPOINT=http://localhost:9000
-STORAGE_BUCKET=fakturaai-documents
+STORAGE_BUCKET=saldora-documents
 
 # JWT
 JWT_SECRET_KEY=your-secret-key

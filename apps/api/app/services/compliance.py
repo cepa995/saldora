@@ -10,7 +10,7 @@ from app.schemas.compliance import (
 PRIVACY_POLICY_VERSION = "1.0"
 PRIVACY_POLICY_EFFECTIVE_DATE = date(2026, 3, 1)
 PRIVACY_POLICY_CONTENT = """
-Politika privatnosti — FakturaAI
+Politika privatnosti — Saldora
 
 1. Rukovalac podataka
    Lab42 DOO, Beograd, Republika Srbija.
@@ -40,7 +40,7 @@ Politika privatnosti — FakturaAI
    - Pravo na prenosivost podataka (Član 36 ZZPL)
 
 7. Poverenik
-   Zahteve možete uputiti na: privacy@fakturaai.rs
+   Zahteve možete uputiti na: privacy@saldora.ai
 
 8. Poverenik za informacije od javnog značaja i zaštitu podataka o ličnosti
    Bulevar kralja Aleksandra 15, 11000 Beograd
@@ -92,10 +92,10 @@ Preporuke za korisnike:
 
 Rok za prijavu Povereniku: 72 sata od saznanja o povredi.
 
-Kontakt za dodatne informacije: privacy@fakturaai.rs
+Kontakt za dodatne informacije: privacy@saldora.ai
 
 S poštovanjem,
-FakturaAI tim"""
+Saldora tim"""
 
     return BreachNotificationResponse(subject=subject, body=body)
 

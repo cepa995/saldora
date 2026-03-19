@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger = logging.getLogger("uvicorn")
 
     # Startup
-    logger.info("Starting faktura.ai API...")
+    logger.info("Starting saldora.ai API...")
 
     # 1. Verify database connectivity (migrations are handled by Alembic)
     async with engine.begin() as conn:
@@ -76,11 +76,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     ensure_bucket_exists()
     logger.info("Storage connection verified")
 
-    logger.info(f"faktura.ai API v{settings.app_version} ready ({settings.environment})")
+    logger.info(f"saldora.ai API v{settings.app_version} ready ({settings.environment})")
     yield
 
     # Shutdown
-    logger.info("Shutting down faktura.ai API...")
+    logger.info("Shutting down saldora.ai API...")
     await engine.dispose()
 
     if hasattr(app.state, "redis"):
@@ -102,8 +102,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://fakturaai.rs",
-        "https://www.fakturaai.rs",
+        "https://saldora.ai",
+        "https://www.saldora.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],

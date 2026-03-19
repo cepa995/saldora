@@ -1,4 +1,4 @@
-# SEF (eFaktura) — How It Fits Into FakturaAI
+# SEF (eFaktura) — How It Fits Into Saldora
 
 ## What is SEF?
 
@@ -16,20 +16,20 @@ Right now, a typical Serbian accountant's workflow looks like this:
 
 This is **tedious, error-prone, and duplicated work**. The data already exists in structured form in SEF, yet accountants are manually copy-pasting it into their accounting software.
 
-## How FakturaAI Solves This
+## How Saldora Solves This
 
-FakturaAI sits **between SEF and MiniMax**, automating the entire pipeline:
+Saldora sits **between SEF and MiniMax**, automating the entire pipeline:
 
 ```
-SEF (eFaktura)  →  FakturaAI  →  MiniMax (accounting)
+SEF (eFaktura)  →  Saldora  →  MiniMax (accounting)
     [source]       [intelligence]     [destination]
 ```
 
 **The flow:**
 
-1. **Sync** — FakturaAI pulls new invoices from SEF automatically (polling every 15 minutes)
+1. **Sync** — Saldora pulls new invoices from SEF automatically (polling every 15 minutes)
 2. **Review** — Accountant sees them in `/sef-inbox`, clicks "Process"
-3. **Intelligence** — FakturaAI auto-classifies: input/output invoice, VAT treatment (deductible/non-deductible), suggests konta numbers, applies automation rules
+3. **Intelligence** — Saldora auto-classifies: input/output invoice, VAT treatment (deductible/non-deductible), suggests konta numbers, applies automation rules
 4. **Export** — One click exports to MiniMax with correct accounting entries
 
 **What the accountant does NOT have to do anymore:**
@@ -49,7 +49,7 @@ SEF is a **government portal** — it stores and transmits invoices but does NOT
 - Apply business rules (e.g., "all invoices from supplier X go to konto 5210")
 - Provide OCR for scanned/PDF invoices that arrive outside SEF
 
-FakturaAI adds the **intelligence layer** that SEF lacks.
+Saldora adds the **intelligence layer** that SEF lacks.
 
 ## Why Not Just Use MiniMax Directly?
 
@@ -62,11 +62,11 @@ MiniMax is **accounting software** — it records transactions but does NOT:
 - Detect duplicate invoices
 - Apply automation rules
 
-FakturaAI is the **bridge** that connects these two systems.
+Saldora is the **bridge** that connects these two systems.
 
 ## Two Input Channels
 
-FakturaAI accepts invoices from two sources:
+Saldora accepts invoices from two sources:
 
 ```
 1. SEF (structured XML)     →  High accuracy, no OCR needed
@@ -77,9 +77,9 @@ Both channels feed into the same pipeline: Review → Accounting Intent → Expo
 
 ## Technical Details
 
-- **SEF does NOT support webhooks** — FakturaAI must poll for new invoices
+- **SEF does NOT support webhooks** — Saldora must poll for new invoices
 - **UBL 2.1 XML** is the standard format for SEF invoices
-- **Dual status model**: FakturaAI tracks both an internal status (`new → pending → processed`) and the raw SEF status (`DELIVERED → SEEN → APPROVED`)
+- **Dual status model**: Saldora tracks both an internal status (`new → pending → processed`) and the raw SEF status (`DELIVERED → SEEN → APPROVED`)
 - **DemoSefClient** allows development and testing without real SEF API credentials
 - **Multi-tenant**: Each organization has its own SEF connection and credentials
 
@@ -87,7 +87,7 @@ Both channels feed into the same pipeline: Review → Accounting Intent → Expo
 
 ```
 ┌─────────┐     ┌──────────────┐     ┌─────────────┐     ┌─────────┐
-│   SEF   │────▶│  SEF Inbox   │────▶│  FakturaAI  │────▶│ MiniMax │
+│   SEF   │────▶│  SEF Inbox   │────▶│  Saldora  │────▶│ MiniMax │
 │eFaktura │     │  /sef-inbox  │     │  /invoices  │     │ Export  │
 └─────────┘     └──────────────┘     └─────────────┘     └─────────┘
                   Sync & Review       Auto-classify        Push to

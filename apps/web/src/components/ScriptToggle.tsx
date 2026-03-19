@@ -29,7 +29,7 @@ export function ScriptToggle({ collapsed = false }: ScriptToggleProps) {
     if (newLocale === locale) return;
     // Setting cookie is an intentional side effect from user interaction
     // eslint-disable-next-line react-hooks/immutability
-    document.cookie = `fakturaai_locale=${newLocale};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
+    document.cookie = `saldora_locale=${newLocale};path=/;max-age=${60 * 60 * 24 * 365};SameSite=Lax`;
     router.refresh();
   }
 

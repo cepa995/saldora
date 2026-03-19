@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "FakturaAI",
+    "appName": "Saldora",
     "loading": "Loading...",
     "save": "Save",
     "saving": "Saving...",
@@ -19,7 +19,7 @@
     "retry": "Try again",
     "comingSoon": "Coming soon",
     "allRightsReserved": "All rights reserved.",
-    "copyright": "© {year} FakturaAI. All rights reserved.",
+    "copyright": "© {year} Saldora. All rights reserved.",
     "error": "Error",
     "success": "Success",
     "noData": "No data",

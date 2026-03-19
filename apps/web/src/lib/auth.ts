@@ -20,8 +20,8 @@ export interface AuthUser {
 // In-memory access token — never persisted to localStorage
 let accessToken: string | null = null;
 
-const REFRESH_TOKEN_KEY = "fakturaai_refresh_token";
-const SESSION_COOKIE = "fakturaai_logged_in";
+const REFRESH_TOKEN_KEY = "saldora_refresh_token";
+const SESSION_COOKIE = "saldora_logged_in";
 
 export function getAccessToken(): string | null {
   return accessToken;

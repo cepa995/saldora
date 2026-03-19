@@ -1,7 +1,7 @@
 [project]
-name = "fakturaai-api"
+name = "saldora-api"
 version = "0.1.0"
-description = "FakturaAI REST API - Invoice processing backend"
+description = "Saldora REST API - Invoice processing backend"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

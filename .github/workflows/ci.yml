@@ -45,7 +45,7 @@ jobs:
         run: npm ci
 
       - name: ESLint
-        run: npm -w @fakturaai/web run lint
+        run: npm -w @saldora/web run lint
 
   typecheck:
     name: Type Check
@@ -63,7 +63,7 @@ jobs:
         run: npm ci
 
       - name: TypeScript type check
-        run: npx -w @fakturaai/web tsc --noEmit
+        run: npx -w @saldora/web tsc --noEmit
 
   test-api:
     name: API Tests
@@ -140,7 +140,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          npm -w @fakturaai/web run test -- \
+          npm -w @saldora/web run test -- \
             --coverage \
             --coverage.reporter=text \
             --coverage.reporter=clover
@@ -169,18 +169,18 @@ jobs:
         run: npm ci
 
       - name: Build Next.js
-        run: npm -w @fakturaai/web run build
+        run: npm -w @saldora/web run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Build API Docker image
-        run: docker build -t fakturaai-api:ci -f apps/api/Dockerfile .
+        run: docker build -t saldora-api:ci -f apps/api/Dockerfile .
 
       - name: Build Web Docker image
         run: >
-          docker build -t fakturaai-web:ci
+          docker build -t saldora-web:ci
           --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000
           -f apps/web/Dockerfile .
 
       - name: Build Worker Docker image
-        run: docker build -t fakturaai-worker:ci -f workers/Dockerfile .
+        run: docker build -t saldora-worker:ci -f workers/Dockerfile .

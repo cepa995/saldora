@@ -22,7 +22,7 @@ export default async function AuthLayout({
         >
           <Image
             src="/logo.png"
-            alt="FakturaAI"
+            alt="Saldora"
             width={180}
             height={120}
             className="group-hover:scale-105 transition-transform duration-300"

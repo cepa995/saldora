@@ -1,4 +1,4 @@
-"""Map FakturaAI Invoice models to MiniMax API payloads."""
+"""Map Saldora Invoice models to MiniMax API payloads."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def map_invoice_to_received(
     customer_id: int,
     currency_id: int | None = None,
 ) -> dict:
-    """Map a FakturaAI Invoice to a MiniMax ReceivedInvoice payload.
+    """Map a Saldora Invoice to a MiniMax ReceivedInvoice payload.
 
     Args:
         invoice: Invoice model instance.

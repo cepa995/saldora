@@ -101,7 +101,7 @@ export default function LandingNav({ navLinks = DEFAULT_NAV_LINKS }: LandingNavP
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center">
-              <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">FakturaAI</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">Saldora</span>
             </Link>
 
             {/* Desktop */}
@@ -160,9 +160,9 @@ export default function LandingNav({ navLinks = DEFAULT_NAV_LINKS }: LandingNavP
           <div className="flex items-center justify-between p-6 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-lg">F</span>
+                <span className="text-white font-bold text-lg">S</span>
               </div>
-              <span className="text-lg font-bold text-gray-900">FakturaAI</span>
+              <span className="text-lg font-bold text-gray-900">Saldora</span>
             </div>
             <button
               onClick={() => setMobileMenuOpen(false)}

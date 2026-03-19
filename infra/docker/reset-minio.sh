@@ -9,7 +9,7 @@
 set -euo pipefail
 
 COMPOSE_FILE="infra/docker/docker-compose.yml"
-CONTAINER="fakturaai-minio"
+CONTAINER="saldora-minio"
 
 echo "Stopping MinIO..."
 docker compose -f "$COMPOSE_FILE" stop minio

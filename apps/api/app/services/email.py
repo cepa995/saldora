@@ -44,7 +44,7 @@ def _build_email_html(title: str, content_html: str) -> str:
 <body style="{_BODY_STYLE}">
   <div style="text-align: center; margin-bottom: 32px;">
     <h1 style="color: #7c3aed; font-size: 24px; margin: 0;">
-      FakturaAI
+      Saldora
     </h1>
   </div>
 
@@ -138,7 +138,7 @@ async def send_invitation_email(
     </a>"""
 
     html = _build_email_html("Poziv za pridruživanje", content)
-    subject = f"Poziv za {organization_name} — FakturaAI"
+    subject = f"Poziv za {organization_name} — Saldora"
     return await _send_email(to_email, subject, html)
 
 
@@ -156,7 +156,7 @@ async def send_welcome_email(to_email: str, first_name: str | None) -> bool:
 
     content = f"""<p>Zdravo, <strong>{greeting}</strong>!</p>
     <p style="color: #6b7280; font-size: 14px;">
-      Vaš nalog na FakturaAI je uspešno kreiran.
+      Vaš nalog na Saldora je uspešno kreiran.
       Sada možete da kreirate organizaciju ili se
       pridružite postojećoj.
     </p>
@@ -164,8 +164,8 @@ async def send_welcome_email(to_email: str, first_name: str | None) -> bool:
       Prijavite se
     </a>"""
 
-    html = _build_email_html("Dobrodošli na FakturaAI", content)
-    return await _send_email(to_email, "Dobrodošli na FakturaAI", html)
+    html = _build_email_html("Dobrodošli na Saldora", content)
+    return await _send_email(to_email, "Dobrodošli na Saldora", html)
 
 
 async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
@@ -179,7 +179,7 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
         True if email was sent successfully, False otherwise.
     """
     content = f"""<p>Zatražili ste resetovanje lozinke za vaš
-    FakturaAI nalog.</p>
+    Saldora nalog.</p>
     <p style="color: #6b7280; font-size: 14px;">
       Kliknite na dugme ispod da biste postavili novu lozinku.
       Link je važeći <strong>1 sat</strong>.
@@ -192,7 +192,7 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
     </p>"""
 
     html = _build_email_html("Resetovanje lozinke", content)
-    return await _send_email(to_email, "Resetovanje lozinke — FakturaAI", html)
+    return await _send_email(to_email, "Resetovanje lozinke — Saldora", html)
 
 
 async def send_invoice_processed_email(
@@ -225,5 +225,5 @@ async def send_invoice_processed_email(
     </a>"""
 
     html = _build_email_html("Faktura obrađena", content)
-    subject = f"Faktura {invoice_number} je obrađena — FakturaAI"
+    subject = f"Faktura {invoice_number} je obrađena — Saldora"
     return await _send_email(to_email, subject, html)

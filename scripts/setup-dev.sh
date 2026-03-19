@@ -1,9 +1,9 @@
 #!/bin/bash
-# FakturaAI Development Setup Script
+# Saldora Development Setup Script
 
 set -e
 
-echo "🚀 Setting up FakturaAI development environment..."
+echo "🚀 Setting up Saldora development environment..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -60,8 +60,8 @@ sleep 5
 
 # Create MinIO bucket
 echo -e "\n${YELLOW}Setting up MinIO bucket...${NC}"
-docker exec fakturaai-minio mc alias set local http://localhost:9000 minioadmin minioadmin 2>/dev/null || true
-docker exec fakturaai-minio mc mb local/fakturaai-documents --ignore-existing 2>/dev/null || true
+docker exec saldora-minio mc alias set local http://localhost:9000 minioadmin minioadmin 2>/dev/null || true
+docker exec saldora-minio mc mb local/saldora-documents --ignore-existing 2>/dev/null || true
 echo -e "${GREEN}✓ MinIO bucket created${NC}"
 
 echo -e "\n${GREEN}✅ Development environment setup complete!${NC}"
