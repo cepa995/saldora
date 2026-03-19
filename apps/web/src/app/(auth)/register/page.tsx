@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
+import { grantConsent } from "@/lib/api/compliance";
 import type { ApiError } from "@/lib/api-client";
 
 function useErrorMessage() {
@@ -28,6 +29,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false);
+  const [consentAnalytics, setConsentAnalytics] = useState(false);
+  const [consentMarketing, setConsentMarketing] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -41,6 +45,10 @@ export default function RegisterPage() {
       setError(t("passwordMismatch"));
       return;
     }
+    if (!acceptPrivacy) {
+      setError(t("mustAcceptPrivacy"));
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -50,6 +58,15 @@ export default function RegisterPage() {
         firstName: firstName || undefined,
         lastName: lastName || undefined,
       });
+
+      // Grant consents after successful registration
+      try {
+        await grantConsent("basic_processing", "1.0");
+        if (consentAnalytics) await grantConsent("analytics", "1.0");
+        if (consentMarketing) await grantConsent("marketing", "1.0");
+      } catch {
+        // Non-blocking — consent failures shouldn't prevent registration
+      }
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -173,6 +190,49 @@ export default function RegisterPage() {
             className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all"
             autoComplete="new-password"
           />
+        </div>
+
+        {/* Consent checkboxes */}
+        <div className="space-y-2.5 pt-1">
+          <label className="flex gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acceptPrivacy}
+              onChange={(e) => setAcceptPrivacy(e.target.checked)}
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span className="text-sm leading-5 text-gray-600">
+              {t("acceptPrivacyPrefix")}{" "}
+              <Link href="/politika-privatnosti" target="_blank" className="text-violet-600 hover:text-violet-700 underline">
+                {t("privacyPolicyLink")}
+              </Link>
+              {" "}<span className="text-red-500">*</span>
+            </span>
+          </label>
+
+          <label className="flex gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consentAnalytics}
+              onChange={(e) => setConsentAnalytics(e.target.checked)}
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span className="text-sm leading-5 text-gray-500">
+              {t("consentAnalytics")}
+            </span>
+          </label>
+
+          <label className="flex gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={consentMarketing}
+              onChange={(e) => setConsentMarketing(e.target.checked)}
+              className="mt-1 w-4 h-4 shrink-0 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+            />
+            <span className="text-sm leading-5 text-gray-500">
+              {t("consentMarketing")}
+            </span>
+          </label>
         </div>
 
         {error && (
