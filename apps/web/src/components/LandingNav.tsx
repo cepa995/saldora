@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const ArrowRightIcon = ({ className = 'w-5 h-5' }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,8 +65,16 @@ const DEFAULT_NAV_LINKS: NavLink[] = [
 ];
 
 export default function LandingNav({ navLinks = DEFAULT_NAV_LINKS }: LandingNavProps) {
+  const pathname = usePathname();
+  const isLanding = pathname === '/';
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // On non-landing pages, prefix anchor links with / so they navigate home
+  const resolvedLinks = navLinks.map((link) => ({
+    ...link,
+    href: !isLanding && link.href.startsWith('#') ? `/${link.href}` : link.href,
+  }));
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -97,7 +106,7 @@ export default function LandingNav({ navLinks = DEFAULT_NAV_LINKS }: LandingNavP
 
             {/* Desktop */}
             <div className="hidden md:flex items-center gap-1">
-              {navLinks.map((link) => (
+              {resolvedLinks.map((link) => (
                 <Link
                   key={link.name}
                   href={link.href}
@@ -167,7 +176,7 @@ export default function LandingNav({ navLinks = DEFAULT_NAV_LINKS }: LandingNavP
 
           <div className="flex-1 overflow-y-auto py-6">
             <div className="space-y-1 px-4">
-              {navLinks.map((link, i) => {
+              {resolvedLinks.map((link, i) => {
                 const IconComponent = MOBILE_ICONS[link.name];
                 const subtitle = MOBILE_SUBTITLES[link.name];
                 return (
