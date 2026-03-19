@@ -145,7 +145,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokens(tokens);
       const createdUser = extractUserFromToken(tokens.access_token);
       setUser(createdUser);
-      router.push(`/${createdUser?.orgSlug}/dashboard`);
+      const slug = createdUser?.orgSlug;
+      if (slug) {
+        router.push(`/${slug}/dashboard`);
+      }
     },
     [router],
   );
