@@ -245,7 +245,7 @@ This milestone is complete. It established the database module, core models (Use
   - 9-digit format check, no leading zero, mod-11 weighted checksum
   - Runs as part of the ML pipeline (not as a separate API service)
 - Implement math validation in `packages/ml/fakturaai_ml/validation/math_check.py`:
-  - Line items sum ≈ subtotal, subtotal + tax ≈ total, line item math (qty * price ≈ total)
+  - Line items sum ≈ subtotal, subtotal + tax ≈ total, line item math (qty * price ≈ total); with discount: qty * price * (1 - discount/100) ≈ tax_base; with tax_base: uses it directly as verified base; 6 verification strategies tried in order
   - Tax groups consistency: sum of group base_amounts ≈ subtotal, sum of group tax_amounts ≈ tax_amount
   - Tiered tolerance by amount range (Section 4.9.5)
   - Design decision: tax amount is NOT recomputed from subtotal * rate

@@ -2,7 +2,7 @@
 # FakturaAI - AI-Powered Invoice Processing Platform
 
 **Version:** 2.5
-**Date:** March 2026
+**Date:** Mach 2026
 **Status:** Draft
 
 ---
@@ -418,8 +418,11 @@ FakturaAI operates as a standalone web application with the following integratio
 | description | Item/service description |
 | quantity | Number of units |
 | unit_price | Price per unit |
+| discount | Discount percentage (rabat), e.g. 7.00 for 7% (nullable) |
+| tax_base | Taxable base after discount, before VAT (poreska osnovica) (nullable) |
 | total | Line total |
 | tax_rate | VAT rate for this line item |
+| tax_amount | VAT amount for this line item (nullable) |
 
 **Tax Group Fields:**
 
@@ -2004,7 +2007,7 @@ CREATE TABLE invoices (
     currency VARCHAR(3) DEFAULT 'RSD',
 
     -- Structured data (JSON arrays)
-    line_items JSON,       -- [{description, quantity, unit_price, total, tax_rate}]
+    line_items JSON,       -- [{description, quantity, unit_price, discount, tax_base, total, tax_rate, tax_amount}]
     tax_groups JSON,       -- [{rate, base_amount, tax_amount}]
 
     -- Confidence and validation
@@ -2195,8 +2198,11 @@ Get invoice details.
       "description": "Usluge konsaltinga",
       "quantity": "10",
       "unit_price": "5000.00",
+      "discount": null,
+      "tax_base": null,
       "total": "50000.00",
-      "tax_rate": "20"
+      "tax_rate": "20",
+      "tax_amount": null
     }
   ],
   "tax_groups": [
@@ -2632,7 +2638,7 @@ The raw OCR text from dots.ocr is sent to Claude along with a structured JSON sc
 | ADDRESS | `Bulevar Kralja Aleksandra 1` | Address string |
 | TAX_RATE | `PDV 20%`, `ПДВ 20%` | 0%, 10%, 20% |
 | TAX_GROUPS | Per-PDV-section breakdown | rate, base_amount, tax_amount per group |
-| LINE_ITEMS | Table rows | description, quantity, unit_price, total, tax_rate |
+| LINE_ITEMS | Table rows | description, quantity, unit_price, discount, tax_base, total, tax_rate, tax_amount |
 
 **LLM Extraction Design Decisions:**
 - Tax amounts are extracted as-printed from the document; they are NOT recomputed from subtotal * rate
@@ -3648,6 +3654,8 @@ The system MUST pull invoices from SEF and process them through the FakturaAI pi
         "quantity": 10,
         "unit": "HUR",  // UN/CEFACT unit code
         "unit_price": 5000.00,
+        "discount": null,
+        "tax_base": null,
         "total": 50000.00,
         "vat_rate": 20.00,
         "vat_amount": 10000.00

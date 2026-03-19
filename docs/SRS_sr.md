@@ -403,7 +403,11 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | description | Opis stavke/usluge |
 | quantity | Količina |
 | unit_price | Cena po jedinici |
+| discount | Rabat (%), npr. 7.00 za 7% (može biti null) |
+| tax_base | Poreska osnovica — iznos posle rabata, pre PDV-a (može biti null) |
 | total | Ukupno za stavku |
+| tax_rate | Stopa PDV-a za stavku |
+| tax_amount | Iznos PDV-a za stavku (može biti null) |
 
 #### FZ-4.3.3 Ocena pouzdanosti
 | ID | FZ-4.3.3 |
@@ -3128,6 +3132,8 @@ Sistem MORA da povlači fakture iz SEF-a i obrađuje ih kroz FakturaAI pipeline.
         "quantity": 10,
         "unit": "HUR",
         "unit_price": 5000.00,
+        "discount": null,
+        "tax_base": null,
         "total": 50000.00,
         "vat_rate": 20.00,
         "vat_amount": 10000.00

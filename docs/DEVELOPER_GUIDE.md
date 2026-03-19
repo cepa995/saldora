@@ -1285,7 +1285,7 @@
   1. Sum of line items = subtotal (within tolerance)
   2. subtotal × tax_rate = tax_amount (within tolerance)
   3. subtotal + tax_amount = total_amount (within tolerance)
-  4. Each line item: quantity × unit_price = line total (within tolerance)
+  4. Each line item: quantity × unit_price = line total (within tolerance); when `discount` is present, applies as `qty × price × (1 - discount/100) ≈ tax_base`; when `tax_base` is present, uses it directly as the verified base
 
   ---
 
