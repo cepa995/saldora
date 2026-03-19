@@ -1,4 +1,4 @@
-# FakturaAI - Specifikacija proizvoda
+# Saldora - Specifikacija proizvoda
 ## Platforma za obradu faktura pomoću veštačke inteligencije
 
 **Verzija:** 2.0
@@ -9,8 +9,8 @@
 
 ## Sadržaj
 
-1. [Šta je FakturaAI?](#1-šta-je-fakturaai)
-2. [Za koga je FakturaAI?](#2-za-koga-je-fakturaai)
+1. [Šta je Saldora?](#1-šta-je-saldora)
+2. [Za koga je Saldora?](#2-za-koga-je-saldora)
 3. [Pregled funkcionalnosti](#3-pregled-funkcionalnosti)
 4. [Tok obrade fakture](#4-tok-obrade-fakture)
 5. [Funkcionalni zahtevi](#5-funkcionalni-zahtevi)
@@ -24,9 +24,9 @@
 
 ---
 
-## 1. Šta je FakturaAI?
+## 1. Šta je Saldora?
 
-FakturaAI je veb platforma dizajnirana za srpsko tržište koja pomoću veštačke inteligencije automatizuje obradu faktura. Umesto ručnog prepisivanja podataka iz faktura u Excel ili računovodstveni softver, korisnik otpremi fakture (PDF, sliku ili iz SEF-a), a sistem automatski:
+Saldora je veb platforma dizajnirana za srpsko tržište koja pomoću veštačke inteligencije automatizuje obradu faktura. Umesto ručnog prepisivanja podataka iz faktura u Excel ili računovodstveni softver, korisnik otpremi fakture (PDF, sliku ili iz SEF-a), a sistem automatski:
 
 - **Prepoznaje tekst** sa fakture (i ćirilicu i latinicu)
 - **Ekstrahuje podatke** (PIB, naziv firme, iznose, stavke, PDV...)
@@ -38,7 +38,7 @@ Računovođa ostaje u potpunoj kontroli - pregleda predloge sistema, ispravlja g
 
 ---
 
-## 2. Za koga je FakturaAI?
+## 2. Za koga je Saldora?
 
 ### 2.1 Samostalni računovođa
 
@@ -425,7 +425,7 @@ Korisnik kreira pravila putem jednostavnog interfejsa bez potrebe za programiran
 
 ### 9.1 SEF - Sistem Elektronskih Faktura
 
-FakturaAI se integriše sa SEF-om (eFaktura) za automatsko preuzimanje elektronskih faktura:
+Saldora se integriše sa SEF-om (eFaktura) za automatsko preuzimanje elektronskih faktura:
 
 **Šta SEF integracija omogućava:**
 - Automatsko preuzimanje novih faktura svakih 15 minuta
@@ -435,7 +435,7 @@ FakturaAI se integriše sa SEF-om (eFaktura) za automatsko preuzimanje elektrons
 
 **Statusi faktura na SEF-u:**
 
-| Status | Značenje | Šta FakturaAI radi |
+| Status | Značenje | Šta Saldora radi |
 |--------|---------|---------------------|
 | Isporučena | Nova faktura stigla | Preuzima i obrađuje |
 | Viđena | Korisnik je video | Ažurira status |

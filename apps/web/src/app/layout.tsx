@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "FakturaAI - Automatska obrada faktura | AI za računovođe",
+  title: "Saldora - Automatska obrada faktura | AI za računovođe",
   description:
     "Uštedite 10+ sati mesečno. AI koji čita vaše fakture i automatski izvlači sve podatke. Za računovodstvene agencije u Srbiji.",
   keywords: [
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     "Srbija",
   ],
   openGraph: {
-    title: "FakturaAI - Automatska obrada faktura",
+    title: "Saldora - Automatska obrada faktura",
     description:
       "AI koji čita vaše fakture i automatski izvlači sve podatke.",
     locale: "sr_RS",

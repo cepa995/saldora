@@ -26,7 +26,7 @@ class SefInvoice(Base, UUIDMixin, TimestampMixin):
     """An invoice received from or sent to the SEF system.
 
     Tracks both an internal status for UI display and the raw SEF status
-    for system fidelity. Linked to a FakturaAI Invoice after processing.
+    for system fidelity. Linked to a Saldora Invoice after processing.
     """
 
     __tablename__ = "sef_invoices"
@@ -46,7 +46,7 @@ class SefInvoice(Base, UUIDMixin, TimestampMixin):
         nullable=False,
     )
 
-    # Link to FakturaAI invoice (set after processing)
+    # Link to Saldora invoice (set after processing)
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("invoices.id", ondelete="SET NULL"),

@@ -1,11 +1,11 @@
-# FakturaAI Development Docker Compose
+# Saldora Development Docker Compose
 # Usage: docker compose -f infra/docker/docker-compose.yml up -d
 
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: fakturaai-postgres
+    container_name: saldora-postgres
     environment:
       POSTGRES_USER: fakturaai
       POSTGRES_PASSWORD: fakturaai_dev
@@ -23,7 +23,7 @@ services:
   # Redis for caching and Celery broker
   redis:
     image: redis:7-alpine
-    container_name: fakturaai-redis
+    container_name: saldora-redis
     ports:
       - "6379:6379"
     volumes:
@@ -37,7 +37,7 @@ services:
   # MinIO for S3-compatible local storage
   minio:
     image: minio/minio:latest
-    container_name: fakturaai-minio
+    container_name: saldora-minio
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -58,7 +58,7 @@ services:
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
-    container_name: fakturaai-api
+    container_name: saldora-api
     environment:
       DATABASE_URL: postgresql+asyncpg://fakturaai:fakturaai_dev@postgres:5432/fakturaai
       REDIS_URL: redis://redis:6379/0
@@ -67,7 +67,7 @@ services:
       STORAGE_PUBLIC_ENDPOINT: http://localhost:9010
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
-      STORAGE_BUCKET: fakturaai-documents
+      STORAGE_BUCKET: saldora-documents
       ENVIRONMENT: development
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       FRONTEND_URL: http://localhost:3000
@@ -99,7 +99,7 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
-    container_name: fakturaai-web
+    container_name: saldora-web
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
@@ -113,7 +113,7 @@ services:
   # vLLM server running dots.ocr model (GPU required)
   dots-ocr-server:
     image: vllm/vllm-openai:latest
-    container_name: fakturaai-dots-ocr
+    container_name: saldora-dots-ocr
     environment:
       HUGGING_FACE_HUB_TOKEN: ""
     command: >
@@ -147,7 +147,7 @@ services:
     build:
       context: ../..
       dockerfile: workers/Dockerfile
-    container_name: fakturaai-ocr-worker
+    container_name: saldora-ocr-worker
     environment:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
@@ -155,7 +155,7 @@ services:
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
-      STORAGE_BUCKET: fakturaai-documents
+      STORAGE_BUCKET: saldora-documents
       DATABASE_URL: postgresql://fakturaai:fakturaai_dev@postgres:5432/fakturaai
       OCR_PRIMARY_ENGINE: dots
       OCR_FALLBACK_ENGINE: none
@@ -176,7 +176,7 @@ services:
   # Flower - Celery monitoring
   flower:
     image: mher/flower:2.0
-    container_name: fakturaai-flower
+    container_name: saldora-flower
     environment:
       CELERY_BROKER_URL: redis://redis:6379/1
       FLOWER_PORT: 5555

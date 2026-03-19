@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback } from 'react';
 
-const STORAGE_KEY = 'fakturaai_sidebar_collapsed';
+const STORAGE_KEY = 'saldora_sidebar_collapsed';
 
 interface SidebarContextType {
   isCollapsed: boolean;

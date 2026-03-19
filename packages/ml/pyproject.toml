@@ -1,7 +1,7 @@
 [project]
 name = "fakturaai-ml"
 version = "0.1.0"
-description = "FakturaAI ML Pipeline - OCR and invoice data extraction"
+description = "Saldora ML Pipeline - OCR and invoice data extraction"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

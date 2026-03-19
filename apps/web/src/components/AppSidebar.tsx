@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -372,9 +373,9 @@ export function AppSidebar() {
               className="flex items-center justify-center py-2"
             >
               {collapsed ? (
-                <span className="text-xl font-bold gradient-text">F</span>
+                <Image src="/app-icon.png" alt="Saldora" width={32} height={32} className="rounded-lg" />
               ) : (
-                <span className="text-lg font-bold gradient-text">FakturaAI</span>
+                <Image src="/logo.png" alt="Saldora" width={120} height={32} className="object-contain" />
               )}
             </Link>
           </div>
@@ -579,7 +580,7 @@ export function AppSidebar() {
           </svg>
         </button>
         <Link href={orgPath("/dashboard")} className="flex items-center mx-auto">
-          <span className="text-base font-bold gradient-text">FakturaAI</span>
+          <Image src="/logo.png" alt="Saldora" width={100} height={28} className="object-contain" />
         </Link>
         <div className="w-10" />
       </div>
@@ -589,7 +590,9 @@ export function AppSidebar() {
         <div className="md:hidden fixed inset-0 z-50 bg-white flex flex-col">
           {/* Close button */}
           <div className="flex items-center justify-between px-4 h-14 border-b border-gray-100 shrink-0">
-            <Link href={orgPath("/dashboard")} onClick={closeMobile} className="text-lg font-bold gradient-text">FakturaAI</Link>
+            <Link href={orgPath("/dashboard")} onClick={closeMobile}>
+              <Image src="/logo.png" alt="Saldora" width={110} height={30} className="object-contain" />
+            </Link>
             <button
               onClick={closeMobile}
               className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"

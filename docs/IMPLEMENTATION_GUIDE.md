@@ -1,4 +1,4 @@
-# FakturaAI — Implementation Guide
+# Saldora — Implementation Guide
 
 **Reference:** [SRS.md](SRS.md)
 **Date:** 2026-02-25
@@ -7,7 +7,7 @@
 
 ## Overview
 
-This guide breaks the FakturaAI SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
+This guide breaks the Saldora SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
 
 > **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
@@ -476,7 +476,7 @@ This milestone is complete. It established the database module, core models (Use
 
 ## Milestone 5: Accounting Intelligence & Rules Engine
 
-**Goal:** Transform FakturaAI from an "OCR tool" into an "accounting intelligence platform." Classify documents, determine VAT treatment, suggest konta, map to PDV books, and apply organization-specific automation rules.
+**Goal:** Transform Saldora from an "OCR tool" into an "accounting intelligence platform." Classify documents, determine VAT treatment, suggest konta, map to PDV books, and apply organization-specific automation rules.
 
 ### Issues
 
@@ -692,7 +692,7 @@ This milestone is complete. It established the database module, core models (Use
   - `find_or_create_customer(pib, name, address, city)` — customer lookup/creation by PIB
   - `get_currency(code)` — currency ID lookup
 - Create `apps/api/app/services/minimax/mapper.py`:
-  - `map_invoice_to_received(invoice, customer_id, currency_id)` — map FakturaAI fields to MiniMax schema
+  - `map_invoice_to_received(invoice, customer_id, currency_id)` — map Saldora fields to MiniMax schema
 - Create `apps/api/app/schemas/minimax.py` — Pydantic schemas for push request/response/config
 - Create `apps/api/app/models/minimax_config.py` — per-org credentials (client_id, client_secret, username, password, minimax_org_id)
 - Create Alembic migration for `minimax_configs` table
@@ -756,7 +756,7 @@ This milestone is complete. It established the database module, core models (Use
 
 #### 7.1 — Implement SEF (eFaktura) inbound invoice sync
 
-**Description:** Pull invoices from the Serbian E-Invoice System via polling (SEF does not support webhooks). Parse UBL/XML, download PDF attachments, and feed into the FakturaAI pipeline.
+**Description:** Pull invoices from the Serbian E-Invoice System via polling (SEF does not support webhooks). Parse UBL/XML, download PDF attachments, and feed into the Saldora pipeline.
 
 **Requirements covered:** Section 10.5.1 through 10.5.3, Section 7.6, Section 8.5.1, 8.5.2
 
@@ -801,7 +801,7 @@ This milestone is complete. It established the database module, core models (Use
   - Respect SEF API rate limits (max 100 requests/hour per org)
 - Wire status changes to notification system
 
-**Acceptance:** Send invoice to SEF → SEF ID stored. Buyer approves on SEF → status updated in FakturaAI within polling interval.
+**Acceptance:** Send invoice to SEF → SEF ID stored. Buyer approves on SEF → status updated in Saldora within polling interval.
 
 ---
 
@@ -1064,7 +1064,7 @@ This milestone is complete. It established the database module, core models (Use
 - Row click opens SEF invoice detail with accept/reject/process actions
 - Wire to SEF integration endpoints
 
-**Acceptance:** SEF invoices appear in inbox after sync. Process action creates FakturaAI invoice. Accept/reject sends response to SEF.
+**Acceptance:** SEF invoices appear in inbox after sync. Process action creates Saldora invoice. Accept/reject sends response to SEF.
 
 ---
 

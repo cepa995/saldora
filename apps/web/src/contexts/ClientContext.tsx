@@ -27,7 +27,7 @@ const ClientContext = createContext<ClientContextValue>({
   refresh: () => {},
 });
 
-const STORAGE_KEY = 'fakturaai_selected_client';
+const STORAGE_KEY = 'saldora_selected_client';
 
 /**
  * Provides client selection context for Agency organizations.

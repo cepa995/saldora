@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = "FakturaAI API"
+    app_name: str = "Saldora API"
     app_version: str = "0.1.0"
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = False
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     storage_public_endpoint: str | None = (
         None  # Browser-accessible URL (e.g. http://localhost:9010)
     )
-    storage_bucket: str = "fakturaai-documents"
+    storage_bucket: str = "saldora-documents"
     storage_access_key: str = ""
     storage_secret_key: str = ""
     storage_region: str = "auto"
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     resend_api_key: str = ""
-    resend_from_email: str = "noreply@fakturaai.rs"
+    resend_from_email: str = "noreply@saldora.ai"
     frontend_url: str = "http://localhost:3000"
 
     # NBS (National Bank of Serbia) Exchange Rates

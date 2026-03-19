@@ -2,7 +2,7 @@
 
 ## Project
 
-FakturaAI — AI-powered invoice processing SaaS for the Serbian market.
+Saldora — AI-powered invoice processing SaaS for the Serbian market.
 Monorepo: `apps/api` (FastAPI), `apps/web` (Next.js), `workers/`, `packages/`, `infra/`.
 
 ## Issue Workflow

@@ -105,7 +105,7 @@ async def generate_audit_export(
     client = get_s3_client()
     await asyncio.to_thread(
         client.put_object,
-        Bucket="fakturaai-documents",
+        Bucket="saldora-documents",
         Key=key,
         Body=zip_bytes,
         ContentType="application/zip",
@@ -316,7 +316,7 @@ async def _add_documents(zf: zipfile.ZipFile, invoices: list[Invoice]) -> None:
         try:
             response = await asyncio.to_thread(
                 client.get_object,
-                Bucket="fakturaai-documents",
+                Bucket="saldora-documents",
                 Key=inv.document_path,
             )
             body = await asyncio.to_thread(response["Body"].read)

@@ -54,7 +54,7 @@ export async function fetchSefInvoice(id: string): Promise<SefInvoice> {
 }
 
 /**
- * Process a SEF invoice — creates a FakturaAI invoice from it.
+ * Process a SEF invoice — creates a Saldora invoice from it.
  *
  * Args:
  *   id - UUID of the SEF invoice to process.

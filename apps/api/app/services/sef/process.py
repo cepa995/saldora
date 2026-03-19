@@ -1,6 +1,6 @@
 """SEF invoice processing service.
 
-Converts a SEF invoice into a FakturaAI Invoice record by extracting
+Converts a SEF invoice into a Saldora Invoice record by extracting
 structured data from the cached SEF response JSON.
 """
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 async def process_sef_invoice(db: AsyncSession, sef_invoice_id: UUID, org_id: UUID) -> SefInvoice:
-    """Create a FakturaAI Invoice from a SEF invoice.
+    """Create a Saldora Invoice from a SEF invoice.
 
     Extracts structured data from the SEF response JSON, creates an
     Invoice record with status 'review', and links it to the SefInvoice.
@@ -93,7 +93,7 @@ async def process_sef_invoice(db: AsyncSession, sef_invoice_id: UUID, org_id: UU
         if raw_line_items:
             tax_rate = _parse_decimal(raw_line_items[0].get("vat_rate"))
 
-        # Create FakturaAI Invoice
+        # Create Saldora Invoice
         invoice = Invoice(
             organization_id=org_id,
             status="review",

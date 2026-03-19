@@ -1,6 +1,6 @@
-## 1. What is FakturaAI?
+## 1. What is Saldora?
 
-FakturaAI is a web-based invoice processing platform built specifically for the Serbian market. It uses artificial intelligence to automate the manual, time-consuming work of reading invoices, extracting data, verifying correctness, and preparing accounting entries.
+Saldora is a web-based invoice processing platform built specifically for the Serbian market. It uses artificial intelligence to automate the manual, time-consuming work of reading invoices, extracting data, verifying correctness, and preparing accounting entries.
 
 **The core promise:** An accountant uploads a stack of invoices. Within seconds, the system reads every invoice, extracts all relevant data (PIB, company names, amounts, line items, VAT), verifies the numbers, suggests the correct accounting entries, and presents everything for a quick review. What used to take hours now takes minutes.
 
@@ -10,11 +10,11 @@ The accountant remains fully in control — the system proposes, the human appro
 
 ## 2. High-Level System Overview
 
-The following diagram shows the major components of the FakturaAI platform and how they connect:
+The following diagram shows the major components of the Saldora platform and how they connect:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     FakturaAI Platform                        │
+│                     Saldora Platform                        │
 │                                                              │
 │  Web App (Next.js) ◄──► REST API (FastAPI) ◄──► Workers      │
 │  Dashboard, Upload,     Auth, Invoices,        (Celery+Redis)│
@@ -69,7 +69,7 @@ This diagram shows the complete user journey from first registration to exported
 
 ### What the User Does
 
-1. Opens FakturaAI in a web browser
+1. Opens Saldora in a web browser
 2. Creates an account with email, password, name, and organization name
 3. Receives access immediately (no email verification delay)
 4. Sees the dashboard — empty at first, ready for the first invoice
@@ -107,7 +107,7 @@ The user drags and drops files (or clicks to browse) on the Upload page.
 
 ### Channel B — SEF Inbox (eFaktura)
 
-Serbia's electronic invoicing system (SEF) delivers invoices digitally. FakturaAI polls the SEF portal periodically and imports new invoices automatically.
+Serbia's electronic invoicing system (SEF) delivers invoices digitally. Saldora polls the SEF portal periodically and imports new invoices automatically.
 
 - Invoices appear in the SEF Inbox page with status "new"
 - User reviews and decides: accept (import for processing) or reject/archive
@@ -376,7 +376,7 @@ The rules engine is **100% deterministic** — no AI is involved. Rules use exac
 
 ### Pre-Built Templates
 
-FakturaAI comes with nine ready-to-use rule templates for common Serbian accounting scenarios. Users can apply a template and customize it rather than building rules from scratch:
+Saldora comes with nine ready-to-use rule templates for common Serbian accounting scenarios. Users can apply a template and customize it rather than building rules from scratch:
 
 - Small-value purchase auto-approval
 - Foreign supplier flagging
@@ -474,7 +474,7 @@ This correction log serves two purposes:
 
 ## 12. Step 9 — Export & Integration
 
-**Goal:** Get the processed data out of FakturaAI and into the accountant's existing tools.
+**Goal:** Get the processed data out of Saldora and into the accountant's existing tools.
 
 ### Export Formats
 
@@ -504,7 +504,7 @@ The system blocks export of invoices that are not ready:
 
 ### Export Templates
 
-FakturaAI provides four system templates and supports custom user-defined templates:
+Saldora provides four system templates and supports custom user-defined templates:
 
 **System Templates (built-in):**
 
@@ -538,11 +538,11 @@ Templates are scoped per organization — each organization manages its own cust
 
 ### MiniMax Integration
 
-For organizations using MiniMax accounting software, FakturaAI supports direct data push:
+For organizations using MiniMax accounting software, Saldora supports direct data push:
 
 ```
 ┌───────────────┐     ┌────────────────┐     ┌──────────────────┐
-│  FakturaAI    │────►│ MiniMax REST   │────►│ MiniMax Software │
+│  Saldora    │────►│ MiniMax REST   │────►│ MiniMax Software │
 │  (Verified    │     │ API            │     │ (Accounting)     │
 │   invoices)   │     │ Basic Auth     │     │                  │
 └───────────────┘     └────────────────┘     └──────────────────┘
@@ -654,7 +654,7 @@ Every query in the system is automatically scoped to the user's organization. Th
 
 ### Audit Trail
 
-FakturaAI maintains an immutable (append-only) audit log of every significant action:
+Saldora maintains an immutable (append-only) audit log of every significant action:
 
 | Event Category | Examples |
 |----------------|----------|
@@ -668,7 +668,7 @@ Each log entry records: who (user), what (action), when (timestamp), where (IP a
 
 ### Compliance Framework
 
-| Requirement | How FakturaAI Complies |
+| Requirement | How Saldora Complies |
 |-------------|----------------------|
 | **ZZPL** (Serbian Data Protection Law) | All data access logged; encryption at rest and in transit; immutable audit trail |
 | **Zakon o računovodstvu** (Accounting Law) | 10-year document retention; original documents preserved; full audit export for tax authority |
@@ -782,4 +782,4 @@ Attempting to access any client endpoint (`/clients`, `/{invoice_id}/client`) on
 
 ---
 
-*This document describes FakturaAI through Milestone 9 (Client Management). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+*This document describes Saldora through Milestone 9 (Client Management). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*

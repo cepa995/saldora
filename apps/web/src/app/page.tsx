@@ -619,7 +619,7 @@ function TransformationSection() {
             Od haosa do kontrole
           </h2>
           <p className={`text-xl text-gray-400 max-w-2xl mx-auto transition-all duration-700 delay-200 ${isInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}>
-            Pogledajte kako FakturaAI transformiše vaš radni dan
+            Pogledajte kako Saldora transformiše vaš radni dan
           </p>
         </div>
 
@@ -698,7 +698,7 @@ function TransformationSection() {
           <div className={`relative transition-all duration-700 delay-500 ${showAfter ? "opacity-100 scale-100" : "opacity-40 scale-[0.98]"}`}>
             {/* Badge - fixed z-index */}
             <div className="absolute -top-4 right-4 z-20 px-4 py-1.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-sm font-semibold rounded-full backdrop-blur-sm">
-              Sa FakturaAI
+              Sa Saldora
             </div>
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 border border-emerald-500/20 relative overflow-hidden h-full min-h-[480px] flex flex-col">
               {/* Glow effect */}
@@ -1851,7 +1851,7 @@ function CTASection() {
 
         {/* Bottom social proof */}
         <div className={`mt-10 text-center transition-all duration-700 delay-300 ${isInView ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}>
-          <p className="text-sm text-gray-500 mb-4">Pridružite se 500+ računovođa koje već koriste FakturaAI</p>
+          <p className="text-sm text-gray-500 mb-4">Pridružite se 500+ računovođa koje već koriste Saldora</p>
           <div className="flex items-center justify-center gap-1">
             {[...Array(5)].map((_, i) => (
               <div
@@ -1892,7 +1892,7 @@ function Footer() {
             <div className="mb-6">
               <Image
                 src="/logo.png"
-                alt="FakturaAI"
+                alt="Saldora"
                 width={160}
                 height={107}
                 className="brightness-0 invert"
@@ -1954,11 +1954,11 @@ function Footer() {
               </h4>
               <ul className="space-y-4 text-gray-400">
                 <li>
-                  <a href="mailto:info@fakturaai.rs" className="hover:text-white transition-colors flex items-center gap-2">
+                  <a href="mailto:info@saldora.ai" className="hover:text-white transition-colors flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    info@fakturaai.rs
+                    info@saldora.ai
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
@@ -2001,7 +2001,7 @@ function Footer() {
         <div className="pt-8 border-t border-gray-800/50">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
-              <p className="text-gray-500 text-sm">© 2025 FakturaAI. Sva prava zadržana.</p>
+              <p className="text-gray-500 text-sm">© 2025 Saldora. Sva prava zadržana.</p>
               <div className="flex items-center gap-1 text-sm text-gray-600">
                 <span>Napravljeno sa</span>
                 <span className="text-red-500 animate-pulse">❤</span>

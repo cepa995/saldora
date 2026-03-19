@@ -268,7 +268,7 @@ def _download_document(path: str) -> bytes:
         aws_secret_access_key=os.getenv("STORAGE_SECRET_KEY"),
     )
 
-    bucket = os.getenv("STORAGE_BUCKET", "fakturaai-documents")
+    bucket = os.getenv("STORAGE_BUCKET", "saldora-documents")
 
     response = s3.get_object(Bucket=bucket, Key=path)
     return response["Body"].read()

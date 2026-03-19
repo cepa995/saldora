@@ -1,6 +1,6 @@
-  # FakturaAI Developer Guide
+  # Saldora Developer Guide
 
-  A practical, hands-on guide to understanding and working with the FakturaAI codebase.
+  A practical, hands-on guide to understanding and working with the Saldora codebase.
 
   ---
 
@@ -277,7 +277,7 @@
 
   ### Why Docker?
 
-  FakturaAI depends on several services (PostgreSQL, Redis, MinIO) and runtimes (Python 3.12, Node 22, CUDA). Without Docker, every developer would have to install and configure each one manually. Docker gives you:
+  Saldora depends on several services (PostgreSQL, Redis, MinIO) and runtimes (Python 3.12, Node 22, CUDA). Without Docker, every developer would have to install and configure each one manually. Docker gives you:
 
   - **Reproducible environments** - same versions everywhere
   - **One-command infrastructure** - `docker compose up` starts everything
@@ -601,7 +601,7 @@
   |----------|---------|-------------|
   | `ENVIRONMENT` | `development` | One of: `development`, `staging`, `production`. Controls Sentry sample rate, Swagger docs visibility, and debug mode. |
   | `DEBUG` | `false` | Enable debug mode |
-  | `APP_NAME` | `FakturaAI API` | Application name |
+  | `APP_NAME` | `Saldora API` | Application name |
   | `APP_VERSION` | `0.1.0` | Application version |
   | `HOST` | `0.0.0.0` | Server bind address |
   | `PORT` | `8000` | Server port |
@@ -730,7 +730,7 @@
   OCR_PRIMARY_ENGINE=dots
   OCR_USE_GPU=true
 
-  NEXT_PUBLIC_API_URL=https://api.staging.fakturaai.rs
+  NEXT_PUBLIC_API_URL=https://api.staging.saldora.ai
   ```
 
   #### Production
@@ -769,7 +769,7 @@
   OCR_USE_GPU=true
   OCR_CONFIDENCE_THRESHOLD=0.80
 
-  NEXT_PUBLIC_API_URL=https://api.fakturaai.rs
+  NEXT_PUBLIC_API_URL=https://api.saldora.ai
   ```
 
   ### What Changes Between Environments
@@ -837,8 +837,8 @@
       CORSMiddleware,
       allow_origins=[
           "http://localhost:3000",          # Local dev
-          "https://fakturaai.rs",           # Production
-          "https://www.fakturaai.rs",       # Production (www)
+          "https://saldora.ai",           # Production
+          "https://www.saldora.ai",       # Production (www)
       ],
       allow_credentials=True,               # Allow cookies/tokens
       allow_methods=["*"],

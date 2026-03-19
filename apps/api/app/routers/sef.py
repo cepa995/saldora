@@ -208,7 +208,7 @@ async def process_invoice(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("operator")),
 ) -> SefInvoiceResponse:
-    """Process a SEF invoice — creates a FakturaAI invoice from it.
+    """Process a SEF invoice — creates a Saldora invoice from it.
 
     Args:
         invoice_id: UUID of the SEF invoice to process.

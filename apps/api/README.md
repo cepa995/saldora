@@ -1,6 +1,6 @@
-# FakturaAI API
+# Saldora API
 
-FastAPI backend for the FakturaAI invoice processing platform.
+FastAPI backend for the Saldora invoice processing platform.
 
 ## Setup
 

@@ -21,7 +21,7 @@ const AUTH_ROUTES = ["/login", "/register", "/password-reset", "/invite"];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isLoggedIn =
-    request.cookies.get("fakturaai_logged_in")?.value === "true";
+    request.cookies.get("saldora_logged_in")?.value === "true";
 
   // Check if path matches /:orgSlug/:page pattern (org-scoped app route)
   const segments = pathname.split("/").filter(Boolean);

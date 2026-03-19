@@ -4,7 +4,7 @@ import { type Locale, locales, defaultLocale } from './config';
 
 export default getRequestConfig(async () => {
   const cookieStore = await cookies();
-  const raw = cookieStore.get('fakturaai_locale')?.value;
+  const raw = cookieStore.get('saldora_locale')?.value;
   const locale: Locale = locales.includes(raw as Locale) ? (raw as Locale) : defaultLocale;
 
   return {

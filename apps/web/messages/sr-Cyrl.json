@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "FakturaAI",
+    "appName": "Saldora",
     "loading": "Учитавање...",
     "save": "Сачувај",
     "saving": "Чување...",
@@ -19,7 +19,7 @@
     "retry": "Покушај поново",
     "comingSoon": "Ускоро доступно",
     "allRightsReserved": "Сва права задржана.",
-    "copyright": "© {year} FakturaAI. Сва права задржана.",
+    "copyright": "© {year} Saldora. Сва права задржана.",
     "error": "Грешка",
     "success": "Успешно",
     "noData": "Нема података",

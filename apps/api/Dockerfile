@@ -17,7 +17,7 @@ RUN useradd -m -u 1000 api
 WORKDIR /app
 
 # Install Python dependencies
-# Copy pyproject.toml and install deps (skip fakturaai-ml — not needed in API container)
+# Copy pyproject.toml and install deps (skip saldora-ml — not needed in API container)
 COPY apps/api/pyproject.toml /app/
 RUN pip install \
     "fastapi>=0.115.0" \
