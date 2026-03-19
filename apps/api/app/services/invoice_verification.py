@@ -144,12 +144,20 @@ def verify_calculations(invoice: Invoice) -> list[dict]:
             total = _to_decimal(item.get("total"))
             if qty is not None and price is not None and total is not None:
                 expected = qty * price
-                if abs(expected - total) > Decimal("1"):
+                diff = abs(expected - total)
+                if diff > Decimal("1"):
                     desc = item.get("description", f"stavka {i + 1}")
+                    diff_rounded = round(float(diff), 2)
                     warnings.append(
                         {
-                            "message": f"Greška u stavci: {desc} (količina × cena ≠ ukupno)",
-                            "severity": "warning",
+                            "message": (
+                                f"Stavka '{desc}': količina × cena = "
+                                f"{round(float(expected), 2)}, a ukupno = "
+                                f"{round(float(total), 2)} "
+                                f"(razlika: {diff_rounded}). "
+                                "Moguće da ukupno uključuje PDV."
+                            ),
+                            "severity": "info",
                             "field_name": "line_items",
                         }
                     )
