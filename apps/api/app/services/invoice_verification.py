@@ -137,30 +137,55 @@ def verify_calculations(invoice: Invoice) -> list[dict]:
                 )
 
     # Check 5: Per-line-item math (quantity * unit_price = total)
+    # Try without PDV first, then with PDV if tax_rate is available.
+    # Also try with the invoice-level tax_rate as fallback.
     if invoice.line_items:
+        invoice_tax_rate = _to_decimal(
+            getattr(invoice, "tax_rate", None)
+        )
         for i, item in enumerate(invoice.line_items):
             qty = _to_decimal(item.get("quantity"))
             price = _to_decimal(item.get("unit_price"))
             total = _to_decimal(item.get("total"))
-            if qty is not None and price is not None and total is not None:
-                expected = qty * price
-                diff = abs(expected - total)
-                if diff > Decimal("1"):
-                    desc = item.get("description", f"stavka {i + 1}")
-                    diff_rounded = round(float(diff), 2)
-                    warnings.append(
-                        {
-                            "message": (
-                                f"Stavka '{desc}': količina × cena = "
-                                f"{round(float(expected), 2)}, a ukupno = "
-                                f"{round(float(total), 2)} "
-                                f"(razlika: {diff_rounded}). "
-                                "Moguće da ukupno uključuje PDV."
-                            ),
-                            "severity": "info",
-                            "field_name": "line_items",
-                        }
-                    )
+            if qty is None or price is None or total is None:
+                continue
+
+            base = qty * price
+            diff_without_pdv = abs(base - total)
+
+            # If math checks out without PDV, no warning needed
+            if diff_without_pdv <= Decimal("1"):
+                continue
+
+            # Try with per-item tax_rate
+            item_tax_rate = _to_decimal(item.get("tax_rate"))
+            resolved = False
+            for rate in (item_tax_rate, invoice_tax_rate):
+                if rate is not None and rate > 0:
+                    expected_with_pdv = base * (1 + rate / 100)
+                    if abs(expected_with_pdv - total) <= Decimal("1"):
+                        resolved = True
+                        break
+
+            if resolved:
+                continue
+
+            # Neither matched — show info
+            desc = item.get("description", f"stavka {i + 1}")
+            diff_rounded = round(float(diff_without_pdv), 2)
+            warnings.append(
+                {
+                    "message": (
+                        f"Stavka '{desc}': količina × cena = "
+                        f"{round(float(base), 2)}, a ukupno = "
+                        f"{round(float(total), 2)} "
+                        f"(razlika: {diff_rounded}). "
+                        "Moguće da ukupno uključuje PDV ili popust."
+                    ),
+                    "severity": "info",
+                    "field_name": "line_items",
+                }
+            )
 
     return warnings
 
