@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { fetchClients, createClient, updateClient, deleteClient } from '@/lib/api/clients';
+import { isPlanError } from '@/lib/api-client';
+import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 import type { ClientResponse, ClientCreate, ClientUpdate } from '@/lib/types/client';
 
 export default function ClientsPage() {
@@ -27,6 +29,7 @@ export default function ClientsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [planError, setPlanError] = useState<PlanErrorInfo | null>(null);
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -55,8 +58,12 @@ export default function ClientsPage() {
       setClients(result.data);
       setTotalPages(result.pagination.total_pages);
       setTotal(result.pagination.total);
-    } catch {
-      setError(t('loadError'));
+    } catch (err) {
+      if (isPlanError(err)) {
+        setPlanError(err.planError as PlanErrorInfo);
+      } else {
+        setError(t('loadError'));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -109,6 +116,10 @@ export default function ClientsPage() {
     } catch {
       setToast({ message: t('deleteError'), type: 'error' });
     }
+  }
+
+  if (planError) {
+    return <UpgradeModal error={planError} onClose={() => window.history.back()} />;
   }
 
   return (
