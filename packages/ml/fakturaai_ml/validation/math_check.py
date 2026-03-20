@@ -195,28 +195,69 @@ class MathValidator:
         return all_valid
 
     def _validate_line_item_math(self, invoice: ExtractedInvoice) -> bool:
-        """Validate individual line item calculations."""
+        """Validate individual line item calculations.
+
+        Tries multiple strategies to match quantity × unit_price to total,
+        accounting for discount (rabat) and PDV. Only warns if none match.
+        """
         all_valid = True
+        tolerance = Decimal("2")
 
         for i, item in enumerate(invoice.line_items):
             if item.quantity is None or item.unit_price is None or item.total is None:
                 continue
 
-            expected = item.quantity * item.unit_price
-            difference = abs(expected - item.total)
+            gross = item.quantity * item.unit_price
+            discount = getattr(item, "discount", None)
+            tax_base = getattr(item, "tax_base", None)
+            item_tax_rate = getattr(item, "tax_rate", None)
 
-            # Use 1 RSD tolerance per line item
-            if difference > Decimal("1"):
-                self._warnings.append(
-                    ValidationWarning(
-                        warning_type=WarningType.MATH_MISMATCH,
-                        message=f"Greška u stavci {i + 1}: {item.description[:30]}",
-                        field_name=f"line_item_{i}",
-                        severity="warning",
-                        blocking=False,
-                    )
+            net = gross
+            if discount is not None and discount > 0:
+                net = gross * (1 - discount / 100)
+
+            # Try without PDV
+            if abs(gross - item.total) <= tolerance:
+                continue
+            if discount and abs(net - item.total) <= tolerance:
+                continue
+            if tax_base is not None and abs(tax_base - item.total) <= tolerance:
+                continue
+
+            # Try with PDV
+            matched = False
+            for rate in (item_tax_rate,):
+                if rate is not None and rate > 0:
+                    if abs(net * (1 + rate / 100) - item.total) <= tolerance:
+                        matched = True
+                        break
+                    if abs(gross * (1 + rate / 100) - item.total) <= tolerance:
+                        matched = True
+                        break
+                    if tax_base is not None:
+                        if abs(tax_base * (1 + rate / 100) - item.total) <= tolerance:
+                            matched = True
+                            break
+
+            if matched:
+                continue
+
+            desc = item.description[:40] if item.description else f"stavka {i + 1}"
+            self._warnings.append(
+                ValidationWarning(
+                    warning_type=WarningType.MATH_MISMATCH,
+                    message=(
+                        f"Stavka '{desc}': količina × cena = "
+                        f"{round(float(gross), 2)}, ukupno = "
+                        f"{round(float(item.total), 2)}. "
+                        "Proverite rabat ili PDV obračun."
+                    ),
+                    field_name=f"line_item_{i}",
+                    severity="info",
+                    blocking=False,
                 )
-                all_valid = False
+            )
+            all_valid = False
 
         return all_valid
 

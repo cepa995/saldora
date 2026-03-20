@@ -39,7 +39,9 @@ export default function OrganizationSetupPage() {
   // Redirect if user already has an org
   useEffect(() => {
     if (!isLoading && isAuthenticated && user?.organizationId) {
-      router.push(user?.orgSlug ? `/${user.orgSlug}/dashboard` : "/dashboard");
+      if (user?.orgSlug) {
+        router.push(`/${user.orgSlug}/dashboard`);
+      }
     }
     if (!isLoading && !isAuthenticated) {
       router.push("/login");

@@ -1008,6 +1008,16 @@ async def update_invoice(
         new_values=_json_safe(updates),
     )
 
+    # Sync denormalized line items if relevant fields changed
+    _sync_fields = {"line_items", "seller", "invoice_date", "currency"}
+    if _sync_fields & set(updates.keys()):
+        try:
+            from app.services.line_item_sync import sync_line_items_orm
+
+            await sync_line_items_orm(db, invoice)
+        except Exception:
+            pass  # Non-blocking — logged inside sync function
+
     await db.commit()
     await db.refresh(invoice)
 

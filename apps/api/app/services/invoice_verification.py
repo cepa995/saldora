@@ -136,23 +136,92 @@ def verify_calculations(invoice: Invoice) -> list[dict]:
                     }
                 )
 
-    # Check 5: Per-line-item math (quantity * unit_price = total)
+    # Check 5: Per-line-item math verification.
+    # Invoices may have: discount (rabat), tax_base (poreska osnovica),
+    # and total that includes PDV. We try multiple formulas before warning.
     if invoice.line_items:
+        invoice_tax_rate = _to_decimal(getattr(invoice, "tax_rate", None))
         for i, item in enumerate(invoice.line_items):
             qty = _to_decimal(item.get("quantity"))
             price = _to_decimal(item.get("unit_price"))
             total = _to_decimal(item.get("total"))
-            if qty is not None and price is not None and total is not None:
-                expected = qty * price
-                if abs(expected - total) > Decimal("1"):
-                    desc = item.get("description", f"stavka {i + 1}")
-                    warnings.append(
-                        {
-                            "message": f"Greška u stavci: {desc} (količina × cena ≠ ukupno)",
-                            "severity": "warning",
-                            "field_name": "line_items",
-                        }
-                    )
+            if qty is None or price is None or total is None:
+                continue
+
+            discount = _to_decimal(item.get("discount"))
+            tax_base = _to_decimal(item.get("tax_base"))
+            item_tax_rate = _to_decimal(item.get("tax_rate"))
+
+            gross = qty * price
+            tolerance = Decimal("2")
+
+            # Apply discount if present: gross × (1 - discount/100)
+            net = gross
+            if discount is not None and discount > 0:
+                net = gross * (1 - discount / 100)
+
+            # Strategy 1: total = net (no PDV, no discount adjustment needed)
+            if abs(gross - total) <= tolerance:
+                continue
+
+            # Strategy 2: total = net after discount
+            if discount and abs(net - total) <= tolerance:
+                continue
+
+            # Strategy 3: total = tax_base (from invoice)
+            if tax_base is not None and abs(tax_base - total) <= tolerance:
+                continue
+
+            # Strategy 4: total = net × (1 + PDV) — with discount + PDV
+            for rate in (item_tax_rate, invoice_tax_rate):
+                if rate is not None and rate > 0:
+                    expected = net * (1 + rate / 100)
+                    if abs(expected - total) <= tolerance:
+                        break
+            else:
+                # Strategy 5: total = gross × (1 + PDV) — no discount
+                for rate in (item_tax_rate, invoice_tax_rate):
+                    if rate is not None and rate > 0:
+                        expected = gross * (1 + rate / 100)
+                        if abs(expected - total) <= tolerance:
+                            break
+                else:
+                    # Strategy 6: verify tax_base × (1 + PDV) = total
+                    if tax_base is not None:
+                        for rate in (item_tax_rate, invoice_tax_rate):
+                            if rate is not None and rate > 0:
+                                expected = tax_base * (1 + rate / 100)
+                                if abs(expected - total) <= tolerance:
+                                    break
+                        else:
+                            # Nothing matched
+                            desc = item.get("description", f"stavka {i + 1}")
+                            warnings.append(
+                                {
+                                    "message": (
+                                        f"Stavka '{desc}': ne poklapaju se "
+                                        f"količina × cena ({round(float(gross), 2)}) "
+                                        f"sa ukupnim iznosom ({round(float(total), 2)}). "
+                                        "Proverite rabat ili PDV obračun."
+                                    ),
+                                    "severity": "info",
+                                    "field_name": "line_items",
+                                }
+                            )
+                    else:
+                        desc = item.get("description", f"stavka {i + 1}")
+                        warnings.append(
+                            {
+                                "message": (
+                                    f"Stavka '{desc}': ne poklapaju se "
+                                    f"količina × cena ({round(float(gross), 2)}) "
+                                    f"sa ukupnim iznosom ({round(float(total), 2)}). "
+                                    "Proverite rabat ili PDV obračun."
+                                ),
+                                "severity": "info",
+                                "field_name": "line_items",
+                            }
+                        )
 
     return warnings
 

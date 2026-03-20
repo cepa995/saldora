@@ -69,6 +69,8 @@ class LineItemData:
     description: str
     quantity: Decimal | None = None
     unit_price: Decimal | None = None
+    discount: Decimal | None = None
+    tax_base: Decimal | None = None
     total: Decimal | None = None
     tax_rate: Decimal | None = None
     tax_amount: Decimal | None = None
