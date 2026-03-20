@@ -996,6 +996,51 @@ async def update_minimax_config(
     return MiniMaxConfigResponse.model_validate(config)
 
 
+@router.post("/minimax/test-connection")
+async def test_minimax_connection(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+) -> dict:
+    """Test MiniMax connection using saved credentials.
+
+    Args:
+        db: Database session.
+        current_user: Authenticated admin user.
+
+    Returns:
+        Connection status with message.
+    """
+    result = await db.execute(
+        select(MiniMaxConfig).where(
+            MiniMaxConfig.organization_id == current_user.organization_id
+        )
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MiniMax konfiguracija nije postavljena.",
+        )
+
+    try:
+        from app.services.minimax.client import MiniMaxClient
+
+        client = MiniMaxClient(
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+            username=config.username,
+            password=config.password,
+            org_id=config.minimax_org_id,
+        )
+        await client.authenticate()
+        return {"status": "connected", "message": "Uspešno povezano sa MiniMax"}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Neuspešna veza: {exc}",
+        )
+
+
 async def _get_minimax_config(db: AsyncSession, organization_id) -> MiniMaxConfig:
     """Load MiniMax config or raise 404.
 

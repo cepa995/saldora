@@ -13,6 +13,8 @@ import type {
   ExportTemplateCreate,
   ExportTemplateUpdate,
   MiniMaxPushResponse,
+  MiniMaxConfig,
+  MiniMaxConfigCreate,
 } from '@/lib/types/export';
 
 /**
@@ -124,6 +126,39 @@ export function triggerBrowserDownload(blob: Blob, filename: string): void {
   anchor.click();
   document.body.removeChild(anchor);
   setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+/**
+ * Fetch the MiniMax integration config for the current organization.
+ *
+ * @returns The MiniMax config object.
+ */
+export async function fetchMiniMaxConfig(): Promise<MiniMaxConfig> {
+  return apiClient<MiniMaxConfig>('/api/v1/export/minimax/config');
+}
+
+/**
+ * Create or update the MiniMax integration config.
+ *
+ * @param data - MiniMax credentials and org ID.
+ * @returns The saved MiniMax config.
+ */
+export async function saveMiniMaxConfig(data: MiniMaxConfigCreate): Promise<MiniMaxConfig> {
+  return apiClient<MiniMaxConfig>('/api/v1/export/minimax/config', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Test the MiniMax connection using saved credentials.
+ *
+ * @returns Status and message from the test.
+ */
+export async function testMiniMaxConnection(): Promise<{ status: string; message: string }> {
+  return apiClient<{ status: string; message: string }>('/api/v1/export/minimax/test-connection', {
+    method: 'POST',
+  });
 }
 
 /**

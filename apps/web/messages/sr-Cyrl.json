@@ -498,7 +498,30 @@
     "logoFormats": "Подржани су само PNG и JPG формати",
     "logoUploaded": "Лого је успешно отпремљен",
     "logoRemoved": "Лого је уклоњен",
-    "logoError": "Грешка при ажурирању лога"
+    "logoError": "Грешка при ажурирању лога",
+    "integrations": "Интеграције",
+    "minimaxTitle": "MiniMax интеграција",
+    "minimaxDesc": "Повежите ваш MiniMax налог за директан извоз фактура",
+    "minimaxClientId": "Client ID",
+    "minimaxClientSecret": "Client Secret",
+    "minimaxUsername": "Корисничко име",
+    "minimaxPassword": "Лозинка",
+    "minimaxOrgId": "MiniMax Organization ID",
+    "testConnection": "Тестирај везу",
+    "saveConfig": "Сачувај",
+    "connectionSuccess": "Успешно повезано са MiniMax",
+    "connectionFailed": "Неуспешна веза са MiniMax",
+    "configSaved": "Конфигурација је сачувана",
+    "configError": "Грешка при чувању конфигурације",
+    "minimaxNotConfigured": "MiniMax није повезан",
+    "minimaxConfigureFirst": "Повежите MiniMax у Подешавања → Интеграције",
+    "minimaxConnected": "Повезано",
+    "minimaxDisconnected": "Није повезано",
+    "lastSync": "Последња синхронизација",
+    "showSecrets": "Прикажи",
+    "hideSecrets": "Сакриј",
+    "minimaxActive": "Интеграција активна",
+    "allFieldsRequired": "Сва поља су обавезна"
   },
   "landing": {
     "heroTitle": "Фактуре.",
@@ -754,7 +777,9 @@
     "pushFailed": "Слање у MiniMax није успело",
     "pushError": "Грешка при слању у MiniMax",
     "template": "Шаблон извоза",
-    "templateDefault": "Подразумевани (сва поља)"
+    "templateDefault": "Подразумевани (сва поља)",
+    "minimaxNotConfigured": "MiniMax није повезан",
+    "minimaxConfigureFirst": "Повежите MiniMax у Подешавања → Интеграције"
   },
   "templates": {
     "title": "Шаблони извоза",
