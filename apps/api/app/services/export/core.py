@@ -147,10 +147,12 @@ def check_export_blocking(
             reasons.append("Nedostaje PIB prodavca")
 
         # Rule 2: Confidence < 60% without verification
+        # Note: confidence_score is stored as 0.0-1.0 in DB
         if inv.confidence_score is not None:
             score = float(inv.confidence_score)
-            if score < 60 and inv.status != "verified":
-                reasons.append(f"Nizak nivo pouzdanosti ({score:.0f}%) bez verifikacije")
+            score_pct = round(score * 100)
+            if score < 0.60 and inv.status != "verified":
+                reasons.append(f"Nizak nivo pouzdanosti ({score_pct}%) bez verifikacije")
 
         # Rule 3: Unresolved blocking warnings
         if inv.warnings and inv.status not in ("verified", "exported"):
