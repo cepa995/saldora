@@ -782,4 +782,78 @@ Attempting to access any client endpoint (`/clients`, `/{invoice_id}/client`) on
 
 ---
 
-*This document describes Saldora through Milestone 9 (Client Management). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+## 17. Invoice Reports (Izveštaji)
+
+**Goal:** Give accountants instant analytical views of their invoice data — without any AI calls and at zero LLM cost.
+
+### What Replaces What
+
+The Reports feature replaces the earlier PDV knjige (KPR/KIR) plan. Instead of generating VAT-register exports mapped to PP-PDV form fields, the system now provides five general-purpose analytical report templates that are more broadly useful across day-to-day accounting work.
+
+### How the Denormalized Table Works
+
+To make reports fast and query-simple, a separate `invoice_line_items` table mirrors every line item from every verified invoice in a flat, denormalized form. This table is populated at two points in the workflow:
+
+```
+OCR completes ──► Line items extracted into invoices.line_items JSON
+                          │
+                          ▼
+                  Worker writes each line item as a row
+                  in invoice_line_items table
+                  (non-blocking — runs after the main save)
+
+User edits invoice ──► Line items updated in invoices.line_items JSON
+                                │
+                                ▼
+                        invoice_line_items rows
+                        deleted and re-inserted
+                        for that invoice
+```
+
+The denormalized table stores: `invoice_id`, `description`, `quantity`, `unit_price`, `total`, `tax_rate`, `supplier_name`, `supplier_pib`, `invoice_date`, and `currency`. Reports query this table directly with SQL aggregations — no JSON unpacking needed.
+
+### The Five Report Templates
+
+| Report | URL | What It Shows |
+|--------|-----|---------------|
+| **Pregled primljene robe** | `/api/v1/reports/received-goods` | Line items grouped by description; sums quantity and total; shows all suppliers for that item |
+| **Troškovi po dobavljaču** | `/api/v1/reports/spending-by-supplier` | Total amount spent per supplier over the selected period |
+| **Mesečni pregled stavki** | `/api/v1/reports/monthly-breakdown` | Paginated flat list of all line items for a selected date range |
+| **Poređenje cena** | `/api/v1/reports/price-comparison` | Same item description sourced from multiple suppliers, with min/max/avg unit price |
+| **Pregled troškova** | `/api/v1/reports/expense-summary` | Expense totals grouped by month or week |
+
+All five reports accept common query parameters: `date_from`, `date_to`, `supplier_pib` (optional filter), and `search` (optional keyword filter on item description).
+
+### How the User Uses Reports
+
+```
+User opens Izveštaji page
+        │
+        ▼
+Selects a report template (card-based UI)
+        │
+        ▼
+Sets filters: date range, optional supplier, optional keyword
+        │
+        ▼
+Results table loads instantly (SQL aggregation — no AI)
+        │
+        ▼
+User reviews data in-page or clicks "Izvezi CSV"
+        │
+        ▼
+CSV file downloads with Serbian locale formatting
+(semicolon delimiter, comma decimal separator, UTF-8 BOM)
+```
+
+### Zero Cost, Instant Results
+
+Unlike invoice processing (which uses the OCR engine and Claude LLM), reports involve no AI calls whatsoever. Every report is a single SQL query over the `invoice_line_items` table. Response times are typically under 200 ms for organizations with tens of thousands of line items.
+
+### Feature Gate
+
+Reports are a PRO plan feature. Starter-plan users see an upgrade prompt when they navigate to the Izveštaji page.
+
+---
+
+*This document describes Saldora through the Reports feature (Milestone 13). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*

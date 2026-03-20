@@ -17,6 +17,7 @@
    - 4.10 [Sloj računovodstvene namere](#410-sloj-računovodstvene-namere)
    - 4.11 [Motor za automatizaciju pravila](#411-motor-za-automatizaciju-pravila)
    - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
+   - 4.13 [Izveštaji o fakturama (Izveštaji)](#413-izveštaji-o-fakturama-izveštaji)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -1456,6 +1457,125 @@ Ovaj odeljak definiše funkcionalnost Upravljanja klijentima koja je dostupna is
 | **Ponašanje** | Izborom klijenta filtriraju se lista faktura i kontrolna tabla na fakture tog klijenta |
 | **Podrazumevano** | "Svi klijenti" prikazuje sve fakture svih klijenata |
 | **Vidljivost** | Selektor je vidljiv samo kada je `CLIENT_MANAGEMENT` oznaka funkcionalnosti omogućena |
+
+---
+
+### 4.13 Izveštaji o fakturama (Izveštaji)
+
+Ovaj odeljak definiše funkcionalnost Izveštaja o fakturama, koja zamenjuje ranije planiranu generaciju PDV knjiga (KPR/KIR). Izveštaji pružaju pet unapred definisanih analitičkih prikaza nad denormalizovanom tabelom `invoice_line_items`. Svi izveštaji se generišu isključivo SQL agregacijom — bez LLM poziva.
+
+**Kontrola pristupa:** Funkcionalnost Izveštaja je zaštićena oznakom `REPORTS`, koja MORA biti omogućena za Professional i Agency planove. Korisnici na Starter planu dobijaju 403 odgovor.
+
+#### 4.13.1 Denormalizovana tabela stavki faktura
+
+Kako bi se izbeglo raspakovavanje JSON-a pri svakom upitu za izveštaj, sistem održava posebnu tabelu `invoice_line_items` koja preslikava stavke iz obrađenih faktura u ravnom obliku.
+
+**Pravila popunjavanja:**
+- Popunjava se neblokijarujuće odmah nakon završetka OCR obrade (worker upisuje redove nakon čuvanja fakture).
+- Ponovo se popunjava (brisanje + ponovni unos za odgovarajuću fakturu) kad god korisnik sačuva izmene stavki na stranici detalja fakture.
+- Svaki upit je ograničen na `organization_id`.
+
+**Šema tabele:**
+
+```sql
+CREATE TABLE invoice_line_items (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    description   TEXT,
+    quantity      NUMERIC(12, 4),
+    unit_price    NUMERIC(15, 4),
+    total         NUMERIC(15, 2),
+    tax_rate      NUMERIC(5, 2),
+    currency      VARCHAR(3) NOT NULL DEFAULT 'RSD',
+    supplier_name TEXT,
+    supplier_pib  VARCHAR(20),
+    invoice_date  DATE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_invoice_line_items_org     ON invoice_line_items(organization_id);
+CREATE INDEX ix_invoice_line_items_invoice ON invoice_line_items(invoice_id);
+CREATE INDEX ix_invoice_line_items_date    ON invoice_line_items(invoice_date);
+CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
+```
+
+#### 4.13.2 Šabloni izveštaja
+
+Svih pet endpoint-a za izveštaje su pod `/api/v1/reports/` i prihvataju zajednički skup parametara upita:
+
+| Parametar | Tip | Opis |
+|-----------|-----|------|
+| `date_from` | `YYYY-MM-DD` | Početak perioda izveštavanja (obavezno) |
+| `date_to` | `YYYY-MM-DD` | Kraj perioda izveštavanja (obavezno) |
+| `supplier_pib` | String | Opcionalno — filtriranje po jednom dobavljaču |
+| `search` | String | Opcionalno — pretraga po ključnoj reči u opisu stavke (ne razlikuje velika/mala slova) |
+
+##### FZ-4.13.2.1 Pregled primljene robe (`/received-goods`)
+
+| ID | FZ-4.13.2.1 |
+|----|-------------|
+| **Opis** | Grupuje stavke faktura po opisu, sabira količinu i ukupan iznos, i prikazuje sve dobavljače koji su isporučili svaki artikal |
+| **Grupisanje** | `description` (ne razlikuje velika/mala slova, bez razmaka) |
+| **Agregati** | `SUM(quantity)`, `SUM(total)`, `array_agg(DISTINCT supplier_name)` |
+| **Primena** | "Koliko smo primili artikla X i od kojih dobavljača?" |
+
+##### FZ-4.13.2.2 Troškovi po dobavljaču (`/spending-by-supplier`)
+
+| ID | FZ-4.13.2.2 |
+|----|-------------|
+| **Opis** | Vraća ukupan iznos faktura po dobavljaču za izabrani period |
+| **Grupisanje** | `supplier_pib`, `supplier_name` |
+| **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
+| **Primena** | "Koji su naši najveći dobavljači po iznosu troškova?" |
+
+##### FZ-4.13.2.3 Mesečni pregled stavki (`/monthly-breakdown`)
+
+| ID | FZ-4.13.2.3 |
+|----|-------------|
+| **Opis** | Paginirana ravna lista svih pojedinačnih stavki faktura za izabrani period |
+| **Sortiranje** | `invoice_date DESC`, zatim `supplier_name ASC` |
+| **Paginacija** | `?page=` i `?page_size=` (podrazumevano 50 redova po stranici) |
+| **Primena** | "Prikaži sve što smo kupili u martu." |
+
+##### FZ-4.13.2.4 Poređenje cena (`/price-comparison`)
+
+| ID | FZ-4.13.2.4 |
+|----|-------------|
+| **Opis** | Za svaki jedinstven opis artikla koji se javlja kod više od jednog dobavljača, prikazuje minimalnu, maksimalnu i prosečnu jediničnu cenu uz listu dobavljača |
+| **Grupisanje** | `description` |
+| **Agregati** | `MIN(unit_price)`, `MAX(unit_price)`, `AVG(unit_price)`, `array_agg(DISTINCT supplier_name)` |
+| **Filter** | Samo opisi sa `COUNT(DISTINCT supplier_pib) > 1` |
+| **Primena** | "Da li plaćamo različite cene za isti artikal kod različitih dobavljača?" |
+
+##### FZ-4.13.2.5 Pregled troškova (`/expense-summary`)
+
+| ID | FZ-4.13.2.5 |
+|----|-------------|
+| **Opis** | Ukupni troškovi grupisani po mesecu ili nedelji |
+| **Grupisanje** | `date_trunc('month', invoice_date)` ili `date_trunc('week', invoice_date)`, kontrolisano parametrom `?group_by=month\|week` |
+| **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
+| **Primena** | "Kako su se naši troškovi menjali od meseca do meseca?" |
+
+#### 4.13.3 CSV izvoz
+
+Svaki endpoint za izveštaj prihvata zaglavlje `Accept: text/csv` (ili parametar `?format=csv`) i vraća CSV sa UTF-8 BOM oznakom:
+
+- Tačka-zarez kao separator polja
+- Zarez kao decimalni separator (srpski lokalni format)
+- Zaglavlja kolona na srpskom jeziku
+- Naziv fajla: `izvestaj_{tip_izvestaja}_{date_from}_{date_to}.csv`
+
+#### 4.13.4 Stranica u aplikaciji
+
+| Zahtev | Detalj |
+|--------|--------|
+| **Ruta** | `/{orgSlug}/izvestaji` |
+| **Izbor šablona** | UI sa karticama — po jedna kartica za svaki šablon izveštaja |
+| **Filteri** | Birač opsega datuma, opcionalno polje za PIB/naziv dobavljača, opcionalna pretraga po ključnoj reči |
+| **Rezultati** | Prikazani u tabeli sa mogućnošću sortiranja ispod trake filtera |
+| **Izvoz** | Dugme "Izvezi CSV" — pokreće preuzimanje fajla u pregledaču |
+| **Kontrola plana** | Korisnici koji nisu na PRO planu vide modal za nadogradnju umesto forme za filtere |
 
 ---
 
@@ -3838,6 +3958,7 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 1.3 | Januar 2025 | FakturaAI Tim | Ažuriran OCR stek: dots.ocr (VLM) kao primarni engine, EasyOCR kao rezerva |
 | 2.0 | Februar 2026 | FakturaAI Tim | Srpska verzija sa svim ispravkama: uklonjen model training/retraining, ZZPL kao primarni zakon, Paddle umesto Stripe, KPR/KIR terminologija, SEF polling umesto webhook-ova, NBS kursna lista, podrška za ćirilicu i latinicu, PIB constraint za strane entitete, retencija dokumenata 10 godina |
 | 2.1 | Februar 2026 | FakturaAI Tim | dots.ocr arhitektura: vLLM HTTP server sidecar (GPU) + lak OCR radnik (CPU, OpenAI klijent), uklonjen EasyOCR kao rezerva (ručni pregled umesto toga), preskakanje predprocesiranja za VLM |
+| 2.2 | Mart 2026 | FakturaAI Tim | Generacija PDV knjiga (KPR/KIR) zamenjena funkcionalnosti Izveštaja (4.13): denormalizovana tabela invoice_line_items koja se popunjava pri završetku OCR obrade i pri izmenama; pet unapred definisanih šablona izveštaja (pregled primljene robe, troškovi po dobavljaču, mesečni pregled stavki, poređenje cena, pregled troškova) na /api/v1/reports/; nulti LLM trošak; CSV izvoz; stranica na /{orgSlug}/izvestaji; kontrola PRO plana. Dodato upravljanje klijentima za Agency plan (4.12). |
 
 ---
 
