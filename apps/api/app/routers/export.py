@@ -4,6 +4,7 @@ import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -168,7 +169,7 @@ async def create_export(
     return StreamingResponse(
         buffer,
         media_type=config["content_type"],
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 
@@ -253,6 +254,22 @@ async def _load_template(
         )
     )
     return result.scalar_one_or_none()
+
+
+def _content_disposition(filename: str) -> str:
+    """Build Content-Disposition header value safe for non-ASCII filenames.
+
+    Args:
+        filename: The desired download filename (may contain Serbian chars).
+
+    Returns:
+        RFC 5987 encoded header value.
+    """
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "export"
+    return (
+        f"attachment; filename=\"{ascii_name}\"; "
+        f"filename*=UTF-8''{quote(filename)}"
+    )
 
 
 def _sanitize_filename(text: str) -> str:
@@ -597,7 +614,7 @@ async def generate_pdv_book(
     return StreamingResponse(
         buffer,
         media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 
