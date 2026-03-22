@@ -373,9 +373,9 @@ export function AppSidebar() {
               className="flex items-center justify-center py-2"
             >
               {collapsed ? (
-                <Image src="/app-icon.png" alt="Saldora" width={32} height={32} className="rounded-lg" />
+                <Image src="/app-icon.png" alt="Saldora" width={40} height={40} className="rounded-lg" />
               ) : (
-                <Image src="/logo-text-only.png" alt="Saldora" width={120} height={32} className="object-contain" />
+                <Image src="/logo-text-only.png" alt="Saldora" width={150} height={40} className="object-contain" />
               )}
             </Link>
           </div>
@@ -579,8 +579,8 @@ export function AppSidebar() {
             />
           </svg>
         </button>
-        <Link href={orgPath("/dashboard")} className="flex items-center mx-auto">
-          <Image src="/logo.png" alt="Saldora" width={100} height={28} className="object-contain" />
+        <Link href={orgPath("/dashboard")} className="flex-1 flex items-center justify-center">
+          <Image src="/logo-text-only.png" alt="Saldora" width={120} height={32} className="object-contain" />
         </Link>
         <div className="w-10" />
       </div>
@@ -591,7 +591,7 @@ export function AppSidebar() {
           {/* Close button */}
           <div className="flex items-center justify-between px-4 h-14 border-b border-gray-100 shrink-0">
             <Link href={orgPath("/dashboard")} onClick={closeMobile}>
-              <Image src="/logo.png" alt="Saldora" width={110} height={30} className="object-contain" />
+              <Image src="/logo-text-only.png" alt="Saldora" width={120} height={32} className="object-contain" />
             </Link>
             <button
               onClick={closeMobile}
