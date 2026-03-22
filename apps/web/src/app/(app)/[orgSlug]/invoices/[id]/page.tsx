@@ -540,7 +540,7 @@ export default function InvoiceDetailPage({
                             onClick={() => setEditingKonta(false)}
                             className="text-xs text-gray-500 hover:text-gray-700 font-medium"
                           >
-                            {t('cancel')}
+                            {t('cancelEdit')}
                           </button>
                           <button
                             disabled={isSavingKonta}

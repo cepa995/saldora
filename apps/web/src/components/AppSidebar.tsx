@@ -375,7 +375,7 @@ export function AppSidebar() {
               {collapsed ? (
                 <Image src="/app-icon.png" alt="Saldora" width={32} height={32} className="rounded-lg" />
               ) : (
-                <Image src="/logo.png" alt="Saldora" width={120} height={32} className="object-contain" />
+                <Image src="/logo-text-only.png" alt="Saldora" width={120} height={32} className="object-contain" />
               )}
             </Link>
           </div>

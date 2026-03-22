@@ -331,6 +331,7 @@
     "suggestedKonta": "Предложена конта",
     "editKonta": "Измени",
     "saveKonta": "Сачувај",
+    "cancelEdit": "Откажи",
     "kontaSaved": "Конта су сачувана",
     "kontaSaveError": "Грешка при чувању конта",
     "addRow": "Додај",

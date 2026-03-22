@@ -331,6 +331,7 @@
     "suggestedKonta": "Suggested Accounts",
     "editKonta": "Edit",
     "saveKonta": "Save",
+    "cancelEdit": "Cancel",
     "kontaSaved": "Accounts saved",
     "kontaSaveError": "Error saving accounts",
     "addRow": "Add",
