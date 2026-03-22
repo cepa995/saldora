@@ -1,8 +1,8 @@
 # Software Requirements Specification (SRS)
-# FakturaAI - AI-Powered Invoice Processing Platform
+# Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 2.5
-**Date:** Mach 2026
+**Version:** 2.7
+**Date:** March 2026
 **Status:** Draft
 
 ---
@@ -18,6 +18,7 @@
    - 4.11 [Automation Rules Engine](#411-automation-rules-engine)
    - 4.12 [Client Management (Agency)](#412-client-management-agency)
    - 4.13 [Invoice Reports (Izveštaji)](#413-invoice-reports-izveštaji)
+   - 4.14 [Email Ingestion Pipeline](#414-email-ingestion-pipeline)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
@@ -39,7 +40,7 @@
 
 ### 1.1 Purpose
 
-This Software Requirements Specification (SRS) document provides a comprehensive description of the FakturaAI platform - an AI-powered invoice processing system designed specifically for the Serbian market. The document outlines functional and non-functional requirements, system architecture, and technical specifications.
+This Software Requirements Specification (SRS) document provides a comprehensive description of the Saldora platform (formerly FakturaAI) - an AI-powered invoice processing system designed specifically for the Serbian market. The document outlines functional and non-functional requirements, system architecture, and technical specifications.
 
 ### 1.2 Scope
 
@@ -473,9 +474,24 @@ FakturaAI operates as a standalone web application with the following integratio
 #### FR-4.4.3 Duplicate Detection
 | ID | FR-4.4.3 |
 |----|----------|
-| **Description** | System SHOULD detect duplicate invoices |
-| **Criteria** | Same invoice number + seller PIB + date |
-| **Action** | Warning prompt, option to skip or process anyway |
+| **Description** | System MUST detect and block duplicate invoices |
+| **Criteria** | Same invoice number + seller PIB within the same organization |
+| **Action** | 🚫 Block upload with "Faktura sa ovim brojem od ovog dobavljača već postoji" |
+| **Override** | Admin can force-process with explicit confirmation |
+
+**Duplicate Detection Logic:**
+```
+DUPLICATE_CHECK(invoice, organization_id):
+  IF EXISTS(
+    invoice_number == invoice.invoice_number
+    AND seller_pib == invoice.seller.pib
+    AND organization_id == organization_id
+    AND status != 'error'
+  ):
+    BLOCK("Faktura sa ovim brojem od ovog dobavljača već postoji")
+    SHOW_LINK_TO_EXISTING(existing_invoice_id)
+    ALLOW_ADMIN_OVERRIDE("Ipak obradi")
+```
 
 ### 4.5 Data Review & Editing
 
@@ -1796,6 +1812,249 @@ Every report endpoint accepts an `Accept: text/csv` header (or `?format=csv` que
 
 ---
 
+### 4.14 Email Ingestion Pipeline
+
+This section defines the Email Ingestion feature, which allows organizations to receive invoices via a dedicated email address and automatically route them into the processing pipeline — eliminating manual upload for the majority of invoices.
+
+**Feature Gate:** Email Ingestion is available on Professional and Agency plans.
+
+#### 4.14.1 Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Email Ingestion Architecture                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Supplier sends invoice         Dedicated inbox                      │
+│  via email                      (Postmark Inbound)                   │
+│  ┌─────────┐                    ┌──────────────┐                    │
+│  │ Email   │───────────────────▶│ Webhook      │                    │
+│  │ + PDF   │                    │ /api/v1/     │                    │
+│  │ attach  │                    │ inbound/email│                    │
+│  └─────────┘                    └──────┬───────┘                    │
+│                                        │                             │
+│                                        ▼                             │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ Processing Pipeline                                          │   │
+│  │                                                              │   │
+│  │ 1. Validate sender domain / organization mapping             │   │
+│  │ 2. Extract PDF/image attachments (skip .html, .sig, etc.)   │   │
+│  │ 3. Upload attachments to S3                                  │   │
+│  │ 4. Create invoice records (status: processing)               │   │
+│  │ 5. Dispatch OCR tasks (same pipeline as manual upload)       │   │
+│  │ 6. Send confirmation email to sender (optional)              │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### 4.14.2 Dedicated Inbox
+
+Each organization receives a unique inbound email address upon activation:
+
+| Field | Value |
+|-------|-------|
+| **Format** | `{org-slug}@invoices.saldora.ai` |
+| **Example** | `racunovodstvo-petrovic@invoices.saldora.ai` |
+| **Provider** | Postmark Inbound (or similar: SendGrid Inbound Parse, AWS SES) |
+| **Webhook** | `POST /api/v1/inbound/email` |
+
+**Configuration (per organization):**
+
+```json
+{
+  "email_ingestion": {
+    "enabled": true,
+    "inbound_address": "racunovodstvo-petrovic@invoices.saldora.ai",
+    "allowed_sender_domains": ["*"],
+    "allowed_sender_emails": [],
+    "auto_process": true,
+    "send_confirmation": true,
+    "confirmation_language": "sr-Latn"
+  }
+}
+```
+
+#### 4.14.3 Inbound Email Processing
+
+**Accepted Attachments:**
+
+| File Type | Action |
+|-----------|--------|
+| PDF | Process as invoice |
+| JPEG, PNG, TIFF, BMP, WEBP | Process as invoice |
+| ZIP | Extract and process contained PDFs/images |
+| HTML, TXT, .sig, .p7s, .vcf | Ignore (email signature artifacts) |
+| Other | Ignore, log warning |
+
+**Processing Rules:**
+
+```
+PROCESS_INBOUND_EMAIL(email):
+  # 1. Identify organization from recipient address
+  org = LOOKUP_ORG_BY_INBOUND_ADDRESS(email.to)
+  IF NOT org:
+    LOG_WARNING("Unknown inbound address", email.to)
+    RETURN  # silently drop — prevents bounce loops
+
+  # 2. Check if email ingestion is enabled
+  IF NOT org.email_ingestion.enabled:
+    RETURN
+
+  # 3. Filter sender (if allowlist configured)
+  IF org.allowed_sender_domains != ["*"]:
+    IF sender_domain(email.from) NOT IN org.allowed_sender_domains:
+      SEND_REJECTION("Vaša adresa nije odobrena za slanje faktura")
+      RETURN
+
+  # 4. Extract valid attachments
+  attachments = FILTER_ATTACHMENTS(email.attachments, ACCEPTED_TYPES)
+  IF NOT attachments:
+    SEND_REPLY("Email nema priložene fakture (PDF ili sliku)")
+    RETURN
+
+  # 5. Check plan limits
+  IF org.usage + LEN(attachments) > org.plan.invoice_limit:
+    SEND_REPLY("Dostignut mesečni limit faktura")
+    RETURN
+
+  # 6. Process each attachment
+  FOR EACH attachment IN attachments:
+    invoice = CREATE_INVOICE(
+      organization_id=org.id,
+      source="email",
+      source_email=email.from,
+      source_subject=email.subject
+    )
+    UPLOAD_TO_S3(attachment, invoice.id)
+    DISPATCH_OCR_TASK(invoice.id)
+
+  # 7. Send confirmation (if enabled)
+  IF org.send_confirmation:
+    SEND_CONFIRMATION(
+      to=email.from,
+      count=LEN(attachments),
+      org_name=org.name
+    )
+```
+
+#### 4.14.4 Security Considerations
+
+| Concern | Mitigation |
+|---------|------------|
+| Spam / unsolicited emails | Sender domain allowlist (optional), attachment type filtering |
+| Malicious attachments | File type validation, virus scanning (ClamAV), size limits |
+| Bounce loops | Never send auto-replies to noreply/mailer-daemon addresses |
+| Rate limiting | Max 50 emails per hour per organization |
+| Data privacy | Inbound email body is NOT stored — only attachments are processed |
+| Email authentication | Validate SPF/DKIM on inbound emails when available |
+
+#### 4.14.5 Database Schema
+
+```sql
+-- Track inbound email processing
+CREATE TABLE inbound_emails (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id),
+
+    -- Email metadata (body NOT stored for privacy)
+    sender_email VARCHAR(255) NOT NULL,
+    sender_name VARCHAR(255),
+    subject TEXT,
+    message_id VARCHAR(500),          -- Email Message-ID header for dedup
+
+    -- Processing
+    attachment_count INTEGER NOT NULL DEFAULT 0,
+    invoices_created INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'processed',
+    error_message TEXT,
+
+    -- Timestamps
+    received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    CONSTRAINT valid_inbound_status CHECK (status IN (
+        'processed', 'rejected', 'error', 'no_attachments', 'limit_exceeded'
+    )),
+    CONSTRAINT unique_message_id UNIQUE (organization_id, message_id)
+);
+
+CREATE INDEX idx_inbound_emails_org ON inbound_emails(organization_id);
+CREATE INDEX idx_inbound_emails_received ON inbound_emails(received_at);
+```
+
+**Invoice source tracking** — add `source` and `source_email` columns to `invoices` table:
+
+```sql
+ALTER TABLE invoices ADD COLUMN source VARCHAR(20) DEFAULT 'upload';
+-- Values: 'upload', 'email', 'sef', 'api'
+ALTER TABLE invoices ADD COLUMN source_email VARCHAR(255);
+ALTER TABLE invoices ADD COLUMN source_subject TEXT;
+```
+
+#### 4.14.6 API Endpoints
+
+##### POST /api/v1/inbound/email (Webhook)
+
+Receives inbound email from Postmark/SendGrid. Not authenticated via JWT — uses webhook signature verification.
+
+##### GET /api/v1/settings/email-ingestion
+
+Returns email ingestion configuration for the current organization.
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "inbound_address": "racunovodstvo-petrovic@invoices.saldora.ai",
+  "allowed_sender_domains": ["*"],
+  "auto_process": true,
+  "send_confirmation": true,
+  "emails_received_today": 12,
+  "invoices_created_today": 18
+}
+```
+
+##### PUT /api/v1/settings/email-ingestion
+
+Update email ingestion settings.
+
+#### 4.14.7 Frontend
+
+| Requirement | Detail |
+|-------------|--------|
+| **Settings location** | Settings → Integracije → "Email prijem faktura" card |
+| **Display** | Show inbound address with copy button |
+| **Configuration** | Toggle enable/disable, sender domain allowlist, confirmation toggle |
+| **Activity log** | Recent inbound emails table (sender, subject, attachments count, status) |
+| **Invoice source badge** | Invoices received via email show an email icon badge in the invoice list |
+
+#### 4.14.8 Confirmation Email Template
+
+```
+Predmet: Primljene fakture ({count}) — Saldora
+
+Poštovani,
+
+Primili smo {count} faktur(u/e) poslatih na {inbound_address}.
+
+Fakture su u obradi i biće dostupne u vašem nalogu u roku od
+nekoliko minuta.
+
+Fajlovi:
+{for each attachment}
+  • {filename} ({file_size})
+{end for}
+
+Pozdrav,
+Saldora tim
+
+---
+Ovo je automatska poruka. Za podešavanja email prijema,
+posetite Podešavanja → Integracije u aplikaciji.
+```
+
+---
+
 ## 5. Non-Functional Requirements
 
 ### 5.1 Performance Requirements
@@ -2179,6 +2438,36 @@ CREATE TABLE clients (
 
 CREATE INDEX idx_clients_organization ON clients(organization_id);
 CREATE INDEX idx_clients_pib ON clients(pib);
+```
+
+#### 7.2.5 invoice_line_items
+
+Denormalized table for report queries (Section 4.13). Populated after OCR processing and re-populated on user edits.
+
+```sql
+CREATE TABLE invoice_line_items (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    description   TEXT,
+    quantity      NUMERIC(12, 4),
+    unit_price    NUMERIC(15, 4),
+    discount      NUMERIC(5, 2),        -- Rabat percentage (e.g. 7.00 for 7%)
+    tax_base      NUMERIC(15, 2),        -- Poreska osnovica (after discount, before VAT)
+    total         NUMERIC(15, 2),
+    tax_rate      NUMERIC(5, 2),
+    tax_amount    NUMERIC(15, 2),
+    currency      VARCHAR(3) NOT NULL DEFAULT 'RSD',
+    supplier_name TEXT,
+    supplier_pib  VARCHAR(20),
+    invoice_date  DATE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_invoice_line_items_org      ON invoice_line_items(organization_id);
+CREATE INDEX ix_invoice_line_items_invoice  ON invoice_line_items(invoice_id);
+CREATE INDEX ix_invoice_line_items_date     ON invoice_line_items(invoice_date);
+CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
 ```
 
 ---
@@ -4483,7 +4772,8 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.3 | March 2026 | FakturaAI Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
 | 2.4 | March 2026 | FakturaAI Team | Added Invoice Template Learning & LLM Cost Optimization spec (9.9): layout fingerprinting, template storage model, template-based field extraction with three-tier fallback chain, automatic template learning from LLM extractions, cost tracking metrics. |
 | 2.5 | March 2026 | FakturaAI Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
-| 2.6 | March 2026 | FakturaAI Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
+| 2.6 | March 2026 | Saldora Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
+| 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
 
 ---
 
