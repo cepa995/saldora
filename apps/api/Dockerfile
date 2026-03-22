@@ -37,7 +37,8 @@ RUN pip install \
     "pillow>=11.0.0" \
     "sentry-sdk[fastapi]>=2.19.0" \
     "email-validator>=2.0.0" \
-    "openpyxl>=3.1.0"
+    "openpyxl>=3.1.0" \
+    "slowapi>=0.1.9"
 
 # Copy application code
 COPY apps/api/app /app/app

@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
-from app.middleware import RequestContextMiddleware
+from app.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.routers import (
     analytics,
     audit_logs,
@@ -28,6 +30,7 @@ from app.routers import (
     users,
     webhooks,
 )
+from app.security import limiter
 
 settings = get_settings()
 
@@ -98,6 +101,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -111,6 +118,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Request context middleware (extracts IP + User-Agent for audit logging)
 app.add_middleware(RequestContextMiddleware)

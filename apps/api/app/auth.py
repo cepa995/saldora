@@ -1,5 +1,6 @@
-"""Authentication utilities - JWT Tokens and password hashing"""
+"""Authentication utilities - JWT Tokens and password hashing."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from jose import jwt
@@ -64,6 +65,7 @@ def create_access_token(
 
     payload = {
         "sub": user_id,  # Subject (who the token is for)
+        "jti": str(uuid.uuid4()),  # Unique token ID (for blacklisting)
         "org": organization_id or "",  # Organization (multi-tenancy)
         "org_slug": org_slug or "",  # Organization slug (URL routing)
         "email": email,
