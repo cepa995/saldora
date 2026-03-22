@@ -58,6 +58,14 @@ async def get_current_user(
         token_type = payload.get("type")
         if user_id is None or token_type != "access":
             raise credentials_exception
+
+        # Check token blacklist (logout invalidation)
+        jti = payload.get("jti")
+        if jti:
+            from app.security import is_token_blacklisted
+
+            if await is_token_blacklisted(jti):
+                raise credentials_exception
     except JWTError:
         raise credentials_exception
 

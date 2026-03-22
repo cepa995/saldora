@@ -98,6 +98,7 @@
     "passwordTooShort": "Password must be at least 8 characters",
     "passwordMismatch": "Passwords do not match",
     "serverError": "Server communication error. Please try again.",
+    "accountLocked": "Too many failed attempts. Please try again in 15 minutes.",
     "invalidData": "Please enter valid data",
     "registrationSuccess": "Registration successful! Sign in with your new account.",
     "checkInbox": "Check your inbox",

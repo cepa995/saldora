@@ -42,11 +42,13 @@ async def paddle_webhook(
     """
     raw_body = await request.body()
 
-    # Verify webhook signature
-    if settings.paddle_webhook_secret:
-        if not verify_paddle_signature(raw_body, paddle_signature, settings.paddle_webhook_secret):
-            logger.warning("Paddle webhook signature verification failed")
-            raise HTTPException(status_code=400, detail="Invalid signature")
+    # Verify webhook signature (required — reject if secret not configured)
+    if not settings.paddle_webhook_secret:
+        logger.error("Paddle webhook received but PADDLE_WEBHOOK_SECRET is not configured")
+        raise HTTPException(status_code=500, detail="Webhook signature verification not configured")
+    if not verify_paddle_signature(raw_body, paddle_signature, settings.paddle_webhook_secret):
+        logger.warning("Paddle webhook signature verification failed")
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     # Parse event
     try:

@@ -13,6 +13,7 @@ function useErrorMessage() {
     const apiError = error as ApiError;
     if (apiError?.status === 401) return t("invalidCredentials");
     if (apiError?.status === 422) return t("invalidData");
+    if (apiError?.status === 429) return t("accountLocked");
     return t("serverError");
   };
 }

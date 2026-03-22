@@ -98,6 +98,7 @@
     "passwordTooShort": "Lozinka mora imati najmanje 8 karaktera",
     "passwordMismatch": "Lozinke se ne poklapaju",
     "serverError": "Greška u komunikaciji sa serverom. Pokušajte ponovo.",
+    "accountLocked": "Previše neuspešnih pokušaja. Pokušajte ponovo za 15 minuta.",
     "invalidData": "Molimo unesite ispravne podatke",
     "mustAcceptPrivacy": "Morate prihvatiti politiku privatnosti za nastavak.",
     "acceptPrivacyPrefix": "Prihvatam",

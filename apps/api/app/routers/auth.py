@@ -31,6 +31,13 @@ from app.schemas.auth import (
     TokenResponse,
     UserCreate,
 )
+from app.security import (
+    blacklist_token,
+    clear_failed_logins,
+    is_account_locked,
+    limiter,
+    record_failed_login,
+)
 from app.services import audit
 from app.services.email import send_password_reset_email, send_welcome_email
 
@@ -204,31 +211,39 @@ async def create_organization(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("10/minute")
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """
-    API Endpoint for User Authentication/Login
+    """Authenticate user and return JWT tokens.
 
-    Arguments:
-        request (Request): HTTP request for audit context.
-        form_data (OAuth2PasswordRequestForm): login data inserted by the user
-        db (AsyncSession): DB session which is being injected via get_db
-        dependency
+    Rate limited to 10 attempts per minute per IP. Account locks after
+    5 failed attempts for 15 minutes.
+
+    Args:
+        request: HTTP request for audit context and rate limiting.
+        form_data: OAuth2 login credentials.
+        db: Database session.
 
     Returns:
-        JWT token if the user exists, otherwise, exception is raised
+        JWT access and refresh tokens.
     """
+    # 0. Check account lockout
+    if await is_account_locked(form_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Previše neuspešnih pokušaja. Pokušajte ponovo za 15 minuta.",
+        )
+
     # 1. Find user
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
 
     # 2. Verify password (constant-time comparison to prevent timing attacks)
     if not user or not verify_password(form_data.password, user.password_hash):
-        # Audit failed login before raising (separate commit — the main
-        # transaction has nothing else to persist)
+        await record_failed_login(form_data.username)
         await audit.log(
             db=db,
             action="login_failure",
@@ -241,7 +256,8 @@ async def login(
             detail="Incorrect email or password",
         )
 
-    # 3. Audit successful login
+    # 3. Clear lockout counter and audit successful login
+    await clear_failed_logins(form_data.username)
     await audit.log(
         db=db,
         action="login_success",
@@ -356,13 +372,52 @@ async def refresh(
 
 
 @router.post("/logout")
-async def logout() -> dict[str, str]:
+async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Logout user and blacklist the current access token.
+
+    The token is added to a Redis blacklist for the remainder of its
+    TTL, preventing reuse after logout.
+
+    Args:
+        request: HTTP request containing the Authorization header.
+        current_user: Authenticated user.
+        db: Database session.
+
+    Returns:
+        Confirmation message.
     """
-    Logout user and invalidate tokens.
-    """
-    # TODO: Implement logout
-    # 1. Add refresh token to blacklist
-    # 2. Clear session
+    # Extract and blacklist the access token
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            payload = decode_token(token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                import time
+
+                ttl = max(int(exp - time.time()), 0)
+                if ttl > 0:
+                    await blacklist_token(jti, ttl)
+        except JWTError:
+            pass  # Token already invalid, nothing to blacklist
+
+    await audit.log(
+        db=db,
+        action="logout",
+        request=request,
+        organization_id=current_user.organization_id,
+        user_id=current_user.id,
+        entity_type="user",
+        entity_id=current_user.id,
+    )
+    await db.commit()
+
     return {"message": "Logged out successfully"}
 
 
@@ -400,7 +455,9 @@ def _validate_pib(pib: str) -> None:
 
 
 @router.post("/password-reset/request")
+@limiter.limit("5/minute")
 async def request_password_reset(
+    request: Request,
     body: PasswordResetRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
