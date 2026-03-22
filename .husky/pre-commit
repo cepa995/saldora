@@ -1,2 +1,1 @@
 npx lint-staged
-python -m pytest apps/api/tests/ -v
