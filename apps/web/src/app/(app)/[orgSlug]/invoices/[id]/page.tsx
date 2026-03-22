@@ -130,6 +130,7 @@ export default function InvoiceDetailPage({
 
   function resetField(field: keyof InvoiceUpdate) {
     // Remove from editedFields by creating a new object without this field
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { [field]: _, ...rest } = editedFields;
     // We need to use the hook's setField to clear it — but the hook only adds.
     // Instead, discard all and re-set the remaining edits.

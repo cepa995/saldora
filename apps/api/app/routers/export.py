@@ -266,10 +266,7 @@ def _content_disposition(filename: str) -> str:
         RFC 5987 encoded header value.
     """
     ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "export"
-    return (
-        f"attachment; filename=\"{ascii_name}\"; "
-        f"filename*=UTF-8''{quote(filename)}"
-    )
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
 def _sanitize_filename(text: str) -> str:
@@ -1028,9 +1025,7 @@ async def test_minimax_connection(
         Connection status with message.
     """
     result = await db.execute(
-        select(MiniMaxConfig).where(
-            MiniMaxConfig.organization_id == current_user.organization_id
-        )
+        select(MiniMaxConfig).where(MiniMaxConfig.organization_id == current_user.organization_id)
     )
     config = result.scalar_one_or_none()
     if not config:

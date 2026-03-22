@@ -881,7 +881,6 @@ function IntegrationsTab() {
         </button>
 
         <MiniMaxConfigForm
-          toast={toast}
           setToast={setToast}
           onStatusChange={(hasConfig, isActive) => {
             setMinimaxHasConfig(hasConfig);
@@ -964,11 +963,9 @@ function IntegrationsTab() {
 }
 
 function MiniMaxConfigForm({
-  toast,
   setToast,
   onStatusChange,
 }: {
-  toast: { message: string; type: 'success' | 'error' } | null;
   setToast: (t: { message: string; type: 'success' | 'error' } | null) => void;
   onStatusChange: (hasConfig: boolean, isActive: boolean) => void;
 }) {
