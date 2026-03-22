@@ -145,6 +145,15 @@ export interface PdvBookEntries {
   pp_pdv_fields: Record<string, string>;
 }
 
+export interface AccountingIntentUpdateRequest {
+  document_type?: string;
+  transaction_type?: string;
+  vat_treatment?: string;
+  is_deductible?: boolean;
+  suggested_konta?: { debit: KontoEntry[]; credit: KontoEntry[] };
+  notes?: string;
+}
+
 export interface AccountingIntentResponse {
   id: string;
   invoice_id: string;

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
@@ -10,7 +9,6 @@ import { previewPdvBook, generatePdvBook } from '@/lib/api/pdv-books';
 
 export default function PdvKnjigePage() {
   const t = useTranslations('pdvBooks');
-  const { user } = useAuth();
   const { clients, isAgency } = useClient();
 
   const now = new Date();

@@ -15,8 +15,8 @@ import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { ExportDialog } from '@/components/ExportDialog';
 import { formatAmountSr } from '@/lib/formatters';
-import { assignClientToInvoice, fetchAccountingIntent, reviewAccountingIntent } from '@/lib/api/invoices';
-import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse } from '@/lib/types/invoice';
+import { assignClientToInvoice, fetchAccountingIntent, reviewAccountingIntent, updateAccountingIntent } from '@/lib/api/invoices';
+import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse, KontoEntry } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
 
@@ -58,6 +58,10 @@ export default function InvoiceDetailPage({
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [accountingIntent, setAccountingIntent] = useState<AccountingIntentResponse | null>(null);
   const [isReviewingIntent, setIsReviewingIntent] = useState(false);
+  const [editingKonta, setEditingKonta] = useState(false);
+  const [editedDebit, setEditedDebit] = useState<KontoEntry[]>([]);
+  const [editedCredit, setEditedCredit] = useState<KontoEntry[]>([]);
+  const [isSavingKonta, setIsSavingKonta] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const isProcessing = invoice?.status === 'processing' || !canWrite;
@@ -126,6 +130,7 @@ export default function InvoiceDetailPage({
 
   function resetField(field: keyof InvoiceUpdate) {
     // Remove from editedFields by creating a new object without this field
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { [field]: _, ...rest } = editedFields;
     // We need to use the hook's setField to clear it — but the hook only adds.
     // Instead, discard all and re-set the remaining edits.
@@ -517,13 +522,90 @@ export default function InvoiceDetailPage({
                 {/* Suggested konta */}
                 {accountingIntent.suggested_konta && (
                   <div>
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('suggestedKonta')}</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('suggestedKonta')}</div>
+                      {!editingKonta ? (
+                        <button
+                          onClick={() => {
+                            setEditedDebit([...(accountingIntent.suggested_konta.debit || [])]);
+                            setEditedCredit([...(accountingIntent.suggested_konta.credit || [])]);
+                            setEditingKonta(true);
+                          }}
+                          className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                        >
+                          {t('editKonta')}
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingKonta(false)}
+                            className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                          >
+                            {t('cancelEdit')}
+                          </button>
+                          <button
+                            disabled={isSavingKonta}
+                            onClick={async () => {
+                              setIsSavingKonta(true);
+                              try {
+                                const updated = await updateAccountingIntent(id, {
+                                  suggested_konta: { debit: editedDebit, credit: editedCredit },
+                                });
+                                setAccountingIntent(updated);
+                                setEditingKonta(false);
+                                setToast({ message: t('kontaSaved'), type: 'success' });
+                              } catch {
+                                setToast({ message: t('kontaSaveError'), type: 'error' });
+                              } finally {
+                                setIsSavingKonta(false);
+                              }
+                            }}
+                            className="text-xs text-white bg-violet-600 hover:bg-violet-700 px-2 py-1 rounded font-medium disabled:opacity-50"
+                          >
+                            {isSavingKonta ? '...' : t('saveKonta')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* Debit */}
                       <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-3">
-                        <div className="text-xs font-medium text-blue-600 mb-2">{t('debitSide')}</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-medium text-blue-600">{t('debitSide')}</div>
+                          {editingKonta && (
+                            <button
+                              onClick={() => setEditedDebit([...editedDebit, { konto: '', name: '', amount: '0' }])}
+                              className="text-xs text-blue-600 hover:text-blue-700"
+                            >+ {t('addRow')}</button>
+                          )}
+                        </div>
                         <div className="space-y-2">
-                          {(accountingIntent.suggested_konta.debit || []).map((entry, i) => (
+                          {editingKonta ? editedDebit.map((entry, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                value={entry.konto}
+                                onChange={e => { const arr = [...editedDebit]; arr[i] = { ...arr[i], konto: e.target.value }; setEditedDebit(arr); }}
+                                className="w-16 font-mono text-sm border border-gray-300 rounded px-1 py-0.5"
+                                placeholder="5330"
+                              />
+                              <input
+                                value={entry.name}
+                                onChange={e => { const arr = [...editedDebit]; arr[i] = { ...arr[i], name: e.target.value }; setEditedDebit(arr); }}
+                                className="flex-1 text-xs border border-gray-300 rounded px-1 py-0.5 min-w-0"
+                                placeholder={t('kontoName')}
+                              />
+                              <input
+                                value={entry.amount}
+                                onChange={e => { const arr = [...editedDebit]; arr[i] = { ...arr[i], amount: e.target.value }; setEditedDebit(arr); }}
+                                className="w-24 text-sm text-right border border-gray-300 rounded px-1 py-0.5 tabular-nums"
+                                placeholder="0.00"
+                              />
+                              <button
+                                onClick={() => setEditedDebit(editedDebit.filter((_, j) => j !== i))}
+                                className="text-red-400 hover:text-red-600 text-xs"
+                              >&times;</button>
+                            </div>
+                          )) : (accountingIntent.suggested_konta.debit || []).map((entry, i) => (
                             <div key={i} className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="font-mono text-sm font-semibold text-gray-900">{entry.konto}</div>
@@ -536,9 +618,42 @@ export default function InvoiceDetailPage({
                       </div>
                       {/* Credit */}
                       <div className="border border-emerald-100 bg-emerald-50/50 rounded-xl p-3">
-                        <div className="text-xs font-medium text-emerald-600 mb-2">{t('creditSide')}</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-medium text-emerald-600">{t('creditSide')}</div>
+                          {editingKonta && (
+                            <button
+                              onClick={() => setEditedCredit([...editedCredit, { konto: '', name: '', amount: '0' }])}
+                              className="text-xs text-emerald-600 hover:text-emerald-700"
+                            >+ {t('addRow')}</button>
+                          )}
+                        </div>
                         <div className="space-y-2">
-                          {(accountingIntent.suggested_konta.credit || []).map((entry, i) => (
+                          {editingKonta ? editedCredit.map((entry, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                value={entry.konto}
+                                onChange={e => { const arr = [...editedCredit]; arr[i] = { ...arr[i], konto: e.target.value }; setEditedCredit(arr); }}
+                                className="w-16 font-mono text-sm border border-gray-300 rounded px-1 py-0.5"
+                                placeholder="4330"
+                              />
+                              <input
+                                value={entry.name}
+                                onChange={e => { const arr = [...editedCredit]; arr[i] = { ...arr[i], name: e.target.value }; setEditedCredit(arr); }}
+                                className="flex-1 text-xs border border-gray-300 rounded px-1 py-0.5 min-w-0"
+                                placeholder={t('kontoName')}
+                              />
+                              <input
+                                value={entry.amount}
+                                onChange={e => { const arr = [...editedCredit]; arr[i] = { ...arr[i], amount: e.target.value }; setEditedCredit(arr); }}
+                                className="w-24 text-sm text-right border border-gray-300 rounded px-1 py-0.5 tabular-nums"
+                                placeholder="0.00"
+                              />
+                              <button
+                                onClick={() => setEditedCredit(editedCredit.filter((_, j) => j !== i))}
+                                className="text-red-400 hover:text-red-600 text-xs"
+                              >&times;</button>
+                            </div>
+                          )) : (accountingIntent.suggested_konta.credit || []).map((entry, i) => (
                             <div key={i} className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="font-mono text-sm font-semibold text-gray-900">{entry.konto}</div>

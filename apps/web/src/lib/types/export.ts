@@ -66,3 +66,23 @@ export interface ExportTemplateUpdate {
   fields?: { key: string; label: string; order: number }[];
   supported_formats?: string[];
 }
+
+export interface MiniMaxConfig {
+  id: string;
+  organization_id: string;
+  client_id: string;
+  username: string;
+  minimax_org_id: number;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MiniMaxConfigCreate {
+  client_id: string;
+  client_secret: string;
+  username: string;
+  password: string;
+  minimax_org_id: number;
+}

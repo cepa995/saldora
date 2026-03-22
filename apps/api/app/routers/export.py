@@ -4,6 +4,7 @@ import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -168,7 +169,7 @@ async def create_export(
     return StreamingResponse(
         buffer,
         media_type=config["content_type"],
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 
@@ -253,6 +254,19 @@ async def _load_template(
         )
     )
     return result.scalar_one_or_none()
+
+
+def _content_disposition(filename: str) -> str:
+    """Build Content-Disposition header value safe for non-ASCII filenames.
+
+    Args:
+        filename: The desired download filename (may contain Serbian chars).
+
+    Returns:
+        RFC 5987 encoded header value.
+    """
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "export"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
 
 
 def _sanitize_filename(text: str) -> str:
@@ -597,7 +611,7 @@ async def generate_pdv_book(
     return StreamingResponse(
         buffer,
         media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 
@@ -994,6 +1008,49 @@ async def update_minimax_config(
     await db.refresh(config)
 
     return MiniMaxConfigResponse.model_validate(config)
+
+
+@router.post("/minimax/test-connection")
+async def test_minimax_connection(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role("admin")),
+) -> dict:
+    """Test MiniMax connection using saved credentials.
+
+    Args:
+        db: Database session.
+        current_user: Authenticated admin user.
+
+    Returns:
+        Connection status with message.
+    """
+    result = await db.execute(
+        select(MiniMaxConfig).where(MiniMaxConfig.organization_id == current_user.organization_id)
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MiniMax konfiguracija nije postavljena.",
+        )
+
+    try:
+        from app.services.minimax.client import MiniMaxClient
+
+        client = MiniMaxClient(
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+            username=config.username,
+            password=config.password,
+            org_id=config.minimax_org_id,
+        )
+        await client.authenticate()
+        return {"status": "connected", "message": "Uspešno povezano sa MiniMax"}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Neuspešna veza: {exc}",
+        )
 
 
 async def _get_minimax_config(db: AsyncSession, organization_id) -> MiniMaxConfig:

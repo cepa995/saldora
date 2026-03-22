@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { exportInvoices, fetchTemplates, pushToMinimax, triggerBrowserDownload } from '@/lib/api/export';
+import { exportInvoices, fetchTemplates, fetchMiniMaxConfig, pushToMinimax, triggerBrowserDownload } from '@/lib/api/export';
 import { Toast, type ToastType } from '@/components/Toast';
 import type { ExportFormat, ExportOptions, ExportTemplate, BlockedInvoice, MiniMaxPushResult } from '@/lib/types/export';
 
@@ -47,6 +47,7 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
   const [pushResults, setPushResults] = useState<MiniMaxPushResult[] | null>(null);
   const [templates, setTemplates] = useState<ExportTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default');
+  const [minimaxConfigured, setMinimaxConfigured] = useState<boolean | null>(null);
 
   // Load templates on mount
   useEffect(() => {
@@ -54,6 +55,15 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
       .then(setTemplates)
       .catch(() => {});
   }, []);
+
+  // Check MiniMax config when format is minimax_xml
+  useEffect(() => {
+    if (format !== 'minimax_xml') return;
+    setMinimaxConfigured(null);
+    fetchMiniMaxConfig()
+      .then(() => setMinimaxConfigured(true))
+      .catch(() => setMinimaxConfigured(false));
+  }, [format]);
 
   // Close on Escape
   useEffect(() => {
@@ -307,19 +317,26 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
           {format === 'minimax_xml' && (
             <div className="space-y-3">
               <p className="text-xs text-gray-500 italic">{t('formatMinimaxDesc')}</p>
-              <div className="p-3 bg-violet-50 border border-violet-100 rounded-xl space-y-2">
-                <p className="text-xs font-medium text-violet-800">{t('pushToMinimaxTitle')}</p>
-                <p className="text-xs text-violet-600">{t('pushToMinimaxDesc')}</p>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={createCustomers}
-                    onChange={(e) => setCreateCustomers(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                  />
-                  <span className="text-xs text-violet-700">{t('createCustomers')}</span>
-                </label>
-              </div>
+              {minimaxConfigured === false ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-xs font-medium text-amber-800">{t('minimaxNotConfigured')}</p>
+                  <p className="text-xs text-amber-600 mt-0.5">{t('minimaxConfigureFirst')}</p>
+                </div>
+              ) : minimaxConfigured === true ? (
+                <div className="p-3 bg-violet-50 border border-violet-100 rounded-xl space-y-2">
+                  <p className="text-xs font-medium text-violet-800">{t('pushToMinimaxTitle')}</p>
+                  <p className="text-xs text-violet-600">{t('pushToMinimaxDesc')}</p>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createCustomers}
+                      onChange={(e) => setCreateCustomers(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-xs text-violet-700">{t('createCustomers')}</span>
+                  </label>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -406,8 +423,8 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
             {tCommon('cancel')}
           </button>
 
-          {/* MiniMax push button (only for minimax_xml format) */}
-          {format === 'minimax_xml' && (
+          {/* MiniMax push button (only for minimax_xml format when configured) */}
+          {format === 'minimax_xml' && minimaxConfigured === true && (
             <button
               onClick={handlePushToMinimax}
               disabled={isBusy}

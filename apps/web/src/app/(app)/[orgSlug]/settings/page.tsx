@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,18 +13,20 @@ import { updateMemberRole, removeMember } from '@/lib/api/team';
 import { createInvitation, fetchInvitations, revokeInvitation, type InvitationInfo } from '@/lib/api/invitations';
 import { fetchJoinRequests, approveJoinRequest, rejectJoinRequest, type JoinRequestInfo } from '@/lib/api/join-requests';
 import { uploadLogo, deleteLogo } from '@/lib/api/organizations';
+import { fetchMiniMaxConfig, saveMiniMaxConfig, testMiniMaxConnection } from '@/lib/api/export';
 import { Toast, type ToastType } from '@/components/Toast';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 import { isPlanError } from '@/lib/api-client';
 import { formatRelativeTime } from '@/lib/formatters';
 import { useNotifications } from '@/contexts/NotificationContext';
 
-type SettingsTab = 'profile' | 'organization' | 'team' | 'data-privacy';
+type SettingsTab = 'profile' | 'organization' | 'team' | 'integrations' | 'data-privacy';
 
 const TABS: { key: SettingsTab; labelKey: string; adminOnly?: boolean }[] = [
   { key: 'profile', labelKey: 'profile' },
   { key: 'organization', labelKey: 'organization' },
   { key: 'team', labelKey: 'team', adminOnly: true },
+  { key: 'integrations', labelKey: 'integrations', adminOnly: true },
   { key: 'data-privacy', labelKey: 'dataPrivacy' },
 ];
 
@@ -95,6 +98,7 @@ export default function SettingsPage() {
       {activeTab === 'profile' && <ProfileTab />}
       {activeTab === 'organization' && <OrganizationTab />}
       {activeTab === 'team' && isAdmin && <TeamTab />}
+      {activeTab === 'integrations' && isAdmin && <IntegrationsTab />}
       {activeTab === 'data-privacy' && <DataPrivacyTab />}
     </div>
   );
@@ -808,6 +812,369 @@ function TeamTab() {
       {planError && (
         <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
       )}
+    </div>
+  );
+}
+
+function IntegrationsTab() {
+  const t = useTranslations('settings');
+  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // MiniMax config state
+  const [minimaxConfigLoaded, setMinimaxConfigLoaded] = useState(false);
+  const [minimaxHasConfig, setMinimaxHasConfig] = useState(false);
+  const [minimaxActive, setMinimaxActive] = useState(false);
+
+  // Load MiniMax config status on mount
+  useEffect(() => {
+    fetchMiniMaxConfig()
+      .then((config) => {
+        setMinimaxHasConfig(true);
+        setMinimaxActive(config.is_active);
+      })
+      .catch(() => {})
+      .finally(() => setMinimaxConfigLoaded(true));
+  }, []);
+
+  const integrations = [
+    {
+      id: 'minimax',
+      name: 'MiniMax',
+      description: t('minimaxDesc'),
+      logo: '/minimax-logo.png',
+      icon: (
+        <Image src="/minimax-logo.png" alt="MiniMax" width={24} height={24} className="object-contain" />
+      ),
+      connected: minimaxHasConfig && minimaxActive,
+      loaded: minimaxConfigLoaded,
+    },
+    {
+      id: 'sef',
+      name: 'SEF (eFaktura)',
+      description: t('sefDesc'),
+      logo: '/sef-logo.png',
+      icon: (
+        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+        </svg>
+      ),
+      connected: false,
+      loaded: true,
+      comingSoon: true,
+    },
+  ];
+
+  // If an integration is selected, show its config form
+  if (selectedIntegration === 'minimax') {
+    return (
+      <div className="space-y-6">
+        {/* Back button */}
+        <button
+          onClick={() => setSelectedIntegration(null)}
+          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          {t('backToIntegrations')}
+        </button>
+
+        <MiniMaxConfigForm
+          setToast={setToast}
+          onStatusChange={(hasConfig, isActive) => {
+            setMinimaxHasConfig(hasConfig);
+            setMinimaxActive(isActive);
+          }}
+        />
+
+        {toast && (
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        )}
+      </div>
+    );
+  }
+
+  // Integration cards grid
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {integrations.map((integration) => (
+          <button
+            key={integration.id}
+            onClick={() => !integration.comingSoon && setSelectedIntegration(integration.id)}
+            disabled={integration.comingSoon}
+            className={`relative bg-white rounded-2xl border shadow-sm p-5 text-left transition-all ${
+              integration.comingSoon
+                ? 'border-gray-100 opacity-60 cursor-not-allowed'
+                : 'border-gray-100 hover:border-violet-200 hover:shadow-md cursor-pointer'
+            }`}
+          >
+            {/* Logo — bottom right */}
+            {integration.logo && (
+              <div className="absolute bottom-3 right-3 pointer-events-none">
+                <Image src={integration.logo} alt={integration.name} width={64} height={64} className="object-contain" />
+              </div>
+            )}
+            {/* Fallback icon for integrations without a logo */}
+            {!integration.logo && (
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
+                integration.id === 'sef' ? 'bg-blue-100' : 'bg-gray-50 border border-gray-100'
+              }`}>
+                {integration.icon}
+              </div>
+            )}
+
+            {/* Status / Coming soon badge */}
+            {integration.comingSoon ? (
+              <span className="absolute top-3 right-3 text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                {t('comingSoon')}
+              </span>
+            ) : integration.loaded && (
+              <span className={`absolute top-3 right-3 text-xs font-medium px-2.5 py-0.5 rounded-full ${
+                integration.connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {integration.connected ? t('minimaxConnected') : t('minimaxDisconnected')}
+              </span>
+            )}
+
+            {/* Name & description */}
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">{integration.name}</h3>
+            <p className="text-xs text-gray-500 line-clamp-2">{integration.description}</p>
+
+            {/* Configure arrow */}
+            {!integration.comingSoon && (
+              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-violet-600">
+                {t('configure')}
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
+    </div>
+  );
+}
+
+function MiniMaxConfigForm({
+  setToast,
+  onStatusChange,
+}: {
+  setToast: (t: { message: string; type: 'success' | 'error' } | null) => void;
+  onStatusChange: (hasConfig: boolean, isActive: boolean) => void;
+}) {
+  const t = useTranslations('settings');
+
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [hasConfig, setHasConfig] = useState(false);
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [orgId, setOrgId] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(false);
+
+  useEffect(() => {
+    fetchMiniMaxConfig()
+      .then((config) => {
+        setHasConfig(true);
+        setClientId(config.client_id);
+        setUsername(config.username);
+        setOrgId(String(config.minimax_org_id));
+        setIsActive(config.is_active);
+        setLastSync(config.last_sync_at);
+      })
+      .catch(() => {})
+      .finally(() => setConfigLoaded(true));
+  }, []);
+
+  async function handleSave() {
+    if (!clientId || !clientSecret || !username || !password || !orgId) {
+      setToast({ message: t('allFieldsRequired'), type: 'error' });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await saveMiniMaxConfig({
+        client_id: clientId,
+        client_secret: clientSecret,
+        username,
+        password,
+        minimax_org_id: Number(orgId),
+      });
+      setHasConfig(true);
+      setClientSecret('');
+      setPassword('');
+      onStatusChange(true, isActive);
+      setToast({ message: t('configSaved'), type: 'success' });
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err
+        ? String(err.message) : t('configError');
+      setToast({ message, type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    setIsTesting(true);
+    try {
+      const result = await testMiniMaxConnection();
+      if (result.status === 'ok' || result.status === 'success' || result.status === 'connected') {
+        setToast({ message: t('connectionSuccess'), type: 'success' });
+      } else {
+        setToast({ message: result.message || t('connectionFailed'), type: 'error' });
+      }
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err
+        ? String(err.message) : t('connectionFailed');
+      setToast({ message, type: 'error' });
+    } finally {
+      setIsTesting(false);
+    }
+  }
+
+  if (!configLoaded) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="h-5 w-40 bg-gray-200 rounded animate-pulse mb-4" />
+        <div className="space-y-4 max-w-lg">
+          <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+          <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+          <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      {/* Card header */}
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+            </svg>
+          </div>
+          <h2 className="text-base font-semibold text-gray-900">{t('minimaxTitle')}</h2>
+        </div>
+        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${hasConfig && isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {hasConfig && isActive ? t('minimaxConnected') : t('minimaxDisconnected')}
+        </span>
+      </div>
+      <p className="text-sm text-gray-500 mb-5 ml-12">{t('minimaxDesc')}</p>
+
+      {/* Form fields */}
+      <div className="space-y-4 max-w-lg">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">{t('minimaxClientId')}</label>
+          <input
+            type="text"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-medium text-gray-500">{t('minimaxClientSecret')}</label>
+            <button
+              type="button"
+              onClick={() => setShowSecrets((s) => !s)}
+              className="text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors"
+            >
+              {showSecrets ? t('hideSecrets') : t('showSecrets')}
+            </button>
+          </div>
+          <input
+            type={showSecrets ? 'text' : 'password'}
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
+            placeholder={hasConfig ? '••••••••' : ''}
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">{t('minimaxUsername')}</label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">{t('minimaxPassword')}</label>
+          <input
+            type={showSecrets ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={hasConfig ? '••••••••' : ''}
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">{t('minimaxOrgId')}</label>
+          <input
+            type="number"
+            value={orgId}
+            onChange={(e) => setOrgId(e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+          />
+        </div>
+
+        {/* Active toggle and last sync */}
+        {hasConfig && (
+          <div className="pt-2 border-t border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-900">{t('minimaxActive')}</p>
+              <button
+                type="button"
+                onClick={() => setIsActive((a) => !a)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? 'bg-violet-600' : 'bg-gray-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            {lastSync && (
+              <p className="text-xs text-gray-400">
+                {t('lastSync')}: {formatRelativeTime(lastSync)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-3 pt-2">
+          {hasConfig && (
+            <button
+              onClick={handleTest}
+              disabled={isTesting || isSaving}
+              className="px-5 py-2 text-sm font-medium text-violet-700 bg-white border border-violet-300 rounded-xl hover:bg-violet-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isTesting ? t('saving') : t('testConnection')}
+            </button>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isTesting}
+            className="px-5 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? t('saving') : t('saveConfig')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
