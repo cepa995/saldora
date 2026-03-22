@@ -92,8 +92,13 @@ async def upload_invoice(
             detail=f"Unsupported file type: {file.content_type}",
         )
 
-    # Validate file size
+    # Validate file size and magic bytes
     content = await file.read()
+    if not _validate_magic_bytes(content, file.content_type):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Sadržaj fajla ne odgovara deklarisanom tipu",
+        )
     if len(content) > settings.ocr_max_file_size_mb * 1024 * 1024:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
@@ -213,6 +218,31 @@ def _get_resolution_error(content: bytes, filename: str) -> str | None:
     if w < MIN_WIDTH or h < MIN_HEIGHT:
         return f"Rezolucija slike je premala ({w}x{h}px). Minimum je {MIN_WIDTH}x{MIN_HEIGHT}px."
     return None
+
+
+_MAGIC_BYTES = {
+    "application/pdf": [b"%PDF"],
+    "image/png": [b"\x89PNG"],
+    "image/jpeg": [b"\xff\xd8\xff"],
+    "image/tiff": [b"II\x2a\x00", b"MM\x00\x2a"],
+    "image/webp": [b"RIFF"],
+}
+
+
+def _validate_magic_bytes(content: bytes, content_type: str | None) -> bool:
+    """Validate file content matches declared MIME type via magic bytes.
+
+    Args:
+        content: Raw file bytes.
+        content_type: Declared MIME type from upload header.
+
+    Returns:
+        True if magic bytes match the declared type.
+    """
+    if not content_type or content_type not in _MAGIC_BYTES:
+        return True  # Unknown type — let other validation handle it
+    signatures = _MAGIC_BYTES[content_type]
+    return any(content[: len(sig)] == sig for sig in signatures)
 
 
 def _check_image_resolution(content: bytes, filename: str) -> None:

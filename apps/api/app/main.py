@@ -96,8 +96,8 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="AI-powered invoice processing API for the Serbian market",
-    docs_url="/docs" if settings.environment != "production" else None,
-    redoc_url="/redoc" if settings.environment != "production" else None,
+    docs_url="/docs" if settings.environment == "development" else None,
+    redoc_url="/redoc" if settings.environment == "development" else None,
     lifespan=lifespan,
 )
 
@@ -114,8 +114,8 @@ app.add_middleware(
         "https://www.saldora.ai",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
     expose_headers=["Content-Disposition"],
 )
 
