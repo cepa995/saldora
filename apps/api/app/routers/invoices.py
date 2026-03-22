@@ -31,7 +31,11 @@ from app.models.client import Client
 from app.models.correction_log import CorrectionLog
 from app.models.invoice import Invoice
 from app.models.user import User
-from app.schemas.accounting_intent import AccountingIntentResponse, AccountingIntentReviewRequest
+from app.schemas.accounting_intent import (
+    AccountingIntentResponse,
+    AccountingIntentReviewRequest,
+    AccountingIntentUpdateRequest,
+)
 from app.schemas.client import ClientSummary
 from app.schemas.invoice import (
     CompanyInfo,
@@ -1340,6 +1344,53 @@ async def get_accounting_intent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Accounting intent not found. Invoice must be verified first.",
         )
+
+    return AccountingIntentResponse.model_validate(intent)
+
+
+@router.patch("/{invoice_id}/accounting-intent", response_model=AccountingIntentResponse)
+async def update_accounting_intent(
+    invoice_id: UUID,
+    body: AccountingIntentUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AccountingIntentResponse:
+    """Update accounting intent fields (konta, classification, notes).
+
+    Args:
+        invoice_id: UUID of the invoice.
+        body: Fields to update.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Updated AccountingIntentResponse.
+    """
+    await _get_invoice_or_404(invoice_id, db, user)
+
+    result = await db.execute(
+        select(AccountingIntent).where(
+            AccountingIntent.invoice_id == invoice_id,
+            AccountingIntent.organization_id == user.organization_id,
+        )
+    )
+    intent = result.scalar_one_or_none()
+
+    if not intent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accounting intent not found. Invoice must be verified first.",
+        )
+
+    update_data = body.model_dump(exclude_unset=True)
+    if "suggested_konta" in update_data:
+        update_data["suggested_konta"] = body.suggested_konta.model_dump()
+
+    for field, value in update_data.items():
+        setattr(intent, field, value)
+
+    await db.commit()
+    await db.refresh(intent)
 
     return AccountingIntentResponse.model_validate(intent)
 

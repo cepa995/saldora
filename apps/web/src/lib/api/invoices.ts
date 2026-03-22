@@ -7,6 +7,7 @@
 import { apiClient } from '@/lib/api-client';
 import type {
   AccountingIntentResponse,
+  AccountingIntentUpdateRequest,
   InvoiceFilters,
   InvoiceListResponse,
   InvoiceResponse,
@@ -149,6 +150,28 @@ export async function fetchAccountingIntent(
  * Returns:
  *   Updated accounting intent.
  */
+/**
+ * Update accounting intent fields (konta, classification, notes).
+ *
+ * Args:
+ *   invoiceId - UUID of the invoice.
+ *   data - Fields to update.
+ * Returns:
+ *   Updated accounting intent.
+ */
+export async function updateAccountingIntent(
+  invoiceId: string,
+  data: AccountingIntentUpdateRequest,
+): Promise<AccountingIntentResponse> {
+  return apiClient<AccountingIntentResponse>(
+    `/api/v1/invoices/${invoiceId}/accounting-intent`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    },
+  );
+}
+
 export async function reviewAccountingIntent(
   invoiceId: string,
   notes?: string,

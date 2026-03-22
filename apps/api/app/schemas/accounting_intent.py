@@ -22,6 +22,17 @@ class SuggestedKonta(BaseModel):
     credit: list[KontoEntry] = Field(default_factory=list)
 
 
+class AccountingIntentUpdateRequest(BaseModel):
+    """Request body for updating an accounting intent."""
+
+    document_type: str | None = None
+    transaction_type: str | None = None
+    vat_treatment: str | None = None
+    is_deductible: bool | None = None
+    suggested_konta: SuggestedKonta | None = None
+    notes: str | None = None
+
+
 class AccountingIntentReviewRequest(BaseModel):
     """Request body for marking an accounting intent as reviewed."""
 
