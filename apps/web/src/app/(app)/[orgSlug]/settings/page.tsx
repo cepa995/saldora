@@ -842,8 +842,9 @@ function IntegrationsTab() {
       id: 'minimax',
       name: 'MiniMax',
       description: t('minimaxDesc'),
+      logo: '/minimax-logo.png',
       icon: (
-        <Image src="/minimax-logo.png" alt="MiniMax" width={28} height={28} className="object-contain" />
+        <Image src="/minimax-logo.png" alt="MiniMax" width={24} height={24} className="object-contain" />
       ),
       connected: minimaxHasConfig && minimaxActive,
       loaded: minimaxConfigLoaded,
@@ -852,8 +853,9 @@ function IntegrationsTab() {
       id: 'sef',
       name: 'SEF (eFaktura)',
       description: t('sefDesc'),
+      logo: null as string | null,
       icon: (
-        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
         </svg>
       ),
@@ -909,28 +911,33 @@ function IntegrationsTab() {
                 : 'border-gray-100 hover:border-violet-200 hover:shadow-md cursor-pointer'
             }`}
           >
-            {/* Coming soon badge */}
-            {integration.comingSoon && (
+            {/* Logo — bottom right */}
+            {integration.logo && (
+              <div className="absolute bottom-3 right-3 pointer-events-none">
+                <Image src={integration.logo} alt={integration.name} width={64} height={64} className="object-contain" />
+              </div>
+            )}
+            {/* Fallback icon for integrations without a logo */}
+            {!integration.logo && (
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
+                integration.id === 'sef' ? 'bg-blue-100' : 'bg-gray-50 border border-gray-100'
+              }`}>
+                {integration.icon}
+              </div>
+            )}
+
+            {/* Status / Coming soon badge */}
+            {integration.comingSoon ? (
               <span className="absolute top-3 right-3 text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
                 {t('comingSoon')}
               </span>
-            )}
-
-            {/* Status badge */}
-            {!integration.comingSoon && integration.loaded && (
+            ) : integration.loaded && (
               <span className={`absolute top-3 right-3 text-xs font-medium px-2.5 py-0.5 rounded-full ${
                 integration.connected ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
               }`}>
                 {integration.connected ? t('minimaxConnected') : t('minimaxDisconnected')}
               </span>
             )}
-
-            {/* Icon */}
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-              integration.id === 'sef' ? 'bg-blue-100' : 'bg-gray-50 border border-gray-100'
-            }`}>
-              {integration.icon}
-            </div>
 
             {/* Name & description */}
             <h3 className="text-sm font-semibold text-gray-900 mb-1">{integration.name}</h3>
