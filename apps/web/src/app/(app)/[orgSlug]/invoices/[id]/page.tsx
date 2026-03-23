@@ -745,13 +745,17 @@ export default function InvoiceDetailPage({
                 {/* Confidence + review status */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${
-                    parseFloat(accountingIntent.confidence) >= 0.85
+                    parseFloat(accountingIntent.confidence) >= 0.75
                       ? 'bg-green-100 text-green-700'
-                      : parseFloat(accountingIntent.confidence) >= 0.70
+                      : parseFloat(accountingIntent.confidence) >= 0.50
                         ? 'bg-amber-100 text-amber-700'
                         : 'bg-red-100 text-red-700'
                   }`}>
-                    {t('intentConfidence')}: {(parseFloat(accountingIntent.confidence) * 100).toFixed(0)}%
+                    {t('intentConfidence')}: {parseFloat(accountingIntent.confidence) >= 0.75
+                      ? tCommon('confidenceReliable')
+                      : parseFloat(accountingIntent.confidence) >= 0.50
+                        ? tCommon('confidenceReview')
+                        : tCommon('confidenceUnreliable')}
                   </span>
                   {accountingIntent.requires_review && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-100 text-amber-700">

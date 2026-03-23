@@ -3,39 +3,39 @@ import { render, screen } from '@testing-library/react';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
 
 describe('ConfidenceBadge', () => {
-  it('renders green for confidence >= 80', () => {
+  it('renders green "confidenceReliable" for confidence >= 75', () => {
     const { container } = render(<ConfidenceBadge confidence={85} />);
-    expect(screen.getByText('85%')).toBeInTheDocument();
+    expect(screen.getByText('confidenceReliable')).toBeInTheDocument();
     const dot = container.querySelector('.rounded-full');
     expect(dot?.className).toContain('bg-green-500');
     expect(container.firstElementChild!.className).toContain('text-green-700');
   });
 
-  it('renders green for exactly 80', () => {
-    const { container } = render(<ConfidenceBadge confidence={80} />);
-    expect(screen.getByText('80%')).toBeInTheDocument();
+  it('renders green for exactly 75', () => {
+    const { container } = render(<ConfidenceBadge confidence={75} />);
+    expect(screen.getByText('confidenceReliable')).toBeInTheDocument();
     const dot = container.querySelector('.rounded-full');
     expect(dot?.className).toContain('bg-green-500');
   });
 
-  it('renders amber for confidence 60-79', () => {
-    const { container } = render(<ConfidenceBadge confidence={70} />);
-    expect(screen.getByText('70%')).toBeInTheDocument();
+  it('renders amber "confidenceReview" for confidence 50-74', () => {
+    const { container } = render(<ConfidenceBadge confidence={60} />);
+    expect(screen.getByText('confidenceReview')).toBeInTheDocument();
     const dot = container.querySelector('.rounded-full');
     expect(dot?.className).toContain('bg-amber-500');
     expect(container.firstElementChild!.className).toContain('text-amber-700');
   });
 
-  it('renders amber for exactly 60', () => {
-    const { container } = render(<ConfidenceBadge confidence={60} />);
-    expect(screen.getByText('60%')).toBeInTheDocument();
+  it('renders amber for exactly 50', () => {
+    const { container } = render(<ConfidenceBadge confidence={50} />);
+    expect(screen.getByText('confidenceReview')).toBeInTheDocument();
     const dot = container.querySelector('.rounded-full');
     expect(dot?.className).toContain('bg-amber-500');
   });
 
-  it('renders red for confidence < 60', () => {
-    const { container } = render(<ConfidenceBadge confidence={45} />);
-    expect(screen.getByText('45%')).toBeInTheDocument();
+  it('renders red "confidenceUnreliable" for confidence < 50', () => {
+    const { container } = render(<ConfidenceBadge confidence={30} />);
+    expect(screen.getByText('confidenceUnreliable')).toBeInTheDocument();
     const dot = container.querySelector('.rounded-full');
     expect(dot?.className).toContain('bg-red-500');
     expect(container.firstElementChild!.className).toContain('text-red-700');
@@ -49,9 +49,11 @@ describe('ConfidenceBadge', () => {
     expect(container.firstElementChild!.className).toContain('text-gray-400');
   });
 
-  it('rounds decimal confidence values', () => {
-    render(<ConfidenceBadge confidence={79.6} />);
-    expect(screen.getByText('80%')).toBeInTheDocument();
+  it('rounds decimal values to correct threshold', () => {
+    const { container } = render(<ConfidenceBadge confidence={74.6} />);
+    expect(screen.getByText('confidenceReliable')).toBeInTheDocument();
+    const dot = container.querySelector('.rounded-full');
+    expect(dot?.className).toContain('bg-green-500');
   });
 
   it('accepts custom className', () => {
