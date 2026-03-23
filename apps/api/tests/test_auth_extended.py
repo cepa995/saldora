@@ -82,13 +82,18 @@ async def _register_with_org(
 async def test_logout_returns_success_message(client: AsyncClient):
     """POST /api/v1/auth/logout returns 200 with a success message.
 
-    The current implementation is a stub that always succeeds.  This test
-    ensures the endpoint is reachable and returns the expected shape.
+    Requires authentication. Logs out the current user and blacklists
+    the access token.
 
     Args:
         client: Async HTTP client fixture.
     """
-    resp = await client.post("/api/v1/auth/logout")
+    reg = await _register(client, "auth-logout@example.com")
+    token = reg["access_token"]
+    resp = await client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "message" in data

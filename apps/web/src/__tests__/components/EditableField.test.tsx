@@ -42,15 +42,15 @@ describe('EditableField', () => {
     render(
       <EditableField label="Field" value="val" onChange={() => {}} confidence={85} />
     );
-    expect(screen.getByText('85%')).toBeInTheDocument();
+    expect(screen.getByText('confidenceReliable')).toBeInTheDocument();
   });
 
   it('does not show confidence badge when confidence is null', () => {
     const { container } = render(
       <EditableField label="Field" value="val" onChange={() => {}} confidence={null} />
     );
-    // No ConfidenceBadge rendered — no percentage text
-    expect(container.textContent).not.toContain('%');
+    // Null confidence renders em-dash, not a label
+    expect(container.textContent).not.toContain('confidenceReliable');
   });
 
   it('renders correct input type', () => {

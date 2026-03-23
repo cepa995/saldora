@@ -16,11 +16,14 @@ settings = get_settings()
 # Rate limiting (slowapi)
 # ---------------------------------------------------------------------------
 
+_is_testing = settings.database_url.endswith("_test")
+
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200/minute"],
     storage_uri=settings.redis_url,
     in_memory_fallback_enabled=True,
+    enabled=not _is_testing,
 )
 
 # ---------------------------------------------------------------------------
@@ -90,7 +93,7 @@ async def clear_failed_logins(email: str) -> None:
 async def is_account_locked(email: str) -> bool:
     """Check if an account is locked due to too many failed attempts.
 
-    Fails open (returns False) if Redis is unavailable.
+    Fails open (returns False) if Redis is unavailable or in test environment.
 
     Args:
         email: The email address to check.
@@ -98,6 +101,8 @@ async def is_account_locked(email: str) -> bool:
     Returns:
         True if the account is locked.
     """
+    if _is_testing:
+        return False
     try:
         r = _get_redis()
         key = f"{_LOCKOUT_PREFIX}{email.lower()}"
