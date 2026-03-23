@@ -27,11 +27,11 @@ export function ConfidenceBadge({ confidence, className = '' }: ConfidenceBadgeP
   let textClass: string;
   let label: string;
 
-  if (rounded >= 85) {
+  if (rounded >= 75) {
     dotClass = 'bg-green-500';
     textClass = 'text-green-700';
     label = t('confidenceReliable');
-  } else if (rounded >= 65) {
+  } else if (rounded >= 50) {
     dotClass = 'bg-amber-500';
     textClass = 'text-amber-700';
     label = t('confidenceReview');
