@@ -47,9 +47,10 @@ USER worker
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -m celery -A ocr_worker.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
-# Run Celery worker with solo pool
+# Run Celery worker with prefork pool (4 concurrent tasks for vLLM batching)
 CMD ["python", "-m", "celery", "-A", "ocr_worker.celery_app", "worker", \
      "--loglevel=info", \
-     "--pool=solo", \
+     "--pool=prefork", \
+     "--concurrency=4", \
      "--queues=ocr", \
      "--hostname=ocr-worker@%h"]

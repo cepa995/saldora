@@ -268,11 +268,15 @@ async def _process_single_file(
     user: User,
     priority: str,
     callback_url: str | None,
+    countdown: int = 0,
 ) -> ProcessingStatus:
     """Process a single file within a batch upload.
 
     Creates an invoice record, uploads to S3, and queues a Celery OCR task.
     Uses a savepoint so failures only roll back this file, not the whole batch.
+
+    Args:
+        countdown: Seconds to delay task dispatch (for staggering batches).
     """
     # 1. Compute content hash (stored for reference, no dedup blocking)
     document_hash = hashlib.sha256(file_content).hexdigest()
@@ -303,10 +307,13 @@ async def _process_single_file(
     celery_queued = False
     try:
         celery_app = celery.Celery(broker=settings.celery_broker_url)
+        celery_kwargs: dict = {"queue": "ocr"}
+        if countdown > 0:
+            celery_kwargs["countdown"] = countdown
         celery_app.send_task(
             "ocr_worker.tasks.process_invoice",
             args=[str(invoice.id), document_key, callback_url, priority],
-            queue="ocr",
+            **celery_kwargs,
         )
         celery_queued = True
     except Exception as e:
@@ -390,7 +397,7 @@ async def upload_batch(
     results: list[ProcessingStatus] = []
     max_file_bytes = settings.ocr_max_file_size_mb * 1024 * 1024
 
-    for content, content_type, filename in file_data:
+    for batch_idx, (content, content_type, filename) in enumerate(file_data):
         # Validate file type
         if content_type not in ALLOWED_CONTENT_TYPES:
             results.append(
@@ -445,6 +452,7 @@ async def upload_batch(
                 user,
                 priority,
                 callback_url,
+                countdown=batch_idx * 1,  # Stagger: 0s, 1s, 2s, ...
             )
             results.append(result)
         except Exception as e:
@@ -1107,6 +1115,50 @@ async def delete_invoice(
 
     await db.delete(invoice)
     await db.commit()
+
+
+@router.get("/queue/info")
+async def get_queue_info(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Get queue information for the current organization.
+
+    Returns the number of invoices currently in the processing queue
+    and an estimated wait time based on processing speed.
+
+    Args:
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Queue position and estimated wait time.
+    """
+    # Count all processing invoices globally (queue depth)
+    global_result = await db.execute(
+        select(func.count(Invoice.id)).where(Invoice.status == "processing")
+    )
+    global_queue = global_result.scalar() or 0
+
+    # Count this org's processing invoices
+    org_result = await db.execute(
+        select(func.count(Invoice.id)).where(
+            Invoice.status == "processing",
+            Invoice.organization_id == user.organization_id,
+        )
+    )
+    org_queue = org_result.scalar() or 0
+
+    # Estimate: 4 concurrent workers × ~5s per invoice = ~48 invoices/min
+    invoices_per_minute = 48
+    estimated_minutes = max(1, round(global_queue / invoices_per_minute))
+
+    return {
+        "queue_depth": global_queue,
+        "your_pending": org_queue,
+        "estimated_minutes": estimated_minutes,
+        "workers": 4,
+    }
 
 
 @router.get("/{invoice_id}/status", response_model=ProcessingStatus)

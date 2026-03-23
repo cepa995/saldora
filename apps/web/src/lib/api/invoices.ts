@@ -129,6 +129,18 @@ export async function assignClientToInvoice(
  * Returns:
  *   Accounting intent or null if not yet generated.
  */
+/**
+ * Get queue information (depth, your pending, estimated wait).
+ */
+export async function fetchQueueInfo(): Promise<{
+  queue_depth: number;
+  your_pending: number;
+  estimated_minutes: number;
+  workers: number;
+}> {
+  return apiClient('/api/v1/invoices/queue/info');
+}
+
 export async function fetchAccountingIntent(
   invoiceId: string,
 ): Promise<AccountingIntentResponse | null> {
