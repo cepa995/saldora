@@ -107,15 +107,14 @@ class DotsOCREngine(OCREngine):
             from openai import OpenAI
 
             logger.info("Connecting to dots.ocr vLLM server at %s", self._server_url)
-            self._client = OpenAI(api_key=self._api_key, base_url=self._server_url)
-
-            # Verify connection with a models list call
-            models = self._client.models.list()
-            logger.info(
-                "dots.ocr server connected, available models: %s", [m.id for m in models.data]
+            self._client = OpenAI(
+                api_key=self._api_key,
+                base_url=self._server_url,
+                timeout=300.0,  # 5 min timeout for RunPod cold starts
             )
 
             self._loaded = True
+            logger.info("dots.ocr client ready (server: %s)", self._server_url)
 
         except ImportError:
             logger.error("openai package not installed. Install with: pip install openai")

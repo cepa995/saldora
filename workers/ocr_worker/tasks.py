@@ -58,7 +58,13 @@ class OCRTask(Task):
         logger.info(f"Task {task_id} completed successfully")
 
 
-@app.task(bind=True, base=OCRTask, name="ocr_worker.tasks.process_invoice")
+@app.task(
+    bind=True,
+    base=OCRTask,
+    name="ocr_worker.tasks.process_invoice",
+    soft_time_limit=300,  # 5 min soft limit (handles RunPod cold starts)
+    time_limit=360,  # 6 min hard limit
+)
 def process_invoice(
     self,
     invoice_id: str,
