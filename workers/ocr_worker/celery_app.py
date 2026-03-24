@@ -25,11 +25,11 @@ app.conf.update(
     timezone="Europe/Belgrade",
     enable_utc=True,
     # Worker settings
-    worker_prefetch_multiplier=1,  # One task at a time for GPU workers
-    worker_concurrency=1,  # Single task per worker (GPU bound)
-    # Task time limits
-    task_soft_time_limit=120,  # 2 minutes soft limit
-    task_time_limit=180,  # 3 minutes hard limit
+    worker_prefetch_multiplier=1,  # One task at a time per worker process
+    worker_concurrency=4,  # 4 concurrent tasks (vLLM batching)
+    # Task time limits (5/6 min to handle RunPod cold starts)
+    task_soft_time_limit=300,  # 5 minutes soft limit
+    task_time_limit=360,  # 6 minutes hard limit
     # Result settings
     result_expires=3600,  # Results expire after 1 hour
     # Task routing
