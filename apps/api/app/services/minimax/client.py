@@ -235,7 +235,23 @@ class MiniMaxClient:
             return existing
 
         logger.info("MiniMax: creating new customer for PIB %s (%s)", pib, name)
-        return await self.create_customer(name, pib, address, city)
+        try:
+            return await self.create_customer(name, pib, address, city)
+        except MiniMaxError as e:
+            if e.status_code == 409:
+                # Customer exists but lookup missed it — retry search
+                logger.info("MiniMax: customer already exists (409), retrying lookup")
+                existing = await self.find_customer_by_pib(pib)
+                if existing:
+                    return existing
+                # Try searching by name as fallback
+                result = await self._request(
+                    "GET", "customers", params={"filter": f"Name eq '{name}'"}
+                )
+                rows = result.get("Rows", []) if isinstance(result, dict) else result
+                if rows:
+                    return rows[0]
+            raise
 
     async def push_received_invoice(self, data: dict) -> dict:
         """Create a received invoice in MiniMax.
