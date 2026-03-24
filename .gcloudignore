@@ -1,0 +1,10 @@
+.git
+.env
+node_modules
+apps/web/.next
+apps/web/node_modules
+packages/ml/playground
+__pycache__
+*.pyc
+.venv
+google-cloud-sdk
