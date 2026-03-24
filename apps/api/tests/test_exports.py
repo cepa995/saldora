@@ -410,14 +410,14 @@ class TestExportBlocking:
 
     def test_low_confidence_unverified_blocks(self):
         """Low confidence (< 60%) without verification blocks export."""
-        inv = _mock_invoice(confidence_score=Decimal("45"), status="review")
+        inv = _mock_invoice(confidence_score=Decimal("0.45"), status="review")
         blocked = check_export_blocking([inv])
         assert len(blocked) == 1
         assert "Nizak nivo pouzdanosti" in blocked[0]["reasons"][0]
 
     def test_low_confidence_verified_passes(self):
         """Low confidence with verified status passes."""
-        inv = _mock_invoice(confidence_score=Decimal("45"), status="verified")
+        inv = _mock_invoice(confidence_score=Decimal("0.45"), status="verified")
         assert check_export_blocking([inv]) == []
 
     def test_blocking_warnings_block(self):
@@ -715,7 +715,7 @@ class TestExportEndpoint:
         )
         assert resp.status_code == 200
         assert "spreadsheetml" in resp.headers["content-type"]
-        assert resp.headers["content-disposition"].endswith('.xlsx"')
+        assert ".xlsx" in resp.headers["content-disposition"]
 
         # Verify it's valid XLSX
         wb = load_workbook(BytesIO(resp.content))

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -67,12 +67,19 @@ export default function InvoicesPage() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const hasProcessing = invoices.some(inv => inv.status === 'processing');
   const [queueInfo, setQueueInfo] = useState<{ queue_depth: number; your_pending: number; estimated_minutes: number } | null>(null);
+
+  // Clear queue info when no processing invoices
+  const queueInfoRef = useRef(queueInfo);
+  queueInfoRef.current = queueInfo;
+  if (!hasProcessing && queueInfoRef.current !== null) {
+    setQueueInfo(null);
+  }
 
   // Poll queue info when there are processing invoices
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const hasProcessing = invoices.some(inv => inv.status === 'processing');
+    if (!hasProcessing) return;
 
     async function checkQueue() {
       try {
@@ -83,15 +90,10 @@ export default function InvoicesPage() {
       }
     }
 
-    if (hasProcessing) {
-      checkQueue();
-      interval = setInterval(checkQueue, 10000); // Poll every 10s
-    } else {
-      setQueueInfo(null);
-    }
-
-    return () => { if (interval) clearInterval(interval); };
-  }, [invoices]);
+    checkQueue();
+    const interval = setInterval(checkQueue, 10000);
+    return () => clearInterval(interval);
+  }, [hasProcessing]);
 
   function handleSearch(value: string) {
     setSearchValue(value);
