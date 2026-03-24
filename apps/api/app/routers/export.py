@@ -889,7 +889,12 @@ async def push_to_minimax(
                     )
                     continue
 
-            customer_id = customer.get("CustomerID") or customer.get("ID")
+            # MiniMax may return a list or dict depending on the endpoint
+            if isinstance(customer, list):
+                customer = customer[0] if customer else {}
+            customer_id = (
+                customer.get("CustomerID") or customer.get("CustomerId") or customer.get("ID")
+            )
 
             # Look up currency
             currency_id = None
