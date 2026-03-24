@@ -75,6 +75,7 @@ class DotsOCREngine(OCREngine):
         self._loaded = False
         self._server_url = os.getenv("DOTS_OCR_SERVER_URL", "http://localhost:8100/v1")
         self._model_name = os.getenv("DOTS_OCR_MODEL_NAME", "model")
+        self._api_key = os.getenv("DOTS_OCR_API_KEY", "unused")
 
     @property
     def name(self) -> str:
@@ -106,7 +107,7 @@ class DotsOCREngine(OCREngine):
             from openai import OpenAI
 
             logger.info("Connecting to dots.ocr vLLM server at %s", self._server_url)
-            self._client = OpenAI(api_key="unused", base_url=self._server_url)
+            self._client = OpenAI(api_key=self._api_key, base_url=self._server_url)
 
             # Verify connection with a models list call
             models = self._client.models.list()
