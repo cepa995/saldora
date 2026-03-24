@@ -99,7 +99,7 @@ async def test_upload_rejects_unsupported_type(client: AsyncClient):
 async def test_upload_rejects_oversized_file(client: AsyncClient):
     """Upload over 20MB returns 413."""
     headers = await _auth_headers(client)
-    big_content = b"x" * (20 * 1024 * 1024 + 1)
+    big_content = b"%PDF-1.4 " + b"x" * (20 * 1024 * 1024 + 1)
     response = await client.post(
         "/api/v1/invoices/upload",
         files={"file": ("big.pdf", big_content, "application/pdf")},

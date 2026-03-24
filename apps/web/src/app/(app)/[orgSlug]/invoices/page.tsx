@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -10,6 +10,7 @@ import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
 import { ExportDialog } from '@/components/ExportDialog';
+import { fetchQueueInfo } from '@/lib/api/invoices';
 import { formatDateSr, formatAmountSr } from '@/lib/formatters';
 import type { InvoiceStatus, SortColumn } from '@/lib/types/invoice';
 
@@ -66,6 +67,30 @@ export default function InvoicesPage() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const hasProcessing = invoices.some(inv => inv.status === 'processing');
+  const [rawQueueInfo, setRawQueueInfo] = useState<{ queue_depth: number; your_pending: number; estimated_minutes: number } | null>(null);
+
+  // Derive displayed queue info — only show when processing
+  const queueInfo = hasProcessing ? rawQueueInfo : null;
+
+  // Poll queue info when there are processing invoices
+  useEffect(() => {
+    if (!hasProcessing) return;
+
+    let active = true;
+    async function checkQueue() {
+      try {
+        const info = await fetchQueueInfo();
+        if (active) setRawQueueInfo(info.your_pending > 0 ? info : null);
+      } catch {
+        if (active) setRawQueueInfo(null);
+      }
+    }
+
+    checkQueue();
+    const interval = setInterval(checkQueue, 10000);
+    return () => { active = false; clearInterval(interval); };
+  }, [hasProcessing]);
 
   function handleSearch(value: string) {
     setSearchValue(value);
@@ -126,6 +151,25 @@ export default function InvoicesPage() {
           </Link>
         )}
       </div>
+
+      {/* Queue info banner */}
+      {queueInfo && queueInfo.your_pending > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-violet-50 border border-violet-200 rounded-xl">
+          <div className="animate-spin w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full shrink-0" />
+          <div className="text-sm text-violet-700">
+            <span className="font-medium">
+              {queueInfo.your_pending} {queueInfo.your_pending === 1 ? t('invoiceInQueue') : t('invoicesInQueue')}
+            </span>
+            {' · '}
+            {t('estimatedWait', { minutes: String(queueInfo.estimated_minutes) })}
+            {queueInfo.queue_depth > queueInfo.your_pending && (
+              <span className="text-violet-500">
+                {' · '}{t('totalInQueue', { count: String(queueInfo.queue_depth) })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Search + Filters */}
       <div className="space-y-4">

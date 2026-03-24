@@ -242,19 +242,24 @@ async def test_cancel_no_subscription(client: AsyncClient):
 
 async def test_paddle_webhook_missing_signature(client: AsyncClient):
     """POST /webhooks/paddle without signature header should return 422."""
-    resp = await client.post(
-        "/api/v1/webhooks/paddle",
-        content=b'{"event_type":"test","data":{}}',
-        headers={"Content-Type": "application/json"},
-    )
+    with patch("app.routers.webhooks.settings") as mock_settings:
+        mock_settings.paddle_webhook_secret = "test_secret"
+        resp = await client.post(
+            "/api/v1/webhooks/paddle",
+            content=b'{"event_type":"test","data":{}}',
+            headers={"Content-Type": "application/json"},
+        )
     assert resp.status_code == 422
 
 
 async def test_paddle_webhook_unknown_event(client: AsyncClient):
     """Unknown event type should still return 200 (acknowledged)."""
     body = json.dumps({"event_type": "customer.created", "data": {}}).encode()
-    with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.paddle_webhook_secret = ""
+    with (
+        patch("app.routers.webhooks.settings") as mock_settings,
+        patch("app.routers.webhooks.verify_paddle_signature", return_value=True),
+    ):
+        mock_settings.paddle_webhook_secret = "test_secret"
         resp = await client.post(
             "/api/v1/webhooks/paddle",
             content=body,
@@ -296,8 +301,11 @@ async def test_paddle_webhook_subscription_created(
     # to be resolved. Since test env has no prices configured, the plan
     # will be None (unresolved), but the customer_id and subscription_id
     # should still be saved.
-    with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.paddle_webhook_secret = ""
+    with (
+        patch("app.routers.webhooks.settings") as mock_settings,
+        patch("app.routers.webhooks.verify_paddle_signature", return_value=True),
+    ):
+        mock_settings.paddle_webhook_secret = "test_secret"
         resp = await client.post(
             "/api/v1/webhooks/paddle",
             content=body,
@@ -345,8 +353,11 @@ async def test_paddle_webhook_subscription_canceled(
     }
     body = json.dumps(event).encode()
 
-    with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.paddle_webhook_secret = ""
+    with (
+        patch("app.routers.webhooks.settings") as mock_settings,
+        patch("app.routers.webhooks.verify_paddle_signature", return_value=True),
+    ):
+        mock_settings.paddle_webhook_secret = "test_secret"
         resp = await client.post(
             "/api/v1/webhooks/paddle",
             content=body,
@@ -374,8 +385,11 @@ async def test_paddle_webhook_transaction_completed(client: AsyncClient):
     }
     body = json.dumps(event).encode()
 
-    with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.paddle_webhook_secret = ""
+    with (
+        patch("app.routers.webhooks.settings") as mock_settings,
+        patch("app.routers.webhooks.verify_paddle_signature", return_value=True),
+    ):
+        mock_settings.paddle_webhook_secret = "test_secret"
         resp = await client.post(
             "/api/v1/webhooks/paddle",
             content=body,
@@ -401,8 +415,11 @@ async def test_paddle_webhook_missing_org_id(client: AsyncClient):
     }
     body = json.dumps(event).encode()
 
-    with patch("app.routers.webhooks.settings") as mock_settings:
-        mock_settings.paddle_webhook_secret = ""
+    with (
+        patch("app.routers.webhooks.settings") as mock_settings,
+        patch("app.routers.webhooks.verify_paddle_signature", return_value=True),
+    ):
+        mock_settings.paddle_webhook_secret = "test_secret"
         resp = await client.post(
             "/api/v1/webhooks/paddle",
             content=body,
