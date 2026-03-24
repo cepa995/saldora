@@ -53,7 +53,7 @@ from app.services.export.pdv_books import (
 )
 from app.services.export.xlsx import generate_xlsx
 from app.services.minimax.client import MiniMaxClient, MiniMaxError
-from app.services.minimax.mapper import map_invoice_to_received
+from app.services.minimax.mapper import map_invoice_to_received, validate_invoice_for_minimax
 from app.services.storage import get_presigned_url
 
 logger = logging.getLogger(__name__)
@@ -854,19 +854,23 @@ async def push_to_minimax(
 
     for inv in invoices:
         try:
-            # Find/create customer
-            seller = inv.seller if isinstance(inv.seller, dict) else {}
-            pib = seller.get("pib", "")
-            if not pib:
+            # Validate invoice before sending
+            validation_errors = validate_invoice_for_minimax(inv)
+            critical_errors = [e for e in validation_errors if "opcionalno" not in e]
+            if critical_errors:
                 results.append(
                     MiniMaxPushResult(
                         invoice_id=inv.id,
                         invoice_number=inv.invoice_number,
                         status="error",
-                        error="Nedostaje PIB prodavca",
+                        error="; ".join(critical_errors),
                     )
                 )
                 continue
+
+            # Find/create customer
+            seller = inv.seller if isinstance(inv.seller, dict) else {}
+            pib = seller.get("pib", "")
 
             if request.create_customers:
                 customer = await client.find_or_create_customer(
