@@ -928,6 +928,10 @@ async def push_to_minimax(
             )
 
         except MiniMaxError as e:
+            # Provide user-friendly error for duplicates
+            error_msg = str(e)
+            if e.status_code == 409 and "originalni broj" in (e.response_body or "").lower():
+                error_msg = f"Faktura '{inv.invoice_number}' već postoji u MiniMax-u"
             logger.error("MiniMax push failed for invoice %s: %s", inv.id, e)
             results.append(
                 MiniMaxPushResult(
