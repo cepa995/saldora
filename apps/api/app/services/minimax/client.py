@@ -215,9 +215,9 @@ class MiniMaxClient:
             "Address": address or "N/A",
             "City": city or "N/A",
             "PostalCode": postal_code or "00000",
-            "Country": {"Code": "RS"},
-            "Currency": {"Code": "RSD"},
-            "SubjectToVAT": "Y",
+            "Country": {"ID": 3},  # Serbia (Republika Srbija)
+            "Currency": {"ID": 2},  # RSD
+            "SubjectToVAT": "D",  # D=Da (Yes), N=Ne (No)
         }
         return await self._request("POST", "customers", json=payload)
 
