@@ -1,5 +1,6 @@
 """Export router - generate exports in various formats."""
 
+import json
 import logging
 import re
 from datetime import UTC, date, datetime, timedelta
@@ -909,9 +910,19 @@ async def push_to_minimax(
 
             # Map and push invoice
             payload = map_invoice_to_received(inv, customer_id, currency_id)
+            logger.info(
+                "MiniMax payload for invoice %s: %s",
+                inv.id,
+                json.dumps(payload, default=str),
+            )
             response = await client.push_received_invoice(payload)
 
-            minimax_id = response.get("ReceivedInvoiceID") or response.get("ID")
+            minimax_id = None
+            if isinstance(response, dict):
+                minimax_id = response.get("ReceivedInvoiceID") or response.get("ID")
+            elif isinstance(response, list) and response:
+                first = response[0]
+                minimax_id = first.get("ReceivedInvoiceID") if isinstance(first, dict) else None
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
@@ -929,16 +940,17 @@ async def push_to_minimax(
 
         except MiniMaxError as e:
             # Provide user-friendly error for duplicates
-            error_msg = str(e)
             if e.status_code == 409 and "originalni broj" in (e.response_body or "").lower():
-                error_msg = f"Faktura '{inv.invoice_number}' već postoji u MiniMax-u"
+                msg = f"Faktura '{inv.invoice_number}' već postoji u MiniMax-u"
+            else:
+                msg = str(e)
             logger.error("MiniMax push failed for invoice %s: %s", inv.id, e)
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
                     invoice_number=inv.invoice_number,
                     status="error",
-                    error=str(e),
+                    error=msg,
                 )
             )
 
