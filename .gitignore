@@ -218,3 +218,7 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# Google Cloud SDK (local install)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz
