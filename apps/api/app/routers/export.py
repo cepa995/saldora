@@ -874,6 +874,7 @@ async def push_to_minimax(
                     name=seller.get("name", "Nepoznat"),
                     address=seller.get("address", ""),
                     city=seller.get("city", ""),
+                    postal_code=seller.get("postal_code", ""),
                 )
             else:
                 customer = await client.find_customer_by_pib(pib)
