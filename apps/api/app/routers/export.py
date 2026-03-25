@@ -1013,9 +1013,12 @@ async def upsert_minimax_config(
 
     if config:
         config.client_id = data.client_id
-        config.client_secret = data.client_secret
+        # Only update secrets if non-empty (frontend sends empty when unchanged)
+        if data.client_secret:
+            config.client_secret = data.client_secret
         config.username = data.username
-        config.password = data.password
+        if data.password:
+            config.password = data.password
         config.minimax_org_id = data.minimax_org_id
     else:
         config = MiniMaxConfig(
