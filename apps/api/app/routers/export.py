@@ -916,12 +916,26 @@ async def push_to_minimax(
             )
             response = await client.push_received_invoice(payload)
 
+            # MiniMax POST returns [] on success — look up the ID by DocumentReference
             minimax_id = None
             if isinstance(response, dict):
-                minimax_id = response.get("ReceivedInvoiceID") or response.get("ID")
-            elif isinstance(response, list) and response:
-                first = response[0]
-                minimax_id = first.get("ReceivedInvoiceID") if isinstance(first, dict) else None
+                minimax_id = response.get("ReceivedInvoiceId") or response.get("ID")
+            elif isinstance(response, list) and not response:
+                # Empty list = success, fetch the ID
+                try:
+                    all_invoices = await client._request("GET", "receivedinvoices")
+                    rows = (
+                        all_invoices.get("Rows", [])
+                        if isinstance(all_invoices, dict)
+                        else all_invoices
+                    )
+                    doc_ref = inv.invoice_number or ""
+                    for row in rows:
+                        if row.get("DocumentReference") == doc_ref:
+                            minimax_id = row.get("ReceivedInvoiceId")
+                            break
+                except Exception:
+                    logger.warning("Could not fetch MiniMax ID for %s", inv.id)
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
