@@ -51,7 +51,7 @@ VAT_RATE_MAP = {
 VALID_PAYMENT_TYPES = {"D", "Z", "P", "R", "N"}
 
 
-def validate_invoice_for_minimax(invoice: Invoice) -> list[str]:
+def validate_invoice_for_minimax(invoice: Invoice) -> dict:
     """Validate that an invoice meets ALL MiniMax API requirements.
 
     Checks every field that MiniMax validates server-side, so we can
@@ -61,53 +61,42 @@ def validate_invoice_for_minimax(invoice: Invoice) -> list[str]:
         invoice: Invoice model instance.
 
     Returns:
-        List of validation error messages. Empty list = valid.
+        Dict with "errors" (blockers) and "warnings" (informational).
+        Empty errors list = OK to push.
     """
     errors: list[str] = []
+    warnings: list[str] = []
 
     seller = invoice.seller if isinstance(invoice.seller, dict) else {}
 
     # --- Customer creation requirements ---
 
-    # Required: seller PIB (used to find/create customer)
     if not seller.get("pib"):
         errors.append("Nedostaje PIB prodavca (potreban za kreiranje stranke u MiniMax-u)")
 
-    # Required: seller name
     if not seller.get("name"):
         errors.append("Nedostaje naziv prodavca")
 
-    # Required: postal code for customer creation
     if not seller.get("postal_code"):
-        errors.append(
-            "Nedostaje poštanski broj prodavca (obavezan podatak za MiniMax stranku)"
+        warnings.append(
+            "Nedostaje poštanski broj prodavca — koristiće se podrazumevana vrednost"
         )
 
     # --- Invoice header requirements ---
 
-    # Required: DocumentReference (original invoice number)
     if not invoice.invoice_number:
         errors.append("Nedostaje broj fakture (MiniMax: originalni broj je obavezan)")
 
-    # Required: DateIssued
     if not invoice.invoice_date:
         errors.append("Nedostaje datum fakture (MiniMax: datum izdavanja je obavezan)")
 
-    # Required: InvoiceAmount + InvoiceAmountDomesticCurrency
     if invoice.total_amount is None:
-        errors.append(
-            "Nedostaje ukupan iznos fakture "
-            "(MiniMax: iznos računa je obavezan)"
-        )
+        errors.append("Nedostaje ukupan iznos fakture (MiniMax: iznos računa je obavezan)")
     else:
-        # Must be rounded to 2 decimals and non-zero
         amount = float(invoice.total_amount)
         if round(amount, 2) != amount and abs(amount - round(amount, 2)) > 0.005:
-            errors.append(
-                "Iznos fakture mora biti zaokružen na 2 decimale za MiniMax"
-            )
+            errors.append("Iznos fakture mora biti zaokružen na 2 decimale za MiniMax")
 
-    # Required: at least one line item or total for row generation
     has_items = (
         invoice.line_items
         and isinstance(invoice.line_items, list)
@@ -116,12 +105,10 @@ def validate_invoice_for_minimax(invoice: Invoice) -> list[str]:
     if not has_items and invoice.total_amount is None:
         errors.append("Nedostaje iznos ili stavke fakture")
 
-    # Check line items have required fields
     if has_items:
         for i, item in enumerate(invoice.line_items, 1):
             if not isinstance(item, dict):
                 continue
-            # Each row needs at least a Value (amount)
             has_value = (
                 item.get("tax_base") is not None
                 or item.get("total") is not None
@@ -136,7 +123,6 @@ def validate_invoice_for_minimax(invoice: Invoice) -> list[str]:
                     "(potreban tax_base, total, ili unit_price + quantity)"
                 )
 
-    # Check VAT rates are mappable
     if has_items:
         for i, item in enumerate(invoice.line_items, 1):
             if not isinstance(item, dict):
@@ -150,13 +136,10 @@ def validate_invoice_for_minimax(invoice: Invoice) -> list[str]:
                         f"(MiniMax podržava: {', '.join(str(r) + '%' for r in sorted(VAT_RATE_MAP))})"
                     )
 
-    # Warning: missing due date (MiniMax accepts it, we default to +30 days)
     if not invoice.due_date:
-        errors.append(
-            "Nedostaje datum dospeća — koristiće se datum fakture + 30 dana"
-        )
+        warnings.append("Nedostaje datum dospeća — koristiće se datum fakture + 30 dana")
 
-    return errors
+    return {"errors": errors, "warnings": warnings}
 
 
 def build_customer_payload(

@@ -856,15 +856,14 @@ async def push_to_minimax(
     for inv in invoices:
         try:
             # Validate invoice before sending
-            validation_errors = validate_invoice_for_minimax(inv)
-            critical_errors = [e for e in validation_errors if "opcionalno" not in e]
-            if critical_errors:
+            validation = validate_invoice_for_minimax(inv)
+            if validation["errors"]:
                 results.append(
                     MiniMaxPushResult(
                         invoice_id=inv.id,
                         invoice_number=inv.invoice_number,
                         status="error",
-                        error="; ".join(critical_errors),
+                        error="; ".join(validation["errors"]),
                     )
                 )
                 continue
