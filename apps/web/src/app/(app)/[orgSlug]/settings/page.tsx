@@ -1075,6 +1075,33 @@ function MiniMaxConfigForm({
       </div>
       <p className="text-sm text-gray-500 mb-5 ml-12">{t('minimaxDesc')}</p>
 
+      {/* Setup guide — shown when not configured */}
+      {!hasConfig && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <h3 className="text-sm font-semibold text-blue-900 mb-2">{t('minimaxSetupTitle')}</h3>
+          <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+            <li>{t('minimaxStep1')}</li>
+            <li>{t('minimaxStep2')}</li>
+            <li>{t('minimaxStep3')}</li>
+            <li>{t('minimaxStep4')}</li>
+            <li>{t('minimaxStep5')}</li>
+          </ol>
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <p className="text-xs text-blue-700">
+              {t('minimaxHelpLink')}{' '}
+              <a
+                href="https://help.minimax.rs/help/podesavanja-za-api-vezu-moj-profil"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline font-medium hover:text-blue-900"
+              >
+                help.minimax.rs
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Form fields */}
       <div className="space-y-4 max-w-lg">
         <div>
