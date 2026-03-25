@@ -406,7 +406,17 @@ export function ExportDialog({ invoiceIds, onClose, onSuccess }: ExportDialogPro
                     MiniMax ID: {result.minimax_id}
                   </span>
                 ) : (
-                  <span className="text-xs text-red-600">{result.error}</span>
+                  <div className="text-xs text-red-600">
+                    {result.error?.includes('; ') ? (
+                      <ul className="list-disc list-inside space-y-0.5">
+                        {result.error.split('; ').map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span>{result.error}</span>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

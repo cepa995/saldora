@@ -944,7 +944,12 @@ async def push_to_minimax(
                 msg = f"Faktura '{inv.invoice_number}' već postoji u MiniMax-u"
             else:
                 msg = str(e)
-            logger.error("MiniMax push failed for invoice %s: %s", inv.id, e)
+            logger.error(
+                "MiniMax push failed for invoice %s: %s (body: %s)",
+                inv.id,
+                e,
+                getattr(e, "response_body", None),
+            )
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
