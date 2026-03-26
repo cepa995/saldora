@@ -411,12 +411,13 @@ def _apply_actions(actions: list[dict], modifications: dict, rule: AutomationRul
                 konta = modifications.get("suggested_konta", {})
                 # Build konto entry
                 entry = {"konto": value, "description": description}
-                if target in ("expense", "revenue", "asset"):
+                # Accept both semantic names and raw debit/credit
+                if target in ("expense", "revenue", "asset", "debit"):
                     konta.setdefault("debit", [])
                     # Replace existing entry for same target or append
                     konta["debit"] = [e for e in konta["debit"] if e.get("description") != target]
                     konta["debit"].append(entry)
-                elif target in ("vat_input", "vat_output", "liability"):
+                elif target in ("vat_input", "vat_output", "liability", "credit"):
                     konta.setdefault("credit", [])
                     konta["credit"] = [e for e in konta["credit"] if e.get("description") != target]
                     konta["credit"].append(entry)
