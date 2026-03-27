@@ -206,3 +206,112 @@ class ExpenseSummaryResponse(BaseModel):
 
     buckets: list[ExpenseSummaryBucket]
     grand_total: float
+
+
+# ---------------------------------------------------------------------------
+# Restaurant-specific reports
+# ---------------------------------------------------------------------------
+
+
+class KalkulacijaItem(BaseModel):
+    """Single item in a price calculation (kalkulacija) report.
+
+    Attributes:
+        description: Item description.
+        unit_of_measure: Unit (kg, kom, l, etc).
+        quantity: Purchased quantity.
+        purchase_price: Nabavna cena (unit_price from invoice).
+        purchase_value: Nabavna vrednost (qty * purchase_price).
+        margin_pct: Configured margin percentage (from product_catalog).
+        margin_amount: Calculated margin amount.
+        tax_rate: PDV rate.
+        tax_amount: PDV amount.
+        selling_price: Prodajna cena sa PDV.
+        selling_value: Prodajna vrednost.
+        supplier_name: Which supplier this came from.
+        invoice_number: Source invoice number.
+        invoice_date: Source invoice date.
+    """
+
+    description: str
+    unit_of_measure: str | None = None
+    quantity: float | None = None
+    purchase_price: float | None = None
+    purchase_value: float | None = None
+    margin_pct: float | None = None
+    margin_amount: float | None = None
+    tax_rate: float | None = None
+    tax_amount: float | None = None
+    selling_price: float | None = None
+    selling_value: float | None = None
+    supplier_name: str | None = None
+    invoice_number: str | None = None
+    invoice_date: date | None = None
+
+
+class KalkulacijaResponse(BaseModel):
+    """Response for the kalkulacija (price calculation) report."""
+
+    items: list[KalkulacijaItem]
+    total_purchase_value: float
+    total_selling_value: float
+    total_margin: float
+    item_count: int
+
+
+class RucItem(BaseModel):
+    """Single item in a RUC (razlika u ceni) report.
+
+    Attributes:
+        description: Canonical product name.
+        category: Product category (piće, hrana, etc).
+        avg_purchase_price: Average nabavna cena across invoices.
+        selling_price: Configured prodajna cena.
+        ruc_amount: Razlika u ceni (selling - purchase).
+        ruc_pct: Margin percentage.
+        total_purchased_qty: Total quantity purchased in period.
+        total_purchased_value: Total nabavna vrednost.
+        suppliers: List of suppliers for this item.
+    """
+
+    description: str
+    category: str | None = None
+    avg_purchase_price: float | None = None
+    selling_price: float | None = None
+    ruc_amount: float | None = None
+    ruc_pct: float | None = None
+    total_purchased_qty: float | None = None
+    total_purchased_value: float | None = None
+    suppliers: list[str] = []
+
+
+class RucResponse(BaseModel):
+    """Response for the RUC (razlika u ceni) report."""
+
+    items: list[RucItem]
+    avg_margin_pct: float
+    total_purchase_value: float
+    item_count: int
+
+
+class CategorySpendingItem(BaseModel):
+    """Spending by product category.
+
+    Attributes:
+        category: Product category (piće, hrana, materijal, etc).
+        total_amount: Total spend in this category.
+        item_count: Number of distinct items.
+        invoice_count: Number of invoices.
+    """
+
+    category: str
+    total_amount: float
+    item_count: int
+    invoice_count: int
+
+
+class CategorySpendingResponse(BaseModel):
+    """Response for spending by category report."""
+
+    items: list[CategorySpendingItem]
+    grand_total: float
