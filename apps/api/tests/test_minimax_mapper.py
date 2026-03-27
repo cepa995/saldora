@@ -246,9 +246,7 @@ def test_build_rows_value_from_tax_base():
 
 def test_build_rows_value_from_qty_price():
     """Row Value calculated from qty * price when no total or tax_base."""
-    inv = _make_invoice(
-        line_items=[{"description": "Test", "unit_price": "500.00", "quantity": 3}]
-    )
+    inv = _make_invoice(line_items=[{"description": "Test", "unit_price": "500.00", "quantity": 3}])
     rows = _build_invoice_rows(inv)
     assert rows[0]["Value"] == pytest.approx(1500.0)
 
@@ -308,9 +306,7 @@ def test_build_rows_missing_optional_fields_omitted():
 
 def test_build_rows_skips_non_dict_items():
     """Non-dict entries in line_items are silently skipped."""
-    inv = _make_invoice(
-        line_items=["not a dict", 42, None, {"description": "Validan unos"}]
-    )
+    inv = _make_invoice(line_items=["not a dict", 42, None, {"description": "Validan unos"}])
     rows = _build_invoice_rows(inv)
     assert len(rows) == 1
     assert rows[0]["Description"] == "Validan unos"
@@ -332,9 +328,7 @@ def test_build_rows_empty_list_falls_back_to_totals():
 
 def test_build_rows_fallback_description_format():
     """Fallback row description includes 'Faktura' and the invoice number."""
-    inv = _make_invoice(
-        invoice_number="INV-2026-042", total_amount=Decimal("1000.00")
-    )
+    inv = _make_invoice(invoice_number="INV-2026-042", total_amount=Decimal("1000.00"))
     inv.line_items = None
     rows = _build_invoice_rows(inv)
     assert rows[0]["Description"] == "Faktura INV-2026-042"
@@ -406,9 +400,7 @@ def test_map_invoice_complete_payload_structure():
         invoice_date=date(2026, 3, 1),
         due_date=date(2026, 3, 31),
         total_amount=Decimal("12000.00"),
-        line_items=[
-            {"description": "Usluge", "total": "12000.00", "tax_rate": "20.00"}
-        ],
+        line_items=[{"description": "Usluge", "total": "12000.00", "tax_rate": "20.00"}],
     )
     payload = map_invoice_to_received(inv, customer_id=7, currency_id=3)
 
@@ -425,9 +417,7 @@ def test_map_invoice_complete_payload_structure():
 
 def test_map_invoice_row_count_matches_line_items():
     """Number of rows matches number of valid line item dicts."""
-    items = [
-        {"description": f"Stavka {i}", "total": str(i * 1000)} for i in range(1, 6)
-    ]
+    items = [{"description": f"Stavka {i}", "total": str(i * 1000)} for i in range(1, 6)]
     inv = _make_invoice(line_items=items)
     payload = map_invoice_to_received(inv, customer_id=1)
     assert len(payload["ReceivedInvoiceRows"]) == 5

@@ -861,9 +861,7 @@ async def test_minimax_push_success(client: AsyncClient, test_engine):
     # MiniMax POST returns [] on success
     mock_push_response = []
     # The code then fetches all invoices to find the ID
-    mock_all_invoices = {
-        "Rows": [{"ReceivedInvoiceId": 9001, "DocumentReference": "RE-2026-001"}]
-    }
+    mock_all_invoices = {"Rows": [{"ReceivedInvoiceId": 9001, "DocumentReference": "RE-2026-001"}]}
 
     mock_client = MagicMock()
     mock_client.find_or_create_customer = AsyncMock(return_value=mock_customer)
