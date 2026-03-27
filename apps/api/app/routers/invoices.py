@@ -474,11 +474,16 @@ async def upload_batch(
 
 
 def _json_safe(obj):
-    """Recursively convert Decimal/date to str for JSON column storage."""
+    """Recursively convert Decimal/date/datetime to str for JSON column storage."""
+    from datetime import date, datetime
     from decimal import Decimal
 
     if isinstance(obj, Decimal):
         return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
     if isinstance(obj, dict):
         return {k: _json_safe(v) for k, v in obj.items()}
     if isinstance(obj, list):

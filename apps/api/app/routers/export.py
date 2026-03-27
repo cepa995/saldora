@@ -1,5 +1,6 @@
 """Export router - generate exports in various formats."""
 
+import json
 import logging
 import re
 from datetime import UTC, date, datetime, timedelta
@@ -53,7 +54,7 @@ from app.services.export.pdv_books import (
 )
 from app.services.export.xlsx import generate_xlsx
 from app.services.minimax.client import MiniMaxClient, MiniMaxError
-from app.services.minimax.mapper import map_invoice_to_received
+from app.services.minimax.mapper import map_invoice_to_received, validate_invoice_for_minimax
 from app.services.storage import get_presigned_url
 
 logger = logging.getLogger(__name__)
@@ -854,19 +855,22 @@ async def push_to_minimax(
 
     for inv in invoices:
         try:
-            # Find/create customer
-            seller = inv.seller if isinstance(inv.seller, dict) else {}
-            pib = seller.get("pib", "")
-            if not pib:
+            # Validate invoice before sending
+            validation = validate_invoice_for_minimax(inv)
+            if validation["errors"]:
                 results.append(
                     MiniMaxPushResult(
                         invoice_id=inv.id,
                         invoice_number=inv.invoice_number,
                         status="error",
-                        error="Nedostaje PIB prodavca",
+                        error="; ".join(validation["errors"]),
                     )
                 )
                 continue
+
+            # Find/create customer
+            seller = inv.seller if isinstance(inv.seller, dict) else {}
+            pib = seller.get("pib", "")
 
             if request.create_customers:
                 customer = await client.find_or_create_customer(
@@ -874,6 +878,7 @@ async def push_to_minimax(
                     name=seller.get("name", "Nepoznat"),
                     address=seller.get("address", ""),
                     city=seller.get("city", ""),
+                    postal_code=seller.get("postal_code", ""),
                 )
             else:
                 customer = await client.find_customer_by_pib(pib)
@@ -888,7 +893,12 @@ async def push_to_minimax(
                     )
                     continue
 
-            customer_id = customer.get("CustomerID") or customer.get("ID")
+            # MiniMax may return a list or dict depending on the endpoint
+            if isinstance(customer, list):
+                customer = customer[0] if customer else {}
+            customer_id = (
+                customer.get("CustomerID") or customer.get("CustomerId") or customer.get("ID")
+            )
 
             # Look up currency
             currency_id = None
@@ -899,9 +909,33 @@ async def push_to_minimax(
 
             # Map and push invoice
             payload = map_invoice_to_received(inv, customer_id, currency_id)
+            logger.info(
+                "MiniMax payload for invoice %s: %s",
+                inv.id,
+                json.dumps(payload, default=str),
+            )
             response = await client.push_received_invoice(payload)
 
-            minimax_id = response.get("ReceivedInvoiceID") or response.get("ID")
+            # MiniMax POST returns [] on success — look up the ID by DocumentReference
+            minimax_id = None
+            if isinstance(response, dict):
+                minimax_id = response.get("ReceivedInvoiceId") or response.get("ID")
+            elif isinstance(response, list) and not response:
+                # Empty list = success, fetch the ID
+                try:
+                    all_invoices = await client._request("GET", "receivedinvoices")
+                    rows = (
+                        all_invoices.get("Rows", [])
+                        if isinstance(all_invoices, dict)
+                        else all_invoices
+                    )
+                    doc_ref = inv.invoice_number or ""
+                    for row in rows:
+                        if row.get("DocumentReference") == doc_ref:
+                            minimax_id = row.get("ReceivedInvoiceId")
+                            break
+                except Exception:
+                    logger.warning("Could not fetch MiniMax ID for %s", inv.id)
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
@@ -918,13 +952,23 @@ async def push_to_minimax(
             )
 
         except MiniMaxError as e:
-            logger.error("MiniMax push failed for invoice %s: %s", inv.id, e)
+            # Provide user-friendly error for duplicates
+            if e.status_code == 409 and "originalni broj" in (e.response_body or "").lower():
+                msg = f"Faktura '{inv.invoice_number}' već postoji u MiniMax-u"
+            else:
+                msg = str(e)
+            logger.error(
+                "MiniMax push failed for invoice %s: %s (body: %s)",
+                inv.id,
+                e,
+                getattr(e, "response_body", None),
+            )
             results.append(
                 MiniMaxPushResult(
                     invoice_id=inv.id,
                     invoice_number=inv.invoice_number,
                     status="error",
-                    error=str(e),
+                    error=msg,
                 )
             )
 
@@ -969,9 +1013,12 @@ async def upsert_minimax_config(
 
     if config:
         config.client_id = data.client_id
-        config.client_secret = data.client_secret
+        # Only update secrets if non-empty (frontend sends empty when unchanged)
+        if data.client_secret:
+            config.client_secret = data.client_secret
         config.username = data.username
-        config.password = data.password
+        if data.password:
+            config.password = data.password
         config.minimax_org_id = data.minimax_org_id
     else:
         config = MiniMaxConfig(

@@ -189,7 +189,14 @@ class MiniMaxClient:
             return rows[0]
         return None
 
-    async def create_customer(self, name: str, pib: str, address: str = "", city: str = "") -> dict:
+    async def create_customer(
+        self,
+        name: str,
+        pib: str,
+        address: str = "",
+        city: str = "",
+        postal_code: str = "",
+    ) -> dict:
         """Create a new customer in MiniMax.
 
         Args:
@@ -197,18 +204,15 @@ class MiniMaxClient:
             pib: Tax identification number.
             address: Street address.
             city: City name.
+            postal_code: Postal code.
 
         Returns:
             Created customer dict with MiniMax ID.
         """
-        payload = {
-            "Name": name,
-            "TaxNumber": pib,
-            "Address": address,
-            "City": city,
-            "Country": {"Code": "RS"},
-            "SubjectToVAT": "Y",
-        }
+        from app.services.minimax.mapper import build_customer_payload
+
+        payload = build_customer_payload(name, pib, address, city, postal_code)
+        payload["Usage"] = "D"  # D=Active
         return await self._request("POST", "customers", json=payload)
 
     async def find_or_create_customer(
@@ -217,6 +221,7 @@ class MiniMaxClient:
         name: str,
         address: str = "",
         city: str = "",
+        postal_code: str = "",
     ) -> dict:
         """Find a customer by PIB or create if not found.
 
@@ -225,6 +230,7 @@ class MiniMaxClient:
             name: Customer name (used for creation).
             address: Street address (used for creation).
             city: City name (used for creation).
+            postal_code: Postal code (used for creation).
 
         Returns:
             Customer dict with MiniMax ID.
@@ -235,7 +241,33 @@ class MiniMaxClient:
             return existing
 
         logger.info("MiniMax: creating new customer for PIB %s (%s)", pib, name)
-        return await self.create_customer(name, pib, address, city)
+        try:
+            return await self.create_customer(name, pib, address, city, postal_code)
+        except MiniMaxError as e:
+            if e.status_code == 409:
+                # Customer exists but filter-based lookup missed it.
+                # Fetch all customers and search locally by PIB.
+                logger.info(
+                    "MiniMax: customer create returned 409, searching all customers for PIB %s",
+                    pib,
+                )
+                try:
+                    result = await self._request("GET", "customers")
+                    rows = result.get("Rows", []) if isinstance(result, dict) else result
+                    for row in rows:
+                        tax_num = row.get("TaxNumber", "") or row.get("taxNumber", "")
+                        if tax_num.strip() == pib.strip():
+                            logger.info(
+                                "MiniMax: found customer by full scan, ID=%s", row.get("CustomerID")
+                            )
+                            return row
+                    # Still not found — return first customer as fallback for testing
+                    logger.warning(
+                        "MiniMax: customer not found by PIB scan, response: %s", e.response_body
+                    )
+                except Exception as scan_err:
+                    logger.error("MiniMax: customer scan failed: %s", scan_err)
+            raise
 
     async def push_received_invoice(self, data: dict) -> dict:
         """Create a received invoice in MiniMax.

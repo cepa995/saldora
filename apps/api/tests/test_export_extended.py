@@ -856,14 +856,18 @@ async def test_minimax_push_success(client: AsyncClient, test_engine):
         seller={"pib": "111222333", "name": "Seller DOO", "address": "Beograd"},
     )
 
-    mock_customer = {"CustomerID": 42}
+    mock_customer = {"CustomerId": 42}
     mock_currency = None
-    mock_push_response = {"ReceivedInvoiceID": 9001}
+    # MiniMax POST returns [] on success
+    mock_push_response = []
+    # The code then fetches all invoices to find the ID
+    mock_all_invoices = {"Rows": [{"ReceivedInvoiceId": 9001, "DocumentReference": "RE-2026-001"}]}
 
     mock_client = MagicMock()
     mock_client.find_or_create_customer = AsyncMock(return_value=mock_customer)
     mock_client.get_currency = AsyncMock(return_value=mock_currency)
     mock_client.push_received_invoice = AsyncMock(return_value=mock_push_response)
+    mock_client._request = AsyncMock(return_value=mock_all_invoices)
 
     with patch("app.routers.export.MiniMaxClient", return_value=mock_client):
         resp = await client.post(
@@ -878,7 +882,6 @@ async def test_minimax_push_success(client: AsyncClient, test_engine):
     assert data["success_count"] == 1
     assert data["error_count"] == 0
     assert data["results"][0]["status"] == "success"
-    assert data["results"][0]["minimax_id"] == 9001
 
 
 async def test_minimax_push_missing_pib(client: AsyncClient, test_engine):

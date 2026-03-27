@@ -983,6 +983,7 @@ function MiniMaxConfigForm({
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [showSecrets, setShowSecrets] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     fetchMiniMaxConfig()
@@ -1075,6 +1076,47 @@ function MiniMaxConfigForm({
       </div>
       <p className="text-sm text-gray-500 mb-5 ml-12">{t('minimaxDesc')}</p>
 
+      {/* Setup guide — always visible, collapsible when configured */}
+      <div className="mb-6">
+        {hasConfig ? (
+          <button
+            type="button"
+            onClick={() => setShowGuide((s) => !s)}
+            className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium mb-2"
+          >
+            <svg className={`w-3.5 h-3.5 transition-transform ${showGuide ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            {t('minimaxSetupTitle')}
+          </button>
+        ) : null}
+        {(!hasConfig || showGuide) && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            {!hasConfig && <h3 className="text-sm font-semibold text-blue-900 mb-2">{t('minimaxSetupTitle')}</h3>}
+            <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+              <li>{t('minimaxStep1')}</li>
+              <li>{t('minimaxStep2')}</li>
+              <li>{t('minimaxStep3')}</li>
+              <li>{t('minimaxStep4')}</li>
+              <li>{t('minimaxStep5')}</li>
+            </ol>
+            <div className="mt-3 pt-3 border-t border-blue-200">
+              <p className="text-xs text-blue-700">
+                {t('minimaxHelpLink')}{' '}
+                <a
+                  href="https://help.minimax.rs/help/podesavanja-za-api-vezu-moj-profil"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-medium hover:text-blue-900"
+                >
+                  help.minimax.rs
+                </a>
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Form fields */}
       <div className="space-y-4 max-w-lg">
         <div>
@@ -1101,7 +1143,7 @@ function MiniMaxConfigForm({
             type={showSecrets ? 'text' : 'password'}
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
-            placeholder={hasConfig ? '••••••••' : ''}
+            placeholder={hasConfig ? '••••••••  (sačuvano — ostavite prazno ako ne menjate)' : ''}
             className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
           />
         </div>
@@ -1120,7 +1162,7 @@ function MiniMaxConfigForm({
             type={showSecrets ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={hasConfig ? '••••••••' : ''}
+            placeholder={hasConfig ? '••••••••  (sačuvano — ostavite prazno ako ne menjate)' : ''}
             className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
           />
         </div>

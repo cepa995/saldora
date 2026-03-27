@@ -1,0 +1,16 @@
+FROM vllm/vllm-openai:latest
+
+# Download model weights at build time (baked into image = faster cold start)
+RUN python3 -c "from huggingface_hub import snapshot_download; snapshot_download('rednote-hilab/dots.ocr')"
+
+# vLLM server configuration
+ENV PORT=8000
+
+CMD ["python", "-m", "vllm.entrypoints.openai.api_server", \
+     "--model", "rednote-hilab/dots.ocr", \
+     "--trust-remote-code", \
+     "--chat-template-content-format", "string", \
+     "--max-model-len", "8192", \
+     "--gpu-memory-utilization", "0.90", \
+     "--port", "8000", \
+     "--host", "0.0.0.0"]

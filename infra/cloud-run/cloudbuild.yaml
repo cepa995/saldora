@@ -1,0 +1,14 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'infra/cloud-run/Dockerfile.dots-ocr'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/saldora-ai-491212/saldora/dots-ocr:latest'
+      - '.'
+images:
+  - 'europe-west1-docker.pkg.dev/saldora-ai-491212/saldora/dots-ocr:latest'
+timeout: 3600s
+options:
+  machineType: 'E2_HIGHCPU_8'
