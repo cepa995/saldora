@@ -1019,6 +1019,12 @@
     "priceComparisonDesc": "Compare prices of the same items across suppliers",
     "expenseSummary": "Expense summary",
     "expenseSummaryDesc": "Expenses grouped by month",
+    "kalkulacija": "Selling price calculation",
+    "kalkulacijaDesc": "Purchase price, margin and selling price breakdown per invoice line item",
+    "ruc": "Price difference (RUC)",
+    "rucDesc": "Margin analysis per product — purchase vs. selling price",
+    "categorySpending": "Spending by category",
+    "categorySpendingDesc": "Total spending grouped by product categories",
     "filters": "Filters",
     "dateFrom": "Date from",
     "dateTo": "Date to",
@@ -1041,6 +1047,17 @@
     "period": "Period",
     "itemCount": "Items",
     "grandTotal": "Grand total",
-    "selectTemplate": "Select report type"
+    "selectTemplate": "Select report type",
+    "unitOfMeasure": "U/M",
+    "purchasePrice": "Purchase price",
+    "purchaseValue": "Purchase value",
+    "marginPct": "Margin %",
+    "sellingPrice": "Selling price",
+    "sellingValue": "Selling value",
+    "category": "Category",
+    "avgPurchasePrice": "Avg purchase price",
+    "rucAmount": "RUC amount",
+    "rucPct": "RUC %",
+    "totalPurchased": "Total purchased"
   }
 }

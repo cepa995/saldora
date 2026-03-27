@@ -8,12 +8,18 @@ import {
   fetchMonthlyBreakdown,
   fetchPriceComparison,
   fetchExpenseSummary,
+  fetchKalkulacija,
+  fetchRuc,
+  fetchCategorySpending,
   type ReportParams,
   type ReceivedGoodsResponse,
   type SpendingBySupplierResponse,
   type MonthlyBreakdownResponse,
   type PriceComparisonResponse,
   type ExpenseSummaryResponse,
+  type KalkulacijaResponse,
+  type RucResponse,
+  type CategorySpendingResponse,
 } from '@/lib/api/reports';
 
 // ── Template definitions ─────────────────────────────────────────────
@@ -23,7 +29,10 @@ type TemplateId =
   | 'spendingBySupplier'
   | 'monthlyBreakdown'
   | 'priceComparison'
-  | 'expenseSummary';
+  | 'expenseSummary'
+  | 'kalkulacija'
+  | 'ruc'
+  | 'categorySpending';
 
 type ReportData =
   | ReceivedGoodsResponse
@@ -31,6 +40,9 @@ type ReportData =
   | MonthlyBreakdownResponse
   | PriceComparisonResponse
   | ExpenseSummaryResponse
+  | KalkulacijaResponse
+  | RucResponse
+  | CategorySpendingResponse
   | null;
 
 // ── Icons ────────────────────────────────────────────────────────────
@@ -76,6 +88,27 @@ const ICONS: Record<TemplateId, React.ReactNode> = {
     <IconBox>
       <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+      </svg>
+    </IconBox>
+  ),
+  kalkulacija: (
+    <IconBox>
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 7H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V9a2 2 0 00-2-2h-2M9 7a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+    </IconBox>
+  ),
+  ruc: (
+    <IconBox>
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      </svg>
+    </IconBox>
+  ),
+  categorySpending: (
+    <IconBox>
+      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
       </svg>
     </IconBox>
   ),
@@ -300,6 +333,136 @@ function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: Ret
   );
 }
 
+function KalkulacijaTable({ data, t }: { data: KalkulacijaResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <TableHead
+            cols={[
+              t('description'),
+              t('unitOfMeasure'),
+              t('quantity'),
+              t('purchasePrice'),
+              t('purchaseValue'),
+              t('marginPct'),
+              t('sellingPrice'),
+              t('sellingValue'),
+            ]}
+          />
+          <tbody>
+            {data.items.map((row, i) => (
+              <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate">{row.description}</td>
+                <td className="px-3 py-2.5 text-gray-500 text-xs">{row.unit_of_measure || '—'}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.purchase_price)}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{row.purchase_value !== null ? fmtAmount(row.purchase_value) : '—'}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{row.margin_pct !== null ? `${fmtNum(row.margin_pct)}%` : '—'}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
+                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{row.selling_value !== null ? fmtAmount(row.selling_value) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-200 bg-gray-50/80">
+              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={4}>{t('grandTotal')}</td>
+              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_purchase_value)}</td>
+              <td />
+              <td />
+              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_selling_value)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function RucTable({ data, t }: { data: RucResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
+  function rucBadgeClass(pct: number | null): string {
+    if (pct === null) return 'text-gray-500';
+    if (pct >= 30) return 'text-green-700 font-semibold';
+    if (pct >= 15) return 'text-yellow-700 font-semibold';
+    return 'text-red-700 font-semibold';
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <TableHead
+            cols={[
+              t('description'),
+              t('category'),
+              t('avgPurchasePrice'),
+              t('sellingPrice'),
+              t('rucAmount'),
+              t('rucPct'),
+              t('totalPurchased'),
+              t('suppliers'),
+            ]}
+          />
+          <tbody>
+            {data.items.map((row, i) => (
+              <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate">{row.description}</td>
+                <td className="px-3 py-2.5 text-gray-500 text-xs">{row.category || '—'}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.avg_purchase_price)}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.ruc_amount)}</td>
+                <td className={`px-3 py-2.5 tabular-nums ${rucBadgeClass(row.ruc_pct)}`}>
+                  {row.ruc_pct !== null ? `${fmtNum(row.ruc_pct)}%` : '—'}
+                </td>
+                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.total_purchased_qty)}</td>
+                <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[200px] truncate" title={row.suppliers.join(', ')}>
+                  {row.suppliers.join(', ') || '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CategorySpendingTable({ data, t }: { data: CategorySpendingResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <TableHead
+            cols={[
+              t('category'),
+              t('total'),
+              t('itemCount'),
+              t('invoiceCount'),
+            ]}
+          />
+          <tbody>
+            {data.items.map((row, i) => (
+              <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <td className="px-3 py-2.5 text-gray-900 font-medium">{row.category}</td>
+                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-center text-gray-700">{row.item_count}</td>
+                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-200 bg-gray-50/80">
+              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase">{t('grandTotal')}</td>
+              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── CSV export ───────────────────────────────────────────────────────
 
 function exportToCsv(templateId: TemplateId, data: ReportData) {
@@ -366,6 +529,44 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
       ...d.items.map((r) => [r.period, String(r.invoice_count), String(r.seller_count), String(r.total_amount)]),
       ['', '', '', String(d.grand_total)],
     ];
+  } else if (templateId === 'kalkulacija') {
+    const d = data as KalkulacijaResponse;
+    rows = [
+      ['Naziv', 'J.M.', 'Kolicina', 'Nab. cena', 'Nab. vrednost', 'Marza %', 'Prod. cena', 'Prod. vrednost'],
+      ...d.items.map((r) => [
+        r.description,
+        r.unit_of_measure ?? '',
+        String(r.quantity ?? ''),
+        String(r.purchase_price ?? ''),
+        String(r.purchase_value ?? ''),
+        String(r.margin_pct ?? ''),
+        String(r.selling_price ?? ''),
+        String(r.selling_value ?? ''),
+      ]),
+      ['', '', '', '', String(d.total_purchase_value), '', '', String(d.total_selling_value)],
+    ];
+  } else if (templateId === 'ruc') {
+    const d = data as RucResponse;
+    rows = [
+      ['Proizvod', 'Kategorija', 'Prosecna nab. cena', 'Prod. cena', 'RUC iznos', 'RUC %', 'Ukupno nabavljeno', 'Dobavljaci'],
+      ...d.items.map((r) => [
+        r.description,
+        r.category ?? '',
+        String(r.avg_purchase_price ?? ''),
+        String(r.selling_price ?? ''),
+        String(r.ruc_amount ?? ''),
+        String(r.ruc_pct ?? ''),
+        String(r.total_purchased_qty ?? ''),
+        r.suppliers.join('; '),
+      ]),
+    ];
+  } else if (templateId === 'categorySpending') {
+    const d = data as CategorySpendingResponse;
+    rows = [
+      ['Kategorija', 'Ukupan iznos', 'Broj artikala', 'Broj faktura'],
+      ...d.items.map((r) => [r.category, String(r.total_amount), String(r.item_count), String(r.invoice_count)]),
+      ['', String(d.grand_total), '', ''],
+    ];
   }
 
   const csv = rows
@@ -407,6 +608,9 @@ const TEMPLATES: TemplateId[] = [
   'monthlyBreakdown',
   'priceComparison',
   'expenseSummary',
+  'kalkulacija',
+  'ruc',
+  'categorySpending',
 ];
 
 const SKELETON_COLS: Record<TemplateId, number> = {
@@ -415,6 +619,9 @@ const SKELETON_COLS: Record<TemplateId, number> = {
   monthlyBreakdown: 6,
   priceComparison: 6,
   expenseSummary: 4,
+  kalkulacija: 8,
+  ruc: 7,
+  categorySpending: 4,
 };
 
 export default function IzvestajiPage() {
@@ -454,6 +661,9 @@ export default function IzvestajiPage() {
       else if (selectedTemplate === 'monthlyBreakdown') result = await fetchMonthlyBreakdown(params);
       else if (selectedTemplate === 'priceComparison') result = await fetchPriceComparison(params);
       else if (selectedTemplate === 'expenseSummary') result = await fetchExpenseSummary(params);
+      else if (selectedTemplate === 'kalkulacija') result = await fetchKalkulacija(params);
+      else if (selectedTemplate === 'ruc') result = await fetchRuc(params);
+      else if (selectedTemplate === 'categorySpending') result = await fetchCategorySpending(params);
       setData(result);
     } catch {
       setError(t('noData'));
@@ -642,6 +852,15 @@ export default function IzvestajiPage() {
               )}
               {selectedTemplate === 'expenseSummary' && (
                 <ExpenseSummaryTable data={data as ExpenseSummaryResponse} t={t} />
+              )}
+              {selectedTemplate === 'kalkulacija' && (
+                <KalkulacijaTable data={data as KalkulacijaResponse} t={t} />
+              )}
+              {selectedTemplate === 'ruc' && (
+                <RucTable data={data as RucResponse} t={t} />
+              )}
+              {selectedTemplate === 'categorySpending' && (
+                <CategorySpendingTable data={data as CategorySpendingResponse} t={t} />
               )}
             </>
           )}

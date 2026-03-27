@@ -1019,6 +1019,12 @@
     "priceComparisonDesc": "Упоредите цене истих ставки код различитих добављача",
     "expenseSummary": "Преглед трошкова",
     "expenseSummaryDesc": "Трошкови груписани по месецима",
+    "kalkulacija": "Калкулација продајне цене",
+    "kalkulacijaDesc": "Обрачун набавне, марже и продајне цене по ставкама фактура",
+    "ruc": "Разлика у цени (РУЦ)",
+    "rucDesc": "Анализа марже по производима — набавна vs. продајна цена",
+    "categorySpending": "Потрошња по категоријама",
+    "categorySpendingDesc": "Укупна потрошња груписана по категоријама производа",
     "filters": "Филтери",
     "dateFrom": "Датум од",
     "dateTo": "Датум до",
@@ -1041,6 +1047,17 @@
     "period": "Период",
     "itemCount": "Бр. ставки",
     "grandTotal": "Укупан износ",
-    "selectTemplate": "Изаберите тип извештаја"
+    "selectTemplate": "Изаберите тип извештаја",
+    "unitOfMeasure": "Ј.М.",
+    "purchasePrice": "Наб. цена",
+    "purchaseValue": "Наб. вредност",
+    "marginPct": "Маржа %",
+    "sellingPrice": "Прод. цена",
+    "sellingValue": "Прод. вредност",
+    "category": "Категорија",
+    "avgPurchasePrice": "Просечна наб. цена",
+    "rucAmount": "РУЦ износ",
+    "rucPct": "РУЦ %",
+    "totalPurchased": "Укупно набављено"
   }
 }

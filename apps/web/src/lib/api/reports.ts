@@ -179,3 +179,106 @@ export async function fetchExpenseSummary(
     `/api/v1/reports/expense-summary${buildQuery(params)}`,
   );
 }
+
+// ── 6. Kalkulacija prodajne cene ─────────────────────────────────────
+
+export interface KalkulacijaItem {
+  description: string;
+  unit_of_measure: string | null;
+  quantity: number | null;
+  purchase_price: number | null;
+  purchase_value: number | null;
+  margin_pct: number | null;
+  margin_amount: number | null;
+  tax_rate: number | null;
+  tax_amount: number | null;
+  selling_price: number | null;
+  selling_value: number | null;
+  supplier_name: string | null;
+  invoice_date: string | null;
+}
+
+export interface KalkulacijaResponse {
+  items: KalkulacijaItem[];
+  total_purchase_value: number;
+  total_selling_value: number;
+  total_margin: number;
+  item_count: number;
+}
+
+/**
+ * Fetch selling price calculation report.
+ *
+ * @param params - Filter parameters.
+ * @returns Kalkulacija data with purchase, margin and selling prices.
+ */
+export async function fetchKalkulacija(
+  params: ReportParams,
+): Promise<KalkulacijaResponse> {
+  return apiClient<KalkulacijaResponse>(
+    `/api/v1/reports/kalkulacija${buildQuery(params)}`,
+  );
+}
+
+// ── 7. Razlika u ceni (RUC) ──────────────────────────────────────────
+
+export interface RucItem {
+  description: string;
+  category: string | null;
+  avg_purchase_price: number | null;
+  selling_price: number | null;
+  ruc_amount: number | null;
+  ruc_pct: number | null;
+  total_purchased_qty: number | null;
+  total_purchased_value: number | null;
+  suppliers: string[];
+}
+
+export interface RucResponse {
+  items: RucItem[];
+  avg_margin_pct: number;
+  total_purchase_value: number;
+  item_count: number;
+}
+
+/**
+ * Fetch RUC (razlika u ceni) margin analysis report.
+ *
+ * @param params - Filter parameters.
+ * @returns RUC data with purchase vs. selling price margin per product.
+ */
+export async function fetchRuc(
+  params: ReportParams,
+): Promise<RucResponse> {
+  return apiClient<RucResponse>(
+    `/api/v1/reports/ruc${buildQuery(params)}`,
+  );
+}
+
+// ── 8. Spending by category ──────────────────────────────────────────
+
+export interface CategorySpendingItem {
+  category: string;
+  total_amount: number;
+  item_count: number;
+  invoice_count: number;
+}
+
+export interface CategorySpendingResponse {
+  items: CategorySpendingItem[];
+  grand_total: number;
+}
+
+/**
+ * Fetch spending grouped by product category.
+ *
+ * @param params - Filter parameters.
+ * @returns Spending totals per category.
+ */
+export async function fetchCategorySpending(
+  params: ReportParams,
+): Promise<CategorySpendingResponse> {
+  return apiClient<CategorySpendingResponse>(
+    `/api/v1/reports/spending-by-category${buildQuery(params)}`,
+  );
+}
