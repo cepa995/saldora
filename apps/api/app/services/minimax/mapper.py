@@ -43,8 +43,8 @@ CURRENCY_RSD_ID = 2  # Serbian Dinar
 VAT_RATE_MAP = {
     20: 4,  # Code "S" — standard rate
     10: 5,  # Code "Z" — reduced rate
-    8: 3,   # Code "P" — special reduced rate
-    0: 1,   # Code "N" — exempt
+    8: 3,  # Code "P" — special reduced rate
+    0: 1,  # Code "N" — exempt
 }
 
 # Valid payment types in MiniMax
@@ -78,9 +78,7 @@ def validate_invoice_for_minimax(invoice: Invoice) -> dict:
         errors.append("Nedostaje naziv prodavca")
 
     if not seller.get("postal_code"):
-        warnings.append(
-            "Nedostaje poštanski broj prodavca — koristiće se podrazumevana vrednost"
-        )
+        warnings.append("Nedostaje poštanski broj prodavca — koristiće se podrazumevana vrednost")
 
     # --- Invoice header requirements ---
 
@@ -98,9 +96,7 @@ def validate_invoice_for_minimax(invoice: Invoice) -> dict:
             errors.append("Iznos fakture mora biti zaokružen na 2 decimale za MiniMax")
 
     has_items = (
-        invoice.line_items
-        and isinstance(invoice.line_items, list)
-        and len(invoice.line_items) > 0
+        invoice.line_items and isinstance(invoice.line_items, list) and len(invoice.line_items) > 0
     )
     if not has_items and invoice.total_amount is None:
         errors.append("Nedostaje iznos ili stavke fakture")
@@ -112,10 +108,7 @@ def validate_invoice_for_minimax(invoice: Invoice) -> dict:
             has_value = (
                 item.get("tax_base") is not None
                 or item.get("total") is not None
-                or (
-                    item.get("unit_price") is not None
-                    and item.get("quantity") is not None
-                )
+                or (item.get("unit_price") is not None and item.get("quantity") is not None)
             )
             if not has_value:
                 errors.append(
@@ -133,8 +126,7 @@ def validate_invoice_for_minimax(invoice: Invoice) -> dict:
                 if rounded not in VAT_RATE_MAP:
                     valid = ", ".join(f"{r}%" for r in sorted(VAT_RATE_MAP))
                     errors.append(
-                        f"Stavka {i}: nepoznata stopa PDV-a {rate}% "
-                        f"(MiniMax podržava: {valid})"
+                        f"Stavka {i}: nepoznata stopa PDV-a {rate}% (MiniMax podržava: {valid})"
                     )
 
     if not invoice.due_date:
