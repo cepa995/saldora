@@ -31,6 +31,11 @@ class InvoiceLineItem(Base, UUIDMixin):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_catalog.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     quantity: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
     unit_price: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
