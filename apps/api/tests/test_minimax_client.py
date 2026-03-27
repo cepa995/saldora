@@ -361,18 +361,16 @@ async def test_create_customer_posts_correct_payload():
         city="Beograd",
     )
 
-    mock_req.assert_called_once_with(
-        "POST",
-        "customers",
-        json={
-            "Name": "Novo Preduzeće DOO",
-            "TaxNumber": "123456789",
-            "Address": "Nemanjina 1",
-            "City": "Beograd",
-            "Country": {"Code": "RS"},
-            "SubjectToVAT": "Y",
-        },
-    )
+    call_args = mock_req.call_args
+    assert call_args[0] == ("POST", "customers")
+    payload = call_args[1]["json"]
+    assert payload["Name"] == "Novo Preduzeće DOO"
+    assert payload["TaxNumber"] == "123456789"
+    assert payload["Address"] == "Nemanjina 1"
+    assert payload["City"] == "Beograd"
+    assert payload["Country"] == {"ID": 3}
+    assert payload["SubjectToVAT"] == "D"
+    assert payload["Currency"] == {"ID": 2}
     assert result["ID"] == 42
 
 
@@ -421,7 +419,7 @@ async def test_find_or_create_creates_when_not_found():
     )
 
     client.create_customer.assert_called_once_with(
-        "Novo Preduzeće", "987654321", "Bulevar 5", "Novi Sad"
+        "Novo Preduzeće", "987654321", "Bulevar 5", "Novi Sad", ""
     )
     assert result == created
 

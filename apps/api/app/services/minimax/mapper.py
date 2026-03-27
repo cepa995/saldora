@@ -131,9 +131,10 @@ def validate_invoice_for_minimax(invoice: Invoice) -> dict:
             if rate is not None:
                 rounded = round(float(rate))
                 if rounded not in VAT_RATE_MAP:
+                    valid = ", ".join(f"{r}%" for r in sorted(VAT_RATE_MAP))
                     errors.append(
                         f"Stavka {i}: nepoznata stopa PDV-a {rate}% "
-                        f"(MiniMax podržava: {', '.join(str(r) + '%' for r in sorted(VAT_RATE_MAP))})"
+                        f"(MiniMax podržava: {valid})"
                     )
 
     if not invoice.due_date:
