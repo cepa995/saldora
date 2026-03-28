@@ -1118,6 +1118,15 @@ async def delete_invoice(
         old_values=old_values,
     )
 
+    # Delete related records that don't have ON DELETE CASCADE
+    from sqlalchemy import delete as sa_delete
+
+    from app.models.correction_log import CorrectionLog
+    from app.models.line_item import InvoiceLineItem
+
+    await db.execute(sa_delete(CorrectionLog).where(CorrectionLog.invoice_id == invoice.id))
+    await db.execute(sa_delete(InvoiceLineItem).where(InvoiceLineItem.invoice_id == invoice.id))
+
     await db.delete(invoice)
     await db.commit()
 
