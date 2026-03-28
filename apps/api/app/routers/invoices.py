@@ -1364,6 +1364,14 @@ async def verify_invoice(
     except Exception:
         logger.exception("Failed to generate AccountingIntent for invoice %s", invoice.id)
 
+    # Sync denormalized line items for reports
+    try:
+        from app.services.line_item_sync import sync_line_items_orm
+
+        await sync_line_items_orm(db, invoice)
+    except Exception:
+        logger.exception("Failed to sync line items for invoice %s", invoice.id)
+
     old_status = invoice.status
     invoice.status = "verified"
 
