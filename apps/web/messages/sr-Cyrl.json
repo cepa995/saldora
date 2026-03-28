@@ -61,6 +61,8 @@
     "audit": "Ревизија",
     "pdvBooks": "ПДВ књиге",
     "reports": "Извештаји",
+    "catalog": "Каталог производа",
+    "dpu": "Шанк листа (ДПУ)",
     "billing": "Наплата"
   },
   "script": {
@@ -1059,5 +1061,47 @@
     "rucAmount": "РУЦ износ",
     "rucPct": "РУЦ %",
     "totalPurchased": "Укупно набављено"
+  },
+  "catalog": {
+    "title": "Каталог производа",
+    "subtitle": "Управљајте производима, категоријама и продајним ценама",
+    "newProduct": "Нови производ",
+    "productName": "Назив производа",
+    "category": "Категорија",
+    "unitOfMeasure": "Јединица мере",
+    "sellingPrice": "Продајна цена",
+    "marginPct": "Маржа %",
+    "aliases": "Алијаси",
+    "matchCount": "Поклапања",
+    "noProducts": "Нема производа у каталогу",
+    "mergeSuggestions": "Предлози спајања",
+    "mergeSuggestionsDesc": "Пронађени су слични називи артикала који би могли бити исти производ",
+    "similarity": "Сличност",
+    "merge": "Споји",
+    "merged": "Спојено",
+    "confirmDelete": "Да ли сте сигурни да желите да обришете овај производ?",
+    "categories": {
+      "hrana": "Храна",
+      "pice": "Пиће",
+      "materijal": "Материјал",
+      "ostalo": "Остало"
+    }
+  },
+  "dpu": {
+    "title": "Шанк листа (ДПУ)",
+    "subtitle": "Дневни промет угоститеља — евиденција примљене и уtrошене робе",
+    "date": "Датум",
+    "itemName": "Назив артикла",
+    "unit": "Ј.М.",
+    "openingStock": "Стање прет. дана",
+    "purchased": "Набавка",
+    "closingStock": "Стање крај дана",
+    "consumed": "Утрошено",
+    "sellingPrice": "Прод. цена",
+    "revenue": "Приход",
+    "totalPurchased": "Укупна набавка",
+    "totalRevenue": "Укупан приход",
+    "noData": "Нема података за изабрани датум",
+    "exportXlsx": "Извези XLSX"
   }
 }

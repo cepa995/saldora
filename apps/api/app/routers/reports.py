@@ -634,6 +634,81 @@ async def ruc_report(
     )
 
 
+@router.get("/dpu")
+async def dpu_report(
+    date: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """DPU (Dnevni Promet Ugostitelja) report for a specific date.
+
+    Groups all line items received on the given date by product name,
+    sums quantities as "purchased". Opening stock and closing stock
+    are placeholders (0) until inventory tracking is implemented.
+
+    Args:
+        date: The date to report on.
+        db: Database session.
+        current_user: Authenticated user.
+
+    Returns:
+        DPU report data with items, totals and date.
+    """
+    org_id = current_user.organization_id
+
+    query = (
+        select(
+            func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description).label(
+                "description"
+            ),
+            ProductCatalog.unit_of_measure,
+            func.sum(InvoiceLineItem.quantity).label("purchased"),
+            ProductCatalog.selling_price,
+        )
+        .outerjoin(ProductCatalog, InvoiceLineItem.product_id == ProductCatalog.id)
+        .where(
+            InvoiceLineItem.organization_id == org_id,
+            InvoiceLineItem.invoice_date == date,
+        )
+        .group_by(
+            func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description),
+            ProductCatalog.unit_of_measure,
+            ProductCatalog.selling_price,
+        )
+        .order_by(func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description))
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    items = []
+    total_purchased = 0.0
+    for row in rows:
+        purchased = float(row.purchased) if row.purchased else 0.0
+        sell_price = float(row.selling_price) if row.selling_price else None
+        total_purchased += purchased * (float(row.selling_price) if row.selling_price else 0)
+
+        items.append(
+            {
+                "description": row.description or "",
+                "unit_of_measure": row.unit_of_measure,
+                "opening_stock": 0,
+                "purchased": purchased,
+                "closing_stock": None,
+                "consumed": None,
+                "selling_price": sell_price,
+                "revenue": None,
+            }
+        )
+
+    return {
+        "date": date.isoformat(),
+        "items": items,
+        "total_purchased_value": round(total_purchased, 2),
+        "total_revenue": None,
+    }
+
+
 @router.get("/spending-by-category", response_model=CategorySpendingResponse)
 async def spending_by_category(
     date_from: date = Query(...),

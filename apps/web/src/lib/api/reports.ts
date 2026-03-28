@@ -255,7 +255,37 @@ export async function fetchRuc(
   );
 }
 
-// ── 8. Spending by category ──────────────────────────────────────────
+// ── 8. DPU (Šank lista) ──────────────────────────────────────────────
+
+export interface DpuItem {
+  description: string;
+  unit_of_measure: string | null;
+  opening_stock: number;
+  purchased: number;
+  closing_stock: number | null;
+  consumed: number | null;
+  selling_price: number | null;
+  revenue: number | null;
+}
+
+export interface DpuResponse {
+  date: string;
+  items: DpuItem[];
+  total_purchased_value: number;
+  total_revenue: number | null;
+}
+
+/**
+ * Fetch DPU (Dnevni Promet Ugostitelja) report for a specific date.
+ *
+ * @param date - Date string in YYYY-MM-DD format.
+ * @returns DPU data with items and totals.
+ */
+export async function fetchDpu(date: string): Promise<DpuResponse> {
+  return apiClient<DpuResponse>(`/api/v1/reports/dpu?date=${date}`);
+}
+
+// ── 9. Spending by category ──────────────────────────────────────────
 
 export interface CategorySpendingItem {
   category: string;

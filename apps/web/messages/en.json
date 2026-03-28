@@ -61,6 +61,8 @@
     "audit": "Audit",
     "pdvBooks": "PDV Books",
     "reports": "Reports",
+    "catalog": "Product catalog",
+    "dpu": "Bar list (DPU)",
     "billing": "Billing"
   },
   "script": {
@@ -1059,5 +1061,47 @@
     "rucAmount": "RUC amount",
     "rucPct": "RUC %",
     "totalPurchased": "Total purchased"
+  },
+  "catalog": {
+    "title": "Product catalog",
+    "subtitle": "Manage products, categories and selling prices",
+    "newProduct": "New product",
+    "productName": "Product name",
+    "category": "Category",
+    "unitOfMeasure": "Unit of measure",
+    "sellingPrice": "Selling price",
+    "marginPct": "Margin %",
+    "aliases": "Aliases",
+    "matchCount": "Matches",
+    "noProducts": "No products in catalog",
+    "mergeSuggestions": "Suggest merge",
+    "mergeSuggestionsDesc": "Similar product names found that may refer to the same product",
+    "similarity": "Similarity",
+    "merge": "Merge",
+    "merged": "Merged",
+    "confirmDelete": "Are you sure you want to delete this product?",
+    "categories": {
+      "hrana": "Food",
+      "pice": "Beverages",
+      "materijal": "Materials",
+      "ostalo": "Other"
+    }
+  },
+  "dpu": {
+    "title": "Bar list (DPU)",
+    "subtitle": "Daily hospitality turnover — received and consumed goods register",
+    "date": "Date",
+    "itemName": "Item name",
+    "unit": "U/M",
+    "openingStock": "Opening stock",
+    "purchased": "Purchased",
+    "closingStock": "Closing stock",
+    "consumed": "Consumed",
+    "sellingPrice": "Sell. price",
+    "revenue": "Revenue",
+    "totalPurchased": "Total purchased",
+    "totalRevenue": "Total revenue",
+    "noData": "No data for selected date",
+    "exportXlsx": "Export XLSX"
   }
 }
