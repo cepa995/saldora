@@ -120,6 +120,7 @@ class MonthlyBreakdownItem(BaseModel):
     unit_price: float | None
     total: float
     tax_rate: float | None
+    tax_amount: float | None
     seller_name: str | None
     invoice_date: str | None
 

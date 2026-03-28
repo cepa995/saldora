@@ -95,6 +95,8 @@ export interface MonthlyBreakdownItem {
   quantity: number | null;
   unit_price: number | null;
   total: number;
+  tax_rate: number | null;
+  tax_amount: number | null;
 }
 
 export interface MonthlyBreakdownResponse {

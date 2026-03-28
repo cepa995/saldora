@@ -244,7 +244,7 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), t('total')]} />
+          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), t('total'), 'PDV %', 'PDV iznos']} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -254,6 +254,8 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
                 <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
                 <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
                 <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
+                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
+                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -261,6 +263,8 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={5}>{t('grandTotal')}</td>
               <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
+              <td></td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -494,7 +498,7 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'monthlyBreakdown') {
     const d = data as MonthlyBreakdownResponse;
     rows = [
-      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'Ukupno'],
+      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'Ukupno', 'PDV %', 'PDV iznos'],
       ...d.items.map((r) => [
         r.invoice_date ?? '',
         r.seller_name ?? '',
@@ -503,8 +507,10 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
         String(r.quantity ?? ''),
         String(r.unit_price ?? ''),
         String(r.total),
+        String(r.tax_rate ?? ''),
+        String(r.tax_amount ?? ''),
       ]),
-      ['', '', '', '', '', '', String(d.total_amount)],
+      ['', '', '', '', '', '', String(d.total_amount), '', ''],
     ];
   } else if (templateId === 'priceComparison') {
     const d = data as PriceComparisonResponse;
@@ -616,7 +622,7 @@ const TEMPLATES: TemplateId[] = [
 const SKELETON_COLS: Record<TemplateId, number> = {
   receivedGoods: 6,
   spendingBySupplier: 4,
-  monthlyBreakdown: 6,
+  monthlyBreakdown: 8,
   priceComparison: 6,
   expenseSummary: 4,
   kalkulacija: 8,

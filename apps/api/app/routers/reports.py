@@ -270,6 +270,7 @@ async def get_monthly_breakdown(
             unit_price=float(row.unit_price) if row.unit_price is not None else None,
             total=float(row.total),
             tax_rate=float(row.tax_rate) if row.tax_rate is not None else None,
+            tax_amount=float(row.tax_amount) if row.tax_amount is not None else None,
             seller_name=row.seller_name,
             invoice_date=row.invoice_date.isoformat() if row.invoice_date is not None else None,
         )
