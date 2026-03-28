@@ -46,7 +46,6 @@ function computeRow(item: DpuItem, closingInput: string): {
 // ── XLSX export ──────────────────────────────────────────────────────
 
 async function exportXlsx(date: string, rows: RowState[], t: ReturnType<typeof useTranslations>) {
-  // Build CSV as a simple fallback (no xlsx dependency required)
   const headers = [
     'R.br',
     t('itemName'),
@@ -87,9 +86,16 @@ async function exportXlsx(date: string, rows: RowState[], t: ReturnType<typeof u
   URL.revokeObjectURL(url);
 }
 
-// ── Main page ────────────────────────────────────────────────────────
+// ── Main component ───────────────────────────────────────────────────
 
-export default function DpuPage() {
+/**
+ * DPU (Dnevni popis utroška) content component.
+ *
+ * Returns:
+ *   A React element with date picker, summary cards, and the DPU table
+ *   with editable closing stock inputs.
+ */
+export default function DpuContent() {
   const t = useTranslations('dpu');
   const tc = useTranslations('common');
 
@@ -132,7 +138,6 @@ export default function DpuPage() {
     });
   }
 
-  // Compute totals from current row states
   const totalRevenue = rows.reduce((sum, row) => {
     const { revenue } = computeRow(row, row.closingInput);
     return sum + (revenue ?? 0);
@@ -143,7 +148,7 @@ export default function DpuPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <h2 className="text-2xl font-bold text-gray-900">{t('title')}</h2>
           <p className="text-sm text-gray-500 mt-1">{t('subtitle')}</p>
         </div>
         <button

@@ -366,9 +366,16 @@ function MergeModal({ onClose, onMerged, t, tc }: MergeModalProps) {
   );
 }
 
-// ── Main page ────────────────────────────────────────────────────────
+// ── Main component ───────────────────────────────────────────────────
 
-export default function KatalogPage() {
+/**
+ * Catalog content component — renders the product catalog table,
+ * product create/edit modal, and merge suggestions modal.
+ *
+ * Returns:
+ *   A React element with the full product catalog UI.
+ */
+export default function CatalogContent() {
   const t = useTranslations('catalog');
   const tc = useTranslations('common');
 
@@ -386,7 +393,6 @@ export default function KatalogPage() {
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  // Debounce search
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => setDebouncedSearch(search), 300);
@@ -412,7 +418,6 @@ export default function KatalogPage() {
     loadProducts();
   }, [loadProducts]);
 
-  // Auto-clear toast
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3000);
@@ -456,7 +461,7 @@ export default function KatalogPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <h2 className="text-2xl font-bold text-gray-900">{t('title')}</h2>
           <p className="text-sm text-gray-500 mt-1">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
