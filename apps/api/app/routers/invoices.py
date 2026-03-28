@@ -1297,6 +1297,12 @@ async def verify_invoice(
         )
 
     # Check required fields
+    field_labels = {
+        "invoice_number": "Broj fakture",
+        "invoice_date": "Datum fakture",
+        "seller": "Podaci o prodavcu",
+        "total_amount": "Ukupan iznos",
+    }
     missing = []
     if not invoice.invoice_number:
         missing.append("invoice_number")
@@ -1307,9 +1313,10 @@ async def verify_invoice(
     if not invoice.total_amount:
         missing.append("total_amount")
     if missing:
+        labels = ", ".join(field_labels.get(f, f) for f in missing)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Missing required fields for verification: {', '.join(missing)}",
+            detail=f"Nedostaju obavezna polja za verifikaciju: {labels}",
         )
 
     # Run verification checks (warnings, non-blocking)
