@@ -5,111 +5,126 @@ import ReportContent from './_components/ReportContent';
 import CatalogContent from './_components/CatalogContent';
 import DpuContent from './_components/DpuContent';
 
-// ── Sidebar data ─────────────────────────────────────────────────────
+// ── Navigation data ─────────────────────────────────────────────────
 
-type SidebarItem = {
+type NavItem = {
   id: string;
   label: string;
+  shortLabel: string;
   group: 'general' | 'hospitality' | 'management';
 };
 
-const SIDEBAR_ITEMS: SidebarItem[] = [
-  // Opšti izveštaji
-  { id: 'receivedGoods', label: 'Primljena roba', group: 'general' },
-  { id: 'spendingBySupplier', label: 'Potrošnja po dobavljačima', group: 'general' },
-  { id: 'monthlyBreakdown', label: 'Mesečni pregled stavki', group: 'general' },
-  { id: 'priceComparison', label: 'Poređenje cena', group: 'general' },
-  { id: 'expenseSummary', label: 'Pregled troškova', group: 'general' },
-  // Ugostiteljstvo
-  { id: 'kalkulacija', label: 'Kalkulacija prodajne cene', group: 'hospitality' },
-  { id: 'ruc', label: 'Razlika u ceni (RUC)', group: 'hospitality' },
-  { id: 'categorySpending', label: 'Potrošnja po kategorijama', group: 'hospitality' },
-  { id: 'dpu', label: 'Šank lista (DPU)', group: 'hospitality' },
-  // Upravljanje
-  { id: 'catalog', label: 'Katalog proizvoda', group: 'management' },
+const NAV_ITEMS: NavItem[] = [
+  { id: 'receivedGoods', label: 'Primljena roba', shortLabel: 'Primljena roba', group: 'general' },
+  { id: 'spendingBySupplier', label: 'Potrošnja po dobavljačima', shortLabel: 'Po dobavljačima', group: 'general' },
+  { id: 'monthlyBreakdown', label: 'Mesečni pregled stavki', shortLabel: 'Mesečni pregled', group: 'general' },
+  { id: 'priceComparison', label: 'Poređenje cena', shortLabel: 'Poređenje cena', group: 'general' },
+  { id: 'expenseSummary', label: 'Pregled troškova', shortLabel: 'Troškovi', group: 'general' },
+  { id: 'kalkulacija', label: 'Kalkulacija prodajne cene', shortLabel: 'Kalkulacija', group: 'hospitality' },
+  { id: 'ruc', label: 'Razlika u ceni (RUC)', shortLabel: 'RUC', group: 'hospitality' },
+  { id: 'categorySpending', label: 'Potrošnja po kategorijama', shortLabel: 'Po kategorijama', group: 'hospitality' },
+  { id: 'dpu', label: 'Šank lista (DPU)', shortLabel: 'Šank lista', group: 'hospitality' },
+  { id: 'catalog', label: 'Katalog proizvoda', shortLabel: 'Katalog', group: 'management' },
 ];
 
-const GROUP_LABELS: Record<SidebarItem['group'], string> = {
-  general: 'Opšti izveštaji',
-  hospitality: 'Ugostiteljstvo',
-  management: 'Upravljanje',
-};
+const GROUPS: { key: NavItem['group']; label: string; icon: React.ReactNode }[] = [
+  {
+    key: 'general',
+    label: 'Opšti',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'hospitality',
+    label: 'Ugostiteljstvo',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'management',
+    label: 'Upravljanje',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
+      </svg>
+    ),
+  },
+];
 
-const REPORT_IDS = SIDEBAR_ITEMS
+const REPORT_IDS = NAV_ITEMS
   .filter((i) => i.group !== 'management' && i.id !== 'dpu')
   .map((i) => i.id);
 
 // ── Page ─────────────────────────────────────────────────────────────
 
-/**
- * Unified Izveštaji page with a left sidebar for navigation and a
- * right content area that renders report tables, the product catalog,
- * or the DPU sheet depending on the selected item.
- *
- * Returns:
- *   A full-height flex layout with a fixed left sidebar and scrollable
- *   right content area.
- */
 export default function IzvestajiPage() {
+  const [activeGroup, setActiveGroup] = useState<NavItem['group']>('general');
   const [selected, setSelected] = useState<string>('receivedGoods');
 
+  const groupItems = NAV_ITEMS.filter((i) => i.group === activeGroup);
+
+  function handleGroupChange(group: NavItem['group']) {
+    setActiveGroup(group);
+    const firstInGroup = NAV_ITEMS.find((i) => i.group === group);
+    if (firstInGroup) setSelected(firstInGroup.id);
+  }
+
   return (
-    <div className="flex min-h-0">
-      {/* ── Left sidebar (static, within page flow) ────────────────── */}
-      <aside className="hidden lg:block w-56 shrink-0 bg-white border-r border-gray-200 overflow-y-auto self-start sticky top-0 max-h-[calc(100vh-4rem)]">
-        {/* Sidebar header */}
-        <div className="px-3 py-3 border-b border-gray-100">
-          <h1 className="text-sm font-bold text-gray-900">Izveštaji</h1>
-          <p className="text-[10px] text-gray-500 mt-0.5">Analitika i upravljanje</p>
-        </div>
+    <div className="space-y-4">
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Izveštaji</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Analitika, kalkulacije i upravljanje katalogom</p>
+      </div>
 
-        {/* Nav groups */}
-        {(Object.entries(GROUP_LABELS) as [SidebarItem['group'], string][]).map(([group, label]) => (
-          <div key={group} className="mb-1 pt-2">
-            <div className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-              {label}
-            </div>
-            {SIDEBAR_ITEMS.filter((i) => i.group === group).map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSelected(item.id)}
-                className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
-                  selected === item.id
-                    ? 'bg-violet-50 text-violet-700 font-medium border-r-2 border-violet-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        ))}
-      </aside>
-
-      {/* ── Right content ──────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0">
-        {/* Mobile: dropdown selector instead of sidebar */}
-        <div className="lg:hidden px-4 pt-4 pb-2">
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+      {/* ── Group pills ──────────────────────────────────────────── */}
+      <div className="flex items-center gap-2">
+        {GROUPS.map((g) => (
+          <button
+            key={g.key}
+            onClick={() => handleGroupChange(g.key)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              activeGroup === g.key
+                ? 'bg-violet-600 text-white shadow-sm shadow-violet-200'
+                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900'
+            }`}
           >
-            {(Object.entries(GROUP_LABELS) as [SidebarItem['group'], string][]).map(([group, label]) => (
-              <optgroup key={group} label={label}>
-                {SIDEBAR_ITEMS.filter((i) => i.group === group).map((item) => (
-                  <option key={item.id} value={item.id}>{item.label}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
+            {g.icon}
+            {g.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="p-4 lg:p-6">
-          {selected === 'catalog' && <CatalogContent />}
-          {selected === 'dpu' && <DpuContent />}
-          {REPORT_IDS.includes(selected) && <ReportContent selectedTemplate={selected} />}
+      {/* ── Report tabs (horizontal) ─────────────────────────────── */}
+      <div className="border-b border-gray-200">
+        <div className="flex gap-0 overflow-x-auto scrollbar-hide -mb-px">
+          {groupItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setSelected(item.id)}
+              className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                selected === item.id
+                  ? 'border-violet-600 text-violet-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {item.shortLabel}
+            </button>
+          ))}
         </div>
+      </div>
+
+      {/* ── Content ──────────────────────────────────────────────── */}
+      <div>
+        {selected === 'catalog' && <CatalogContent />}
+        {selected === 'dpu' && <DpuContent />}
+        {REPORT_IDS.includes(selected) && <ReportContent selectedTemplate={selected} />}
       </div>
     </div>
   );
