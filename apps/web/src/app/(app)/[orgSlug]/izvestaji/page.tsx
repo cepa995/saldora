@@ -253,14 +253,14 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
                 <td className="px-3 py-2.5 text-gray-900 max-w-[200px] truncate font-medium">{row.description}</td>
                 <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
                 <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={5}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
             </tr>
           </tfoot>
         </table>
@@ -502,9 +502,9 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
         r.description,
         String(r.quantity ?? ''),
         String(r.unit_price ?? ''),
-        String(r.total_amount),
+        String(r.total),
       ]),
-      ['', '', '', '', '', '', String(d.grand_total)],
+      ['', '', '', '', '', '', String(d.total_amount)],
     ];
   } else if (templateId === 'priceComparison') {
     const d = data as PriceComparisonResponse;

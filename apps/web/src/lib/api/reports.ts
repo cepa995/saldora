@@ -94,12 +94,12 @@ export interface MonthlyBreakdownItem {
   description: string;
   quantity: number | null;
   unit_price: number | null;
-  total_amount: number;
+  total: number;
 }
 
 export interface MonthlyBreakdownResponse {
   items: MonthlyBreakdownItem[];
-  grand_total: number;
+  total_amount: number;
   item_count: number;
 }
 
