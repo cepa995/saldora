@@ -20,10 +20,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'monthlyBreakdown', label: 'Mesečni pregled stavki', shortLabel: 'Mesečni pregled', group: 'general' },
   { id: 'priceComparison', label: 'Poređenje cena', shortLabel: 'Poređenje cena', group: 'general' },
   { id: 'expenseSummary', label: 'Pregled troškova', shortLabel: 'Troškovi', group: 'general' },
-  { id: 'kalkulacija', label: 'Kalkulacija prodajne cene', shortLabel: 'Kalkulacija', group: 'hospitality' },
+  { id: 'kalkulacija', label: 'Kalkulacija cene', shortLabel: 'Kalkulacija', group: 'hospitality' },
   { id: 'ruc', label: 'Razlika u ceni (RUC)', shortLabel: 'RUC', group: 'hospitality' },
   { id: 'categorySpending', label: 'Potrošnja po kategorijama', shortLabel: 'Po kategorijama', group: 'hospitality' },
-  { id: 'dpu', label: 'Šank lista (DPU)', shortLabel: 'Šank lista', group: 'hospitality' },
+  { id: 'dpu', label: 'Dnevna evidencija robe', shortLabel: 'Dnevna evidencija', group: 'hospitality' },
   { id: 'catalog', label: 'Katalog proizvoda', shortLabel: 'Katalog', group: 'management' },
 ];
 
@@ -39,7 +39,7 @@ const GROUPS: { key: NavItem['group']; label: string; icon: React.ReactNode }[] 
   },
   {
     key: 'hospitality',
-    label: 'Ugostiteljstvo',
+    label: 'Nabavka i prodaja',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

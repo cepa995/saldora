@@ -62,7 +62,7 @@
     "pdvBooks": "PDV Books",
     "reports": "Reports",
     "catalog": "Product catalog",
-    "dpu": "Bar list (DPU)",
+    "dpu": "Daily goods tracking",
     "billing": "Billing"
   },
   "script": {
@@ -1088,8 +1088,8 @@
     }
   },
   "dpu": {
-    "title": "Bar list (DPU)",
-    "subtitle": "Daily hospitality turnover — received and consumed goods register",
+    "title": "Daily goods tracking",
+    "subtitle": "Track received and consumed goods by day",
     "date": "Date",
     "itemName": "Item name",
     "unit": "U/M",

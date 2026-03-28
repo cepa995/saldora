@@ -62,7 +62,7 @@
     "pdvBooks": "PDV knjige",
     "reports": "Izveštaji",
     "catalog": "Katalog proizvoda",
-    "dpu": "Šank lista (DPU)",
+    "dpu": "Dnevna evidencija robe",
     "billing": "Naplata"
   },
   "script": {
@@ -1108,8 +1108,8 @@
     }
   },
   "dpu": {
-    "title": "Šank lista (DPU)",
-    "subtitle": "Dnevni promet ugostitelja — evidencija primljene i utrošene robe",
+    "title": "Dnevna evidencija robe",
+    "subtitle": "Evidencija primljene i utrošene robe po danima",
     "date": "Datum",
     "itemName": "Naziv artikla",
     "unit": "J.M.",
