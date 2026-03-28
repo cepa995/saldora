@@ -1,7 +1,7 @@
 # Software Requirements Specification (SRS)
 # Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 2.7
+**Version:** 2.8
 **Date:** March 2026
 **Status:** Draft
 
@@ -19,6 +19,7 @@
    - 4.12 [Client Management (Agency)](#412-client-management-agency)
    - 4.13 [Invoice Reports (Izveštaji)](#413-invoice-reports-izveštaji)
    - 4.14 [Email Ingestion Pipeline](#414-email-ingestion-pipeline)
+   - 4.15 [Product Catalog (Katalog proizvoda)](#415-product-catalog-katalog-proizvoda)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
@@ -1735,7 +1736,7 @@ CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
 
 #### 4.13.2 Report Templates
 
-All five report endpoints live under `/api/v1/reports/` and accept a common set of query parameters:
+All report endpoints live under `/api/v1/reports/` and accept a common set of query parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -1790,6 +1791,42 @@ All five report endpoints live under `/api/v1/reports/` and accept a common set 
 | **Aggregates** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
 | **Use case** | "How did our spending change month by month?" |
 
+##### FR-4.13.2.6 Price Calculation (`/kalkulacija`)
+
+| ID | FR-4.13.2.6 |
+|----|-------------|
+| **Description** | Per-line-item price calculation showing purchase price (nabavna cena), margin (marža), and calculated selling price (prodajna cena) for each item |
+| **Data source** | `invoice_line_items` joined with `product_catalog` via `product_id` FK |
+| **Columns** | `description`, `unit_price` (nabavna cena), `default_margin_pct`, calculated `selling_price` |
+| **Use case** | "What is the selling price and margin for each item we purchased?" |
+
+##### FR-4.13.2.7 Markup Analysis — RUC (`/ruc`)
+
+| ID | FR-4.13.2.7 |
+|----|-------------|
+| **Description** | Razlika u ceni (markup/margin analysis) grouped by product catalog entry |
+| **Group by** | `product_id` (canonical product) |
+| **Aggregates** | `AVG(unit_price)` as average purchase price, `selling_price` from catalog, calculated markup amount and percentage |
+| **Use case** | "What is our markup across all purchases of each product?" |
+
+##### FR-4.13.2.8 Spending by Category (`/spending-by-category`)
+
+| ID | FR-4.13.2.8 |
+|----|-------------|
+| **Description** | Total spending grouped by product catalog category |
+| **Group by** | `category` from `product_catalog` |
+| **Aggregates** | `SUM(total)`, `COUNT(DISTINCT invoice_id)`, `array_agg(DISTINCT supplier_name)` |
+| **Use case** | "How much did we spend in each product category?" |
+
+##### FR-4.13.2.9 Daily Goods Tracking — Dnevna evidencija robe (`/dpu`)
+
+| ID | FR-4.13.2.9 |
+|----|-------------|
+| **Description** | All line items received on a specific date (replaces former "Šank lista" / DPU page) |
+| **Filter** | `invoice_date` (required — exact date) |
+| **Columns** | `description`, `quantity`, `unit_price`, `total`, `supplier_name`, `invoice_number` |
+| **Use case** | "What goods did we receive on a given day?" |
+
 #### 4.13.3 CSV Export
 
 Every report endpoint accepts an `Accept: text/csv` header (or `?format=csv` query parameter) and returns a UTF-8 BOM CSV with:
@@ -1801,14 +1838,18 @@ Every report endpoint accepts an `Accept: text/csv` header (or `?format=csv` que
 
 #### 4.13.4 Frontend Page
 
+The `/izvestaji` page is a unified hub for all reports, product catalog management, and daily goods tracking. It replaces the formerly separate `/katalog` and `/dpu` pages.
+
 | Requirement | Detail |
 |-------------|--------|
 | **Route** | `/{orgSlug}/izvestaji` |
-| **Template selection** | Card-based UI — one card per report template |
-| **Filters** | Date range picker, optional supplier PIB/name field, optional keyword search |
+| **Navigation** | Group pills at the top: "Opšti" (5 general reports), "Nabavka i prodaja" (kalkulacija, RUC, categories, daily tracking), "Upravljanje" (product catalog) |
+| **Tab layout** | Horizontal tabs within each group for individual report/management views |
+| **Filters** | Date range picker, optional supplier PIB/name field, optional keyword search (per-tab) |
 | **Results** | Rendered in a sortable table below the filter bar |
 | **Export** | "Izvezi CSV" button — triggers browser file download |
 | **Plan gate** | Non-PRO users see an upgrade modal instead of the filter form |
+| **Removed pages** | `/katalog` and `/dpu` routes removed; content consolidated here |
 
 ---
 
@@ -2052,6 +2093,75 @@ Saldora tim
 Ovo je automatska poruka. Za podešavanja email prijema,
 posetite Podešavanja → Integracije u aplikaciji.
 ```
+
+---
+
+### 4.15 Product Catalog (Katalog proizvoda)
+
+This section defines the Product Catalog feature, which provides a canonical list of products that enables accurate inventory tracking, margin analysis, and price comparison for restaurant and hospitality clients.
+
+**Feature Gate:** Product Catalog is available on Professional and Agency plans.
+
+#### 4.15.1 Overview
+
+The product catalog stores canonical product names with aliases (alternative names from different suppliers). When line items are linked to catalog entries, the system can normalize item descriptions across suppliers and enable procurement intelligence reports (Section 4.13.2.6–4.13.2.9).
+
+#### 4.15.2 Database Schema
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+**PostgreSQL `pg_trgm` extension** is used for trigram-based fuzzy matching of `description` values in `invoice_line_items` against catalog entries. This allows the system to suggest catalog matches even when supplier descriptions vary.
+
+The `invoice_line_items` table includes a `product_id` FK column (nullable) that links a line item to its canonical catalog entry after matching.
+
+#### 4.15.3 API Endpoints
+
+All catalog endpoints live under `/api/v1/products/`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/products/` | List all catalog entries for the organization |
+| `POST` | `/api/v1/products/` | Create a new catalog entry |
+| `GET` | `/api/v1/products/{id}` | Retrieve a single entry |
+| `PATCH` | `/api/v1/products/{id}` | Update canonical name, aliases, selling price, margin, category |
+| `DELETE` | `/api/v1/products/{id}` | Delete a catalog entry |
+| `GET` | `/api/v1/products/merge-suggestions` | Return pairs of catalog entries that are likely duplicates (trigram similarity above threshold) |
+| `POST` | `/api/v1/products/merge` | Merge two entries: keep one as canonical, move aliases from the other, reassign `product_id` FKs |
+
+#### 4.15.4 Matching Logic
+
+When a new line item is written to `invoice_line_items` (at OCR completion or on edit), the system attempts to match its `description` against the catalog using `pg_trgm` trigram similarity. On a successful match (similarity ≥ 0.6), the `product_id` FK is set on the line item.
+
+`match_count` on the catalog entry is incremented each time a line item is matched to it.
+
+#### 4.15.5 Frontend (within /izvestaji)
+
+Product catalog management is accessible from the "Upravljanje" group on the `/izvestaji` page:
+
+| Feature | Detail |
+|---------|--------|
+| **Entry list** | Table of catalog entries with canonical name, category, aliases count, selling price, margin |
+| **Add/edit entry** | Form to set canonical name, category, unit of measure, aliases (tag input), selling price, margin |
+| **Merge suggestions** | Tab showing pairs of likely-duplicate entries with a "Merge" action |
+| **Search/filter** | Search by canonical name or category |
 
 ---
 
@@ -2469,6 +2579,32 @@ CREATE INDEX ix_invoice_line_items_invoice  ON invoice_line_items(invoice_id);
 CREATE INDEX ix_invoice_line_items_date     ON invoice_line_items(invoice_date);
 CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
 ```
+
+#### 7.2.6 product_catalog
+
+Canonical product entries for procurement intelligence (Section 4.15). Populated and managed by users via the catalog API. Used for fuzzy-matching line item descriptions.
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+Note: `invoice_line_items` includes a `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` column (added in migration 0007) for linking line items to their canonical catalog entry.
 
 ---
 
@@ -4774,6 +4910,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.5 | March 2026 | FakturaAI Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
 | 2.6 | March 2026 | Saldora Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
 | 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
+| 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
 
 ---
 

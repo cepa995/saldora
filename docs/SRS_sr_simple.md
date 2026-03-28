@@ -1,8 +1,8 @@
 # Saldora - Specifikacija proizvoda
 ## Platforma za obradu faktura pomoću veštačke inteligencije
 
-**Verzija:** 2.0
-**Datum:** Februar 2026
+**Verzija:** 2.8
+**Datum:** Mart 2026
 **Namena dokumenta:** Poslovni pregled za računovođe, partnere i investitore
 
 ---
@@ -78,6 +78,8 @@ Računovođa ostaje u potpunoj kontroli - pregleda predloge sistema, ispravlja g
 | Pravila automatizacije | Definisanje pravila za automatsko knjiženje | Srednji |
 | Kontrolna tabla | Statistike obrade, praćenje korišćenja | Srednji |
 | NBS kursna lista | Automatska konverzija stranih valuta po kursu NBS | Srednji |
+| Izveštaji o nabavci | Kalkulacija cena, RUC analiza, troškovi po kategoriji, dnevna evidencija robe | Srednji |
+| Katalog proizvoda | Kanonička lista proizvoda sa aliasima za normalizaciju stavki faktura | Srednji |
 | API pristup | REST API za integracije sa trećim sistemima | Nizak |
 
 ---
@@ -618,6 +620,29 @@ Aplikacija radi na svim uređajima:
 │                                  UKUPNO:        72.000 RSD │
 └────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Dodatak: Nabavna inteligencija (M16)
+
+### Katalog proizvoda
+
+Za ugostiteljske i maloprodajne klijente, Saldora omogućava kreiranje kataloga proizvoda — kanonijskog spiska artikala sa alternativnim imenima (aliasima), kategorijama, prodajnim cenama i maržama. Sistem automatski pokušava da poveže stavke faktura sa unosima u katalogu koristeći fuzzy poređenje teksta (pg_trgm). Ovo normalizuje različite opise istog proizvoda od različitih dobavljača.
+
+### Izveštaji o nabavci i prodaji
+
+Na stranici Izveštaji ("Nabavka i prodaja" grupa) dostupna su četiri nova izveštaja:
+
+| Izveštaj | Šta prikazuje |
+|----------|--------------|
+| **Kalkulacija** | Nabavna cena, marža i prodajna cena po stavci |
+| **RUC** | Razlika u ceni grupisana po proizvodu iz kataloga |
+| **Troškovi po kategoriji** | Ukupni troškovi grupisani po kategorijama iz kataloga |
+| **Dnevna evidencija robe** | Sve primljene stavke za određeni datum |
+
+### Objedinjena stranica izveštaja
+
+Stranica `/izvestaji` sada objedinjuje sve izveštaje, katalog proizvoda i dnevnu evidenciju robe u jednom mestu. Navigacija se vrši putem tri grupe: **Opšti** (5 opštih izveštaja), **Nabavka i prodaja** (4 nabavna izveštaja), **Upravljanje** (katalog proizvoda).
 
 ---
 

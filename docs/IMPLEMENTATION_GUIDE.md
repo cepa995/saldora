@@ -1825,6 +1825,89 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 
 ---
 
+## Milestone 16: Restaurant / Procurement Intelligence [COMPLETED]
+
+> **Note:** This milestone is also referred to as M16 in the issue tracker. It extends the Reports feature (M13) with a product catalog, four new procurement-focused report endpoints, and a unified /izvestaji page that consolidates all reporting and catalog management.
+
+**Goal:** Enable restaurant and hospitality clients to track procurement costs, margins, and daily goods received. Provide a product catalog that normalizes item descriptions across suppliers.
+
+**Requirements covered:** SRS 4.13.2.6–4.13.2.9, SRS 4.15
+
+### Issues
+
+#### 16.1 — Product catalog model and migration [DONE]
+
+**Description:** `product_catalog` table with canonical names, JSONB aliases, categories, selling prices, and margins. `pg_trgm` extension for fuzzy matching. `product_id` FK on `invoice_line_items`.
+
+**Tasks:**
+- Alembic migration 0007: `product_catalog` table + `product_id` FK on `invoice_line_items`
+- `apps/api/app/models/product_catalog.py` — SQLAlchemy ORM model
+- Enable `pg_trgm` extension in migration
+
+**Status:** Done
+
+---
+
+#### 16.2 — Product catalog API [DONE]
+
+**Description:** CRUD endpoints for catalog management plus merge-suggestions and merge action.
+
+**Tasks:**
+- `apps/api/app/routers/products.py`:
+  - `GET /api/v1/products/` — list with pagination and search
+  - `POST /api/v1/products/` — create entry
+  - `GET /api/v1/products/{id}` — single entry
+  - `PATCH /api/v1/products/{id}` — update
+  - `DELETE /api/v1/products/{id}` — delete
+  - `GET /api/v1/products/merge-suggestions` — trigram-based duplicate pairs
+  - `POST /api/v1/products/merge` — merge two entries
+- Line item sync: on write, attempt pg_trgm match against catalog; set `product_id` on match
+
+**Status:** Done
+
+---
+
+#### 16.3 — Procurement report endpoints [DONE]
+
+**Description:** Four new report endpoints under `/api/v1/reports/`.
+
+**Tasks:**
+- `GET /api/v1/reports/kalkulacija` — price calculation (nabavna → marža → prodajna cena)
+- `GET /api/v1/reports/ruc` — RUC (razlika u ceni) grouped by product
+- `GET /api/v1/reports/spending-by-category` — spending by product catalog category
+- `GET /api/v1/reports/dpu` — daily goods tracking (all line items for a given date)
+
+**Status:** Done
+
+---
+
+#### 16.4 — Unified /izvestaji page [DONE]
+
+**Description:** Consolidate all reports, product catalog, and daily goods tracking into the existing `/izvestaji` page. Remove separate `/katalog` and `/dpu` routes.
+
+**Tasks:**
+- Three group pills: "Opšti" (5 existing reports), "Nabavka i prodaja" (kalkulacija, RUC, categories, dnevna evidencija), "Upravljanje" (product catalog)
+- Horizontal tabs within each group
+- Remove `apps/web/src/app/(app)/[orgSlug]/katalog/` directory
+- Remove `apps/web/src/app/(app)/[orgSlug]/dpu/` directory (if it existed)
+- Rename "Ugostiteljstvo" → "Nabavka i prodaja" in all UI strings
+- Rename "Šank lista (DPU)" → "Dnevna evidencija robe" in all UI strings
+
+**Status:** Done
+
+---
+
+#### 16.5 — Bug fixes [DONE]
+
+- Line items sync on invoice verification (not just edit)
+- Batch delete: cascade to `correction_logs` and `line_items`
+- Monthly breakdown: add PDV % and PDV iznos columns
+- Verification error messages translated to Serbian
+
+**Status:** Done
+
+---
+
 ## Summary
 
 | Milestone | Issues | Key Deliverable |
@@ -1842,8 +1925,9 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 | **M11: Template Learning & LLM Cost Optimization** | 11.1–11.5 | Invoice layout fingerprinting, template-based extraction (LLM bypass), auto-learning from LLM outputs, cost analytics dashboard |
 | **M12: Client Management for Agencies** | 12.1–12.5 | Client model with feature gating, CRUD API, invoice-client auto-assignment via PIB, frontend client context and scoping, tests |
 | **M13: Invoice Reports (Izveštaji)** | 13.1–13.4 | Denormalized invoice_line_items table + sync logic, five report endpoints with CSV export, frontend Izveštaji page with template cards and filters, tests |
+| **M16: Restaurant / Procurement Intelligence** [DONE] | 16.1–16.5 | Product catalog (pg_trgm fuzzy matching, aliases, margins), four procurement report endpoints (kalkulacija, RUC, spending-by-category, dpu), unified /izvestaji page with group tabs, bug fixes |
 
-**Total: 75 issues across 13 milestones.**
+**Total: 80 issues across 14 milestones.**
 
 ### Parallelization Opportunities
 

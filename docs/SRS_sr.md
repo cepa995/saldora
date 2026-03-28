@@ -1,8 +1,8 @@
 # Specifikacija softverskih zahteva (SRS)
 # FakturaAI - Platforma za obradu faktura pomoću veštačke inteligencije
 
-**Verzija:** 2.0
-**Datum:** Februar 2026
+**Verzija:** 2.8
+**Datum:** Mart 2026
 **Status:** Aktivan
 
 ---
@@ -18,6 +18,7 @@
    - 4.11 [Motor za automatizaciju pravila](#411-motor-za-automatizaciju-pravila)
    - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
    - 4.13 [Izveštaji o fakturama (Izveštaji)](#413-izveštaji-o-fakturama-izveštaji)
+   - 4.15 [Katalog proizvoda](#415-katalog-proizvoda)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -1502,7 +1503,7 @@ CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
 
 #### 4.13.2 Šabloni izveštaja
 
-Svih pet endpoint-a za izveštaje su pod `/api/v1/reports/` i prihvataju zajednički skup parametara upita:
+Svi endpoint-i za izveštaje su pod `/api/v1/reports/` i prihvataju zajednički skup parametara upita:
 
 | Parametar | Tip | Opis |
 |-----------|-----|------|
@@ -1557,6 +1558,42 @@ Svih pet endpoint-a za izveštaje su pod `/api/v1/reports/` i prihvataju zajedni
 | **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
 | **Primena** | "Kako su se naši troškovi menjali od meseca do meseca?" |
 
+##### FZ-4.13.2.6 Kalkulacija cena (`/kalkulacija`)
+
+| ID | FZ-4.13.2.6 |
+|----|-------------|
+| **Opis** | Kalkulacija cene po stavci: nabavna cena, marža i prodajna cena za svaki artikal |
+| **Izvor podataka** | `invoice_line_items` spojen sa `product_catalog` putem FK `product_id` |
+| **Kolone** | `description`, `unit_price` (nabavna cena), `default_margin_pct`, izračunata `selling_price` |
+| **Primena** | "Koja je prodajna cena i marža za svaki kupljeni artikal?" |
+
+##### FZ-4.13.2.7 Razlika u ceni — RUC (`/ruc`)
+
+| ID | FZ-4.13.2.7 |
+|----|-------------|
+| **Opis** | Analiza razlike u ceni (RUC) grupisana po unosu u katalogu proizvoda |
+| **Grupisanje** | `product_id` (kanonički proizvod) |
+| **Agregati** | `AVG(unit_price)` kao prosečna nabavna cena, `selling_price` iz kataloga, izračunati iznos i procenat RUC-a |
+| **Primena** | "Kolika je naša marža za sve nabavke svakog proizvoda?" |
+
+##### FZ-4.13.2.8 Troškovi po kategoriji (`/spending-by-category`)
+
+| ID | FZ-4.13.2.8 |
+|----|-------------|
+| **Opis** | Ukupni troškovi grupisani po kategoriji iz kataloga proizvoda |
+| **Grupisanje** | `category` iz `product_catalog` |
+| **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)`, `array_agg(DISTINCT supplier_name)` |
+| **Primena** | "Koliko smo potrošili po svakoj kategoriji proizvoda?" |
+
+##### FZ-4.13.2.9 Dnevna evidencija robe (`/dpu`)
+
+| ID | FZ-4.13.2.9 |
+|----|-------------|
+| **Opis** | Sve stavke primljene na određeni datum (zamenjuje nekadašnju stranicu "Šank lista" / DPU) |
+| **Filter** | `invoice_date` (obavezno — tačan datum) |
+| **Kolone** | `description`, `quantity`, `unit_price`, `total`, `supplier_name`, `invoice_number` |
+| **Primena** | "Koja roba je primljena određenog dana?" |
+
 #### 4.13.3 CSV izvoz
 
 Svaki endpoint za izveštaj prihvata zaglavlje `Accept: text/csv` (ili parametar `?format=csv`) i vraća CSV sa UTF-8 BOM oznakom:
@@ -1568,14 +1605,79 @@ Svaki endpoint za izveštaj prihvata zaglavlje `Accept: text/csv` (ili parametar
 
 #### 4.13.4 Stranica u aplikaciji
 
+Stranica `/izvestaji` je objedinjeni centar za sve izveštaje, upravljanje katalogom proizvoda i dnevnu evidenciju robe. Zamenjuje ranije odvojene stranice `/katalog` i `/dpu`.
+
 | Zahtev | Detalj |
 |--------|--------|
 | **Ruta** | `/{orgSlug}/izvestaji` |
-| **Izbor šablona** | UI sa karticama — po jedna kartica za svaki šablon izveštaja |
-| **Filteri** | Birač opsega datuma, opcionalno polje za PIB/naziv dobavljača, opcionalna pretraga po ključnoj reči |
+| **Navigacija** | Dugmad za grupe na vrhu: "Opšti" (5 opštih izveštaja), "Nabavka i prodaja" (kalkulacija, RUC, kategorije, dnevna evidencija), "Upravljanje" (katalog proizvoda) |
+| **Raspored tabova** | Horizontalni tabovi unutar svake grupe za pojedinačne izveštaje/upravljanje |
+| **Filteri** | Birač opsega datuma, opcionalno polje za PIB/naziv dobavljača, opcionalna pretraga (po tabu) |
 | **Rezultati** | Prikazani u tabeli sa mogućnošću sortiranja ispod trake filtera |
 | **Izvoz** | Dugme "Izvezi CSV" — pokreće preuzimanje fajla u pregledaču |
 | **Kontrola plana** | Korisnici koji nisu na PRO planu vide modal za nadogradnju umesto forme za filtere |
+| **Uklonjene stranice** | Rute `/katalog` i `/dpu` su uklonjene; sadržaj je objedinjen ovde |
+
+---
+
+### 4.15 Katalog proizvoda
+
+Ovaj odeljak definiše funkcionalnost Kataloga proizvoda, koja obezbeđuje kanonički spisak proizvoda za tačno praćenje zaliha, analizu marže i poređenje cena — pre svega za ugostiteljske i hotelijerske klijente.
+
+**Kontrola pristupa:** Katalog proizvoda je dostupan na Professional i Agency planovima.
+
+#### 4.15.1 Pregled
+
+Katalog proizvoda čuva kanonička imena proizvoda sa aliasima (alternativna imena od različitih dobavljača). Kada su stavke faktura povezane sa unosima u katalogu, sistem može normalizovati opise stavki između dobavljača i omogućiti izveštaje o nabavci (Odeljak 4.13.2.6–4.13.2.9).
+
+#### 4.15.2 Šema baze podataka
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+PostgreSQL ekstenzija **`pg_trgm`** se koristi za trigramsko fuzzy poređenje vrednosti `description` u `invoice_line_items` sa unosima u katalogu. Tabela `invoice_line_items` sadrži nullable FK kolonu `product_id` (dodata u migraciji 0007) za povezivanje stavki sa kanonički unosom u katalogu.
+
+#### 4.15.3 API endpoint-i
+
+Svi endpoint-i za katalog su pod `/api/v1/products/`:
+
+| Metod | Endpoint | Opis |
+|-------|----------|------|
+| `GET` | `/api/v1/products/` | Lista svih unosa u katalogu za organizaciju |
+| `POST` | `/api/v1/products/` | Kreiranje novog unosa |
+| `GET` | `/api/v1/products/{id}` | Preuzimanje jednog unosa |
+| `PATCH` | `/api/v1/products/{id}` | Izmena kanonijskog imena, aliasa, prodajne cene, marže, kategorije |
+| `DELETE` | `/api/v1/products/{id}` | Brisanje unosa |
+| `GET` | `/api/v1/products/merge-suggestions` | Lista parova unosa koji su verovatno duplikati (trigramska sličnost iznad praga) |
+| `POST` | `/api/v1/products/merge` | Spajanje dva unosa: zadržava jedan kao kanonički, premešta aliase, ažurira FK veze |
+
+#### 4.15.4 Frontend (u okviru /izvestaji)
+
+Upravljanje katalogom proizvoda je dostupno iz grupe "Upravljanje" na stranici `/izvestaji`:
+
+| Funkcionalnost | Detalj |
+|----------------|--------|
+| **Lista unosa** | Tabela kanonijskih naziva, kategorija, broja aliasa, prodajne cene, marže |
+| **Dodavanje/izmena unosa** | Forma za kanonijsko ime, kategoriju, jedinicu mere, aliase (unos tagova), prodajnu cenu, maržu |
+| **Predlozi spajanja** | Tab sa parovima verovatnih duplikata i akcijom "Spoji" |
+| **Pretraga/filtriranje** | Pretraga po kanonijskom imenu ili kategoriji |
 
 ---
 
@@ -1925,6 +2027,32 @@ CREATE TABLE documents (
 
 CREATE INDEX idx_documents_organization ON documents(organization_id);
 ```
+
+#### 7.2.6 product_catalog
+
+Kanonički unosi proizvoda za nabavnu inteligenciju (Odeljak 4.15). Popunjava se i upravlja se putem API-ja za katalog.
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+Napomena: tabela `invoice_line_items` sadrži nullable FK kolonu `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` (dodata u migraciji 0007).
 
 ---
 
@@ -3959,6 +4087,7 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 2.0 | Februar 2026 | FakturaAI Tim | Srpska verzija sa svim ispravkama: uklonjen model training/retraining, ZZPL kao primarni zakon, Paddle umesto Stripe, KPR/KIR terminologija, SEF polling umesto webhook-ova, NBS kursna lista, podrška za ćirilicu i latinicu, PIB constraint za strane entitete, retencija dokumenata 10 godina |
 | 2.1 | Februar 2026 | FakturaAI Tim | dots.ocr arhitektura: vLLM HTTP server sidecar (GPU) + lak OCR radnik (CPU, OpenAI klijent), uklonjen EasyOCR kao rezerva (ručni pregled umesto toga), preskakanje predprocesiranja za VLM |
 | 2.2 | Mart 2026 | FakturaAI Tim | Generacija PDV knjiga (KPR/KIR) zamenjena funkcionalnosti Izveštaja (4.13): denormalizovana tabela invoice_line_items koja se popunjava pri završetku OCR obrade i pri izmenama; pet unapred definisanih šablona izveštaja (pregled primljene robe, troškovi po dobavljaču, mesečni pregled stavki, poređenje cena, pregled troškova) na /api/v1/reports/; nulti LLM trošak; CSV izvoz; stranica na /{orgSlug}/izvestaji; kontrola PRO plana. Dodato upravljanje klijentima za Agency plan (4.12). |
+| 2.8 | Mart 2026 | Saldora Tim | Dodat Katalog proizvoda (4.15): kanonička imena, aliasi (JSONB), kategorije, prodajne cene, marže, pg_trgm fuzzy matching, FK product_id na invoice_line_items, CRUD + merge API na /api/v1/products/. Dodata četiri endpoint-a za nabavnu inteligenciju (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Stranica /izvestaji objedinjena sa tri grupe: Opšti, Nabavka i prodaja, Upravljanje; uklonjene odvojene stranice /katalog i /dpu. Dodat product_catalog u šemu baze (7.2.6). Preimenovano: "Šank lista" → "Dnevna evidencija robe"; "Ugostiteljstvo" → "Nabavka i prodaja". Ispravke: sinhronizacija stavki pri verifikaciji fakture; kaskadno brisanje pri grupnom brisanju; mesečni pregled prikazuje PDV % i PDV iznos; poruke o greškama verifikacije prevedene na srpski. |
 
 ---
 
