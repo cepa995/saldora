@@ -1,7 +1,7 @@
 # Specifikacija softverskih zahteva (SRS)
 # FakturaAI - Platforma za obradu faktura pomoću veštačke inteligencije
 
-**Verzija:** 2.8
+**Verzija:** 2.9
 **Datum:** Mart 2026
 **Status:** Aktivan
 
@@ -19,6 +19,7 @@
    - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
    - 4.13 [Izveštaji o fakturama (Izveštaji)](#413-izveštaji-o-fakturama-izveštaji)
    - 4.15 [Katalog proizvoda](#415-katalog-proizvoda)
+   - 4.16 [Sistem podrške u aplikaciji](#416-sistem-podrške-u-aplikaciji)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -417,7 +418,7 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | **Opis** | Sistem MORA da pruži ocene pouzdanosti za ekstraktovana polja |
 | **Skala** | 0-100% pouzdanost |
 | **Prag** | Polja ispod 80% pouzdanosti se označavaju za manuelni pregled |
-| **Prikaz** | Vizuelna indikacija (kodiranje bojom) nivoa pouzdanosti |
+| **Prikaz** | Tekstualne oznake umesto procenata: "Pouzdano" (zeleno, ≥75%), "Proveriti" (žuto, 50-74%), "Nepouzdano" (crveno, <50%) |
 
 #### FZ-4.3.4 Podrška za višestranična dokumenta
 | ID | FZ-4.3.4 |
@@ -1681,6 +1682,47 @@ Upravljanje katalogom proizvoda je dostupno iz grupe "Upravljanje" na stranici `
 
 ---
 
+### 4.16 Sistem podrške u aplikaciji
+
+Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju tikete sa stranice Podrška, dodaju fajlove i prate status. Administratori upravljaju svim tiketima iz posebnog admin panela.
+
+**Kontrola pristupa:** Dostupno na svim planovima.
+
+#### 4.16.1 Model podataka
+
+**support_tickets:**
+- id, organization_id, user_id (kreator), subject, status (open/in_progress/resolved/closed), priority (low/normal/high), category (billing/technical/feature_request/other), created_at, updated_at
+
+**support_messages:**
+- id, ticket_id, user_id (pošiljalac), body (TEXT), is_admin_reply (BOOLEAN), created_at
+
+**support_attachments:**
+- id, message_id, file_name, file_path (S3 ključ), file_size, content_type, created_at
+
+#### 4.16.2 Klijentski endpoint-i
+- POST /api/v1/support/tickets — kreiranje tiketa sa inicijalnom porukom
+- GET /api/v1/support/tickets — lista tiketa organizacije (paginirano, sa filterima)
+- GET /api/v1/support/tickets/{id} — detalji tiketa sa porukama
+- POST /api/v1/support/tickets/{id}/messages — dodavanje odgovora (sa fajlovima)
+- POST /api/v1/support/tickets/{id}/close — zatvaranje tiketa
+
+#### 4.16.3 Admin endpoint-i
+- GET /api/v1/admin/support/tickets — svi tiketi svih organizacija
+- PATCH /api/v1/admin/support/tickets/{id} — izmena statusa/prioriteta
+- POST /api/v1/admin/support/tickets/{id}/messages — admin odgovor
+
+#### 4.16.4 Frontend
+- Klijent: /{orgSlug}/podrska — lista tiketa, forma za kreiranje, prikaz konverzacije
+- Admin: /{orgSlug}/admin/podrska — upravljanje tiketima svih organizacija
+- Bedž u bočnoj traci: broj nepročitanih odgovora
+- Status bedževi: Otvoren (zeleni), U obradi (žuti), Rešen (plavi), Zatvoren (sivi)
+
+#### 4.16.5 Obaveštenja
+- Bedž u bočnoj traci za nepročitane odgovore (klijent) i otvorene tikete (admin)
+- Opciono email obaveštenje pri admin odgovoru i novom tiketu
+
+---
+
 ## 5. Nefunkcionalni zahtevi
 
 ### 5.1 Zahtevi performansi
@@ -2512,6 +2554,17 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **Napomena o modelu:** Sistem koristi unapred trenirane modele (dots.ocr, spaCy) bez naknadnog treniranja na korisničkim podacima. Ovaj pristup eliminiše potrebu za prikupljanjem podataka za trening, upravljanjem saglasnošću i složenom MLOps infrastrukturom, dok istovremeno obezbeđuje zaštitu privatnosti korisnika.
 
+**Opcije deployovanja:**
+
+| Opcija | Trošak | Hladno pokretanje | Slučaj korišćenja |
+|--------|--------|-------------------|--------------------|
+| Lokalni vLLM (Docker) | $0 (sopstveni GPU) | Bez | Razvoj |
+| Hetzner GEX44 | ~$200/mes. fiksno | Bez | Produkcija (10+ klijenata) |
+| Google Cloud Run (L4 GPU) | ~$0.0002/sek. | 10-30s | Produkcija (skaliranje do nule) |
+| Cerebrium Serverless | ~$0.0006/fakturi | 30-60s | Produkcija (rana faza) |
+
+OCR radnik se povezuje na bilo koji OpenAI-kompatibilan API endpoint putem environment varijable `DOTS_OCR_SERVER_URL`. Prelaz između lokalnog, Cloud Run ili Cerebrium okruženja zahteva samo promenu environment varijable — bez izmena koda.
+
 ### 9.8 Praćenje kvaliteta ekstrakcije
 
 Sistem MORA da prati kvalitet ekstrakcije putem logovanja korekcija korisnika, ali isključivo u svrhu monitoringa kvaliteta i analitike, NE za treniranje modela.
@@ -2573,11 +2626,14 @@ Ove metrike služe za identifikaciju sistemskih problema i informisanje tima o p
 | Zahtev | Implementacija |
 |--------|---------------|
 | Heširanje lozinki | Argon2id sa salt-om |
-| JWT tokeni | RS256 potpisivanje, istek od 1 sata |
+| JWT tokeni | RS256 potpisivanje, istek od 1 sata; algoritam fiksiran na HS256 (bez konfuzije algoritma) |
 | Refresh tokeni | Bezbedni HTTP-only kolačići, istek od 7 dana |
 | MFA | TOTP-bazirana 2FA (opciona) |
 | Upravljanje sesijama | Sesije podržane u Redis-u |
 | Zaštita od brute force | Ograničenje stope, zaključavanje naloga |
+| Zaključavanje naloga | 5 neuspelih pokušaja → 15 min zaključavanja putem Redis-a |
+| Crna lista tokena | Odjava poništava token putem Redis seta |
+| Ograničenje stope | slowapi, ograničenja po planu (videti 8.1) |
 
 ### 10.2 Bezbednost podataka
 
@@ -2600,6 +2656,9 @@ Ove metrike služe za identifikaciju sistemskih problema i informisanje tima o p
 | CSRF zaštita | CSRF baziran na tokenima |
 | Otpremanje fajlova | Validacija tipa, ograničenja veličine, skeniranje virusa |
 | API bezbednost | Ograničenje stope, rotacija API ključeva |
+| Bezbednosna zaglavlja | X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy putem middleware-a |
+| JWT algoritam | Fiksiran na HS256 (bez konfuzije algoritma) |
+| PII maskiranje | Email i PIB vrednosti maskirane u logovima aplikacije |
 
 ### 10.4 Bezbednost infrastrukture
 
@@ -3217,6 +3276,45 @@ Kredencijali po organizaciji čuvani u tabeli `minimax_configs`:
 - `last_sync_at` — Vreme poslednjeg uspešnog slanja
 
 **API endpointi:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+#### 12.5.4 Referenca API polja MiniMax (RS)
+
+Nazivi polja i ID-ovi validirani prema MiniMax RS Swagger API specifikaciji:
+
+**Zemlja i valuta (Srbija):**
+- ID zemlje: 3 (Kod: "RS", Naziv: "Republika Srbija")
+- ID valute: 2 (Kod: "RSD")
+
+**Obavezna polja ReceivedInvoice:**
+| API polje | Izvor | Napomena |
+|-----------|-------|----------|
+| DocumentReference | invoice_number | Originalni broj fakture (NE InvoiceNumber) |
+| Customer | {ID: customer_id} | FK referenca |
+| Currency | {ID: 2} | RSD podrazumevano |
+| PaymentType | "N" | N=Neplaćen, D=Dospeo, Z=Zatvoreno, P=Plaćen, R=Rata |
+| DateIssued | invoice_date | ISO datetime |
+| DateTransaction | invoice_date | |
+| DateDue | due_date | |
+| DateReceived | invoice_date | |
+| InvoiceAmount | total_amount | Zaokruženo na 2 decimale |
+| InvoiceAmountDomesticCurrency | total_amount | Mora biti jednako InvoiceAmount za RSD |
+
+**Obavezna polja pri kreiranju kupca:**
+| Polje | Vrednost |
+|-------|----------|
+| Country | {ID: 3} |
+| CountryName | "Republika Srbija" |
+| Currency | {ID: 2} |
+| SubjectToVAT | "D" (ne "Y") |
+| PostalCode | Obavezno, neprazno |
+
+**Mapiranje PDV stopa:**
+| Srpska stopa | MiniMax VatRateId | Kod |
+|-------------|-------------------|-----|
+| 20% | 4 | S |
+| 10% | 5 | Z |
+| 8% | 3 | P |
+| 0% | 1 | N |
 
 ### 12.6 SEF integracija (eFaktura)
 
@@ -4088,6 +4186,7 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 2.1 | Februar 2026 | FakturaAI Tim | dots.ocr arhitektura: vLLM HTTP server sidecar (GPU) + lak OCR radnik (CPU, OpenAI klijent), uklonjen EasyOCR kao rezerva (ručni pregled umesto toga), preskakanje predprocesiranja za VLM |
 | 2.2 | Mart 2026 | FakturaAI Tim | Generacija PDV knjiga (KPR/KIR) zamenjena funkcionalnosti Izveštaja (4.13): denormalizovana tabela invoice_line_items koja se popunjava pri završetku OCR obrade i pri izmenama; pet unapred definisanih šablona izveštaja (pregled primljene robe, troškovi po dobavljaču, mesečni pregled stavki, poređenje cena, pregled troškova) na /api/v1/reports/; nulti LLM trošak; CSV izvoz; stranica na /{orgSlug}/izvestaji; kontrola PRO plana. Dodato upravljanje klijentima za Agency plan (4.12). |
 | 2.8 | Mart 2026 | Saldora Tim | Dodat Katalog proizvoda (4.15): kanonička imena, aliasi (JSONB), kategorije, prodajne cene, marže, pg_trgm fuzzy matching, FK product_id na invoice_line_items, CRUD + merge API na /api/v1/products/. Dodata četiri endpoint-a za nabavnu inteligenciju (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Stranica /izvestaji objedinjena sa tri grupe: Opšti, Nabavka i prodaja, Upravljanje; uklonjene odvojene stranice /katalog i /dpu. Dodat product_catalog u šemu baze (7.2.6). Preimenovano: "Šank lista" → "Dnevna evidencija robe"; "Ugostiteljstvo" → "Nabavka i prodaja". Ispravke: sinhronizacija stavki pri verifikaciji fakture; kaskadno brisanje pri grupnom brisanju; mesečni pregled prikazuje PDV % i PDV iznos; poruke o greškama verifikacije prevedene na srpski. |
+| 2.9 | Mart 2026 | Saldora Tim | Dodat sistem podrške u aplikaciji (4.16). Ažurirana referenca MiniMax API polja (12.5.4). Ažurirani detalji bezbednosnih poboljšanja (10.1, 10.3). Dodate serverless GPU opcije deployovanja (9.7). Ažuriran prikaz pouzdanosti sa procenata na tekstualne oznake (4.3.3). |
 
 ---
 

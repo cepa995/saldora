@@ -1,7 +1,7 @@
 # Software Requirements Specification (SRS)
 # Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 2.8
+**Version:** 2.9
 **Date:** March 2026
 **Status:** Draft
 
@@ -20,6 +20,7 @@
    - 4.13 [Invoice Reports (Izveštaji)](#413-invoice-reports-izveštaji)
    - 4.14 [Email Ingestion Pipeline](#414-email-ingestion-pipeline)
    - 4.15 [Product Catalog (Katalog proizvoda)](#415-product-catalog-katalog-proizvoda)
+   - 4.16 [In-App Support System](#416-in-app-support-system)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
@@ -443,7 +444,7 @@ FakturaAI operates as a standalone web application with the following integratio
 | **Description** | System MUST provide confidence scores at both overall and per-field level |
 | **Scale** | 0-100% confidence (stored as 0.0-1.0 in DB, scaled in API) |
 | **Threshold** | Fields below 80% confidence individually flagged with `needs_review: true` |
-| **Display** | Per-field confidence badges (color coded: green > 80%, yellow 60-80%, red < 60%) |
+| **Display** | Text labels instead of percentages: "Pouzdano" (green, ≥75%), "Proveriti" (amber, 50-74%), "Nepouzdano" (red, <50%) |
 | **Field Confidence** | Each extracted field has: `field_name`, `value`, `confidence`, `needs_review` |
 
 #### FR-4.3.4 Multi-Page Document Support
@@ -2165,6 +2166,47 @@ Product catalog management is accessible from the "Upravljanje" group on the `/i
 
 ---
 
+### 4.16 In-App Support System
+
+Ticket-based support system built into the application. Clients create tickets from a Podrška page, attach files, and track status. Admins manage all tickets from a dedicated admin panel.
+
+**Feature Gate:** Available on all plans.
+
+#### 4.16.1 Data Model
+
+**support_tickets:**
+- id, organization_id, user_id (creator), subject, status (open/in_progress/resolved/closed), priority (low/normal/high), category (billing/technical/feature_request/other), created_at, updated_at
+
+**support_messages:**
+- id, ticket_id, user_id (sender), body (TEXT), is_admin_reply (BOOLEAN), created_at
+
+**support_attachments:**
+- id, message_id, file_name, file_path (S3 key), file_size, content_type, created_at
+
+#### 4.16.2 Client Endpoints
+- POST /api/v1/support/tickets — create ticket with initial message
+- GET /api/v1/support/tickets — list org tickets (paginated, filterable)
+- GET /api/v1/support/tickets/{id} — ticket detail with messages
+- POST /api/v1/support/tickets/{id}/messages — add reply (with file attachments)
+- POST /api/v1/support/tickets/{id}/close — close ticket
+
+#### 4.16.3 Admin Endpoints
+- GET /api/v1/admin/support/tickets — all tickets across orgs
+- PATCH /api/v1/admin/support/tickets/{id} — update status/priority
+- POST /api/v1/admin/support/tickets/{id}/messages — admin reply
+
+#### 4.16.4 Frontend
+- Client: /{orgSlug}/podrska — ticket list, create form, chat-like thread view
+- Admin: /{orgSlug}/admin/podrska — cross-org ticket management
+- Sidebar badge: unread reply count
+- Status badges: Otvoren (green), U obradi (yellow), Rešen (blue), Zatvoren (gray)
+
+#### 4.16.5 Notifications
+- Sidebar badge for unread replies (client) and open tickets (admin)
+- Optional email notification on admin reply and new ticket
+
+---
+
 ## 5. Non-Functional Requirements
 
 ### 5.1 Performance Requirements
@@ -3241,6 +3283,17 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **Model Note:** The system uses pre-trained models (dots.ocr for OCR, Claude for field extraction) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
 
+**Deployment Options:**
+
+| Option | Cost | Cold Start | Use Case |
+|--------|------|------------|----------|
+| Local vLLM (Docker) | $0 (own GPU) | None | Development |
+| Hetzner GEX44 | ~$200/mo fixed | None | Production (10+ clients) |
+| Google Cloud Run (L4 GPU) | ~$0.0002/sec | 10-30s | Production (scale-to-zero) |
+| Cerebrium Serverless | ~$0.0006/invoice | 30-60s | Production (early stage) |
+
+The OCR worker connects to any OpenAI-compatible API endpoint via `DOTS_OCR_SERVER_URL` environment variable. Switching between local, Cloud Run, or Cerebrium requires only an env change — no code modifications.
+
 ### 9.8 Extraction Quality Monitoring
 
 The system MUST track extraction quality through correction logging, purely for quality monitoring and analytics purposes, NOT for model training.
@@ -3434,11 +3487,14 @@ The system MUST track LLM cost savings from template usage:
 | Requirement | Implementation |
 |-------------|----------------|
 | Password Hashing | Argon2id with salt |
-| JWT Tokens | RS256 signing, 1-hour expiry |
+| JWT Tokens | RS256 signing, 1-hour expiry; algorithm pinned to HS256 (no algorithm confusion) |
 | Refresh Tokens | Secure HTTP-only cookies, 7-day expiry |
 | MFA | TOTP-based 2FA (optional) |
 | Session Management | Redis-backed sessions |
 | Brute Force Protection | Rate limiting, account lockout |
+| Account Lockout | 5 failed attempts → 15 min lockout via Redis |
+| Token Blacklisting | Logout invalidates token via Redis set |
+| Rate Limiting | slowapi, per-plan limits (see 8.1) |
 
 ### 10.2 Data Security
 
@@ -3461,6 +3517,9 @@ The system MUST track LLM cost savings from template usage:
 | CSRF Protection | Token-based CSRF |
 | File Upload | Type validation, size limits, virus scan |
 | API Security | Rate limiting, API key rotation |
+| Security Headers | X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy via middleware |
+| JWT Algorithm | Pinned to HS256 (no algorithm confusion) |
+| PII Masking | Email and PIB values masked in application logs |
 
 ### 10.4 Infrastructure Security
 
@@ -4031,6 +4090,45 @@ Per-organization credentials stored in `minimax_configs` table:
 - `last_sync_at` — Timestamp of last successful push
 
 **API endpoints:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+#### 12.5.4 MiniMax API Field Reference (RS)
+
+Field names and IDs validated against the MiniMax RS Swagger API spec:
+
+**Country & Currency (Serbia):**
+- Country ID: 3 (Code: "RS", Name: "Republika Srbija")
+- Currency ID: 2 (Code: "RSD")
+
+**ReceivedInvoice required fields:**
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| DocumentReference | invoice_number | Original invoice number (NOT InvoiceNumber) |
+| Customer | {ID: customer_id} | FK reference |
+| Currency | {ID: 2} | RSD default |
+| PaymentType | "N" | N=Neplaćen, D=Dospeo, Z=Zatvoreno, P=Plaćen, R=Rata |
+| DateIssued | invoice_date | ISO datetime |
+| DateTransaction | invoice_date | |
+| DateDue | due_date | |
+| DateReceived | invoice_date | |
+| InvoiceAmount | total_amount | Rounded to 2 decimals |
+| InvoiceAmountDomesticCurrency | total_amount | Must equal InvoiceAmount for RSD |
+
+**Customer creation required fields:**
+| Field | Value |
+|-------|-------|
+| Country | {ID: 3} |
+| CountryName | "Republika Srbija" |
+| Currency | {ID: 2} |
+| SubjectToVAT | "D" (not "Y") |
+| PostalCode | Required, non-empty |
+
+**VAT Rate mapping:**
+| Serbian rate | MiniMax VatRateId | Code |
+|-------------|-------------------|------|
+| 20% | 4 | S |
+| 10% | 5 | Z |
+| 8% | 3 | P |
+| 0% | 1 | N |
 
 ### 12.6 SEF Integration (eFaktura)
 
@@ -4911,6 +5009,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.6 | March 2026 | Saldora Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
 | 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
 | 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
+| 2.9 | March 2026 | Saldora Team | Added In-App Support System spec (4.16). Updated MiniMax API field reference (12.5.4). Updated security hardening details (10.1, 10.3). Added serverless GPU deployment options (9.7). Updated confidence display from percentages to text labels (4.3.3). |
 
 ---
 
