@@ -296,12 +296,13 @@ async def get_price_comparison(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
-    search: str = Query(...),
+    search: str | None = Query(default=None),
 ) -> PriceComparisonResponse:
     """Return price statistics grouped by description and supplier.
 
-    Requires a search term to narrow the comparison to relevant items.
-    Returns min, max, and average unit prices per (description, supplier)
+    Returns items that appear from 2+ different suppliers.
+    Optional search term narrows to specific items.
+    Shows min, max, and average unit prices per (description, supplier)
     combination, useful for identifying pricing discrepancies.
 
     Args:
@@ -320,9 +321,12 @@ async def get_price_comparison(
     """
     conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
 
+    # Use canonical product name if linked, otherwise raw description
+    item_name = func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description)
+
     query = (
         select(
-            InvoiceLineItem.description,
+            item_name.label("description"),
             InvoiceLineItem.seller_name,
             InvoiceLineItem.seller_pib,
             func.avg(InvoiceLineItem.unit_price).label("avg_unit_price"),
@@ -331,34 +335,52 @@ async def get_price_comparison(
             func.sum(InvoiceLineItem.quantity).label("total_quantity"),
             func.count(func.distinct(InvoiceLineItem.invoice_id)).label("invoice_count"),
         )
+        .outerjoin(ProductCatalog, InvoiceLineItem.product_id == ProductCatalog.id)
         .where(*conditions)
         .group_by(
-            InvoiceLineItem.description,
+            item_name,
             InvoiceLineItem.seller_pib,
             InvoiceLineItem.seller_name,
         )
-        .order_by(
-            InvoiceLineItem.description,
-            func.avg(InvoiceLineItem.unit_price),
-        )
+        .order_by(item_name, func.avg(InvoiceLineItem.unit_price))
     )
 
     result = await db.execute(query)
     rows = result.all()
 
-    items = [
-        PriceComparisonItem(
-            description=row.description,
-            seller_name=row.seller_name,
-            seller_pib=row.seller_pib,
-            avg_unit_price=float(row.avg_unit_price) if row.avg_unit_price is not None else None,
-            min_unit_price=float(row.min_unit_price) if row.min_unit_price is not None else None,
-            max_unit_price=float(row.max_unit_price) if row.max_unit_price is not None else None,
-            total_quantity=float(row.total_quantity) if row.total_quantity is not None else None,
-            invoice_count=row.invoice_count,
-        )
-        for row in rows
-    ]
+    # Filter: only items that appear from 2+ suppliers
+    from collections import defaultdict
+
+    by_desc: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_desc[row.description].append(row)
+
+    items = []
+    for desc, desc_rows in by_desc.items():
+        unique_pibs = {r.seller_pib for r in desc_rows if r.seller_pib}
+        if len(unique_pibs) < 2:
+            continue
+        for row in desc_rows:
+            items.append(
+                PriceComparisonItem(
+                    description=row.description,
+                    seller_name=row.seller_name,
+                    seller_pib=row.seller_pib,
+                    avg_unit_price=(
+                        float(row.avg_unit_price) if row.avg_unit_price is not None else None
+                    ),
+                    min_unit_price=(
+                        float(row.min_unit_price) if row.min_unit_price is not None else None
+                    ),
+                    max_unit_price=(
+                        float(row.max_unit_price) if row.max_unit_price is not None else None
+                    ),
+                    total_quantity=(
+                        float(row.total_quantity) if row.total_quantity is not None else None
+                    ),
+                    invoice_count=row.invoice_count,
+                )
+            )
 
     return PriceComparisonResponse(items=items)
 
