@@ -524,7 +524,43 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
 
 // ── Empty state ──────────────────────────────────────────────────────
 
-function EmptyState({ t }: { t: ReturnType<typeof useTranslations<'reports'>> }) {
+const EMPTY_HINTS: Record<string, { title: string; hint: string }> = {
+  receivedGoods: {
+    title: 'Nema primljene robe',
+    hint: 'Otpremite fakture dobavljača i verifikujte ih. Stavke sa faktura će se automatski pojaviti ovde.',
+  },
+  spendingBySupplier: {
+    title: 'Nema podataka o potrošnji',
+    hint: 'Verifikujte fakture da bi se potrošnja po dobavljačima prikazala. Proverite datum i filter.',
+  },
+  monthlyBreakdown: {
+    title: 'Nema stavki za izabrani period',
+    hint: 'Proverite datumski opseg. Stavke se popunjavaju kada verifikujete fakture.',
+  },
+  priceComparison: {
+    title: 'Nema artikala za poređenje',
+    hint: 'Poređenje cena prikazuje samo artikle koji se pojavljuju kod 2+ dobavljača. Spojite slične artikle u Katalogu proizvoda (tab Upravljanje).',
+  },
+  expenseSummary: {
+    title: 'Nema troškova za izabrani period',
+    hint: 'Proverite datumski opseg. Troškovi se prikazuju nakon verifikacije faktura.',
+  },
+  kalkulacija: {
+    title: 'Nema stavki za kalkulaciju',
+    hint: 'Otpremite i verifikujte fakture dobavljača. Za prilagođene marže, podesite prodajne cene u Katalogu proizvoda.',
+  },
+  ruc: {
+    title: 'Nema podataka o maržama',
+    hint: 'RUC izveštaj zahteva prodajne cene u Katalogu proizvoda. Idite na tab Upravljanje → dodajte prodajne cene za artikle.',
+  },
+  categorySpending: {
+    title: 'Nema kategorisanih stavki',
+    hint: 'Dodelite kategorije artiklima u Katalogu proizvoda (tab Upravljanje). Nekategorisani artikli se prikazuju kao "Nekategorisano".',
+  },
+};
+
+function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'reports'>>; templateId?: string }) {
+  const hint = templateId ? EMPTY_HINTS[templateId] : null;
   return (
     <div className="flex flex-col items-center justify-center py-16 bg-white border border-gray-200 rounded-xl">
       <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
@@ -532,8 +568,8 @@ function EmptyState({ t }: { t: ReturnType<typeof useTranslations<'reports'>> })
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
       </div>
-      <p className="text-sm font-medium text-gray-700">{t('noData')}</p>
-      <p className="text-xs text-gray-400 mt-0.5">{t('noDataDesc')}</p>
+      <p className="text-sm font-medium text-gray-700">{hint?.title ?? t('noData')}</p>
+      <p className="text-xs text-gray-400 mt-1 max-w-sm text-center">{hint?.hint ?? t('noDataDesc')}</p>
     </div>
   );
 }
@@ -725,7 +761,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             <p className="text-sm text-gray-500">{t('noDataDesc')}</p>
           </div>
         ) : !hasItems() ? (
-          <EmptyState t={t} />
+          <EmptyState t={t} templateId={templateId} />
         ) : (
           <>
             {templateId === 'receivedGoods' && (
