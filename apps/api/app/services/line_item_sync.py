@@ -32,6 +32,7 @@ def sync_line_items_raw_sql(
     seller: dict | None,
     invoice_date: str | None,
     currency: str,
+    client_id: str | None = None,
 ) -> None:
     """Rebuild invoice_line_items rows using a SQLAlchemy sync session.
 
@@ -72,14 +73,14 @@ def sync_line_items_raw_sql(
             session.execute(
                 text("""
                     INSERT INTO invoice_line_items (
-                        id, invoice_id, organization_id,
+                        id, invoice_id, organization_id, client_id,
                         description, quantity, unit_price,
                         discount, tax_base, total,
                         tax_rate, tax_amount,
                         seller_name, seller_pib,
                         invoice_date, currency
                     ) VALUES (
-                        :id, :invoice_id, :organization_id,
+                        :id, :invoice_id, :organization_id, :client_id,
                         :description, :quantity, :unit_price,
                         :discount, :tax_base, :total,
                         :tax_rate, :tax_amount,
@@ -91,6 +92,7 @@ def sync_line_items_raw_sql(
                     "id": str(uuid.uuid4()),
                     "invoice_id": invoice_id,
                     "organization_id": organization_id,
+                    "client_id": client_id,
                     "description": item.get("description") or "",
                     "quantity": item.get("quantity"),
                     "unit_price": item.get("unit_price"),
@@ -156,12 +158,15 @@ async def sync_line_items_orm(
         invoice_date = invoice.invoice_date
         currency: str = invoice.currency or "RSD"
 
+        client_id = getattr(invoice, "client_id", None)
+
         new_rows = []
         for item in line_items:
             new_rows.append(
                 InvoiceLineItem(
                     invoice_id=invoice.id,
                     organization_id=invoice.organization_id,
+                    client_id=client_id,
                     description=item.get("description") or "",
                     quantity=item.get("quantity"),
                     unit_price=item.get("unit_price"),

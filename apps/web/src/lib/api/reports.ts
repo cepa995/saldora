@@ -13,6 +13,7 @@ export interface ReportParams {
   date_to?: string;
   seller_pib?: string;
   description?: string;
+  client_id?: string;
 }
 
 function buildQuery(params: ReportParams): string {
@@ -21,6 +22,7 @@ function buildQuery(params: ReportParams): string {
   if (params.date_to) qs.set('date_to', params.date_to);
   if (params.seller_pib) qs.set('seller_pib', params.seller_pib);
   if (params.description) qs.set('description', params.description);
+  if (params.client_id) qs.set('client_id', params.client_id);
   const str = qs.toString();
   return str ? `?${str}` : '';
 }

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useClient } from '@/contexts/ClientContext';
 import {
   fetchReceivedGoods,
   fetchSpendingBySupplier,
@@ -569,6 +570,7 @@ interface ReportContentProps {
 export default function ReportContent({ selectedTemplate }: ReportContentProps) {
   const t = useTranslations('reports');
   const templateId = selectedTemplate as TemplateId;
+  const { selectedClientId } = useClient();
 
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(`${now.getFullYear()}-01-01`);
@@ -590,6 +592,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
       date_to: dateTo || undefined,
       seller_pib: sellerPib.trim() || undefined,
       description: description.trim() || undefined,
+      client_id: selectedClientId || undefined,
     };
 
     try {

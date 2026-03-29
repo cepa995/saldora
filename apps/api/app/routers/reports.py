@@ -48,6 +48,7 @@ def _build_conditions(
     date_to: date | None,
     seller_pib: str | None,
     search: str | None,
+    client_id: str | None = None,
 ) -> list:
     """Build a list of SQLAlchemy WHERE conditions for line item queries.
 
@@ -57,6 +58,7 @@ def _build_conditions(
         date_to: Inclusive upper bound for invoice_date.
         seller_pib: Exact PIB filter; skipped when None.
         search: Case-insensitive substring filter on description; skipped when None.
+        client_id: Filter to a specific agency client; skipped when None.
 
     Returns:
         List of SQLAlchemy column expressions suitable for .where(*conditions).
@@ -70,6 +72,8 @@ def _build_conditions(
         conditions.append(InvoiceLineItem.seller_pib == seller_pib)
     if search:
         conditions.append(InvoiceLineItem.description.ilike(f"%{search}%"))
+    if client_id:
+        conditions.append(InvoiceLineItem.client_id == client_id)
     return conditions
 
 
@@ -86,6 +90,7 @@ async def get_received_goods(
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
 ) -> ReceivedGoodsResponse:
     """Return received goods aggregated by line item description.
 
@@ -104,7 +109,9 @@ async def get_received_goods(
     Returns:
         Aggregated received-goods rows with grand total and item count.
     """
-    conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(
+        user.organization_id, date_from, date_to, seller_pib, search, client_id
+    )
 
     query = (
         select(
@@ -152,6 +159,7 @@ async def get_spending_by_supplier(
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
 ) -> SpendingBySupplierResponse:
     """Return total spending grouped by supplier.
 
@@ -169,7 +177,9 @@ async def get_spending_by_supplier(
     Returns:
         Per-supplier spending rows with grand total.
     """
-    conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(
+        user.organization_id, date_from, date_to, seller_pib, search, client_id
+    )
 
     query = (
         select(
@@ -213,6 +223,7 @@ async def get_monthly_breakdown(
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=500),
 ) -> MonthlyBreakdownResponse:
@@ -234,7 +245,9 @@ async def get_monthly_breakdown(
     Returns:
         Paginated line items with aggregate total amount and total row count.
     """
-    conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(
+        user.organization_id, date_from, date_to, seller_pib, search, client_id
+    )
 
     # Aggregate totals across the full result set
     agg_query = select(
@@ -297,6 +310,7 @@ async def get_price_comparison(
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
 ) -> PriceComparisonResponse:
     """Return price statistics grouped by description and supplier.
 
@@ -319,7 +333,9 @@ async def get_price_comparison(
     Raises:
         HTTPException: 422 if search parameter is missing (enforced by FastAPI).
     """
-    conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(
+        user.organization_id, date_from, date_to, seller_pib, search, client_id
+    )
 
     # Use canonical product name if linked, otherwise raw description
     item_name = func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description)
@@ -398,6 +414,7 @@ async def get_expense_summary(
     date_to: date | None = Query(default=None),
     seller_pib: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
     group_by: str = Query(default="month"),
 ) -> ExpenseSummaryResponse:
     """Return total expenses bucketed by time period.
@@ -427,7 +444,9 @@ async def get_expense_summary(
             detail="group_by must be 'month' or 'week'",
         )
 
-    conditions = _build_conditions(user.organization_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(
+        user.organization_id, date_from, date_to, seller_pib, search, client_id
+    )
 
     period_trunc = func.date_trunc(group_by, InvoiceLineItem.invoice_date)
 
@@ -470,6 +489,7 @@ async def kalkulacija_report(
     date_to: date = Query(...),
     seller_pib: str | None = Query(None),
     search: str | None = Query(None),
+    client_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> KalkulacijaResponse:
@@ -491,7 +511,7 @@ async def kalkulacija_report(
         Kalkulacija report with per-item price calculations.
     """
     org_id = current_user.organization_id
-    conditions = _build_conditions(org_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(org_id, date_from, date_to, seller_pib, search, client_id)
 
     # Join with product_catalog to get margin/selling_price
     query = (
@@ -567,6 +587,7 @@ async def ruc_report(
     date_to: date = Query(...),
     seller_pib: str | None = Query(None),
     search: str | None = Query(None),
+    client_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RucResponse:
@@ -588,7 +609,7 @@ async def ruc_report(
         RUC report with per-product margin analysis.
     """
     org_id = current_user.organization_id
-    conditions = _build_conditions(org_id, date_from, date_to, seller_pib, search)
+    conditions = _build_conditions(org_id, date_from, date_to, seller_pib, search, client_id)
 
     # Group by product (canonical name or raw description)
     canonical = func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description)
@@ -660,6 +681,7 @@ async def ruc_report(
 @router.get("/dpu")
 async def dpu_report(
     date: date = Query(...),
+    client_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -692,6 +714,7 @@ async def dpu_report(
         .where(
             InvoiceLineItem.organization_id == org_id,
             InvoiceLineItem.invoice_date == date,
+            *([InvoiceLineItem.client_id == client_id] if client_id else []),
         )
         .group_by(
             func.coalesce(ProductCatalog.canonical_name, InvoiceLineItem.description),
@@ -736,6 +759,7 @@ async def dpu_report(
 async def spending_by_category(
     date_from: date = Query(...),
     date_to: date = Query(...),
+    client_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CategorySpendingResponse:
@@ -754,7 +778,7 @@ async def spending_by_category(
         Spending totals per category.
     """
     org_id = current_user.organization_id
-    conditions = _build_conditions(org_id, date_from, date_to, None, None)
+    conditions = _build_conditions(org_id, date_from, date_to, None, None, client_id)
 
     cat_label = func.coalesce(ProductCatalog.category, "Nekategorisano")
 
