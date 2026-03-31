@@ -284,55 +284,19 @@ async def update_client(
     )
 
 
-@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_client(
-    client_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("manager")),
-) -> None:
-    """Deactivate a client (soft-delete).
-
-    Sets is_active=False. Does not hard-delete because invoices
-    reference this client.
-
-    Args:
-        client_id: Client UUID.
-
-    Raises:
-        HTTPException: 404 if not found or not in user's org.
-    """
-    result = await db.execute(
-        select(Client).where(
-            and_(
-                Client.id == client_id,
-                Client.organization_id == user.organization_id,
-            )
-        )
-    )
-    client = result.scalar_one_or_none()
-    if client is None:
-        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
-
-    client.is_active = False
-    await db.commit()
-
-
-@router.post("/{client_id}/reactivate", status_code=status.HTTP_200_OK)
-async def reactivate_client(
+@router.post("/{client_id}/toggle-active", status_code=status.HTTP_200_OK)
+async def toggle_client_active(
     client_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("manager")),
 ) -> dict:
-    """Reactivate a previously deactivated client.
+    """Toggle client active/inactive status.
 
     Args:
         client_id: Client UUID.
 
     Returns:
-        Reactivated client.
-
-    Raises:
-        HTTPException: 404 if not found or not in user's org.
+        Updated client with new is_active status.
     """
     result = await db.execute(
         select(Client).where(
@@ -346,10 +310,57 @@ async def reactivate_client(
     if client is None:
         raise HTTPException(status_code=404, detail="Klijent nije pronađen")
 
-    client.is_active = True
+    client.is_active = not client.is_active
     await db.commit()
     await db.refresh(client)
-    return {"id": str(client.id), "name": client.name, "is_active": True}
+    return {"id": str(client.id), "name": client.name, "is_active": client.is_active}
+
+
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_client(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> None:
+    """Permanently delete a client.
+
+    Unlinks all invoices and line items from this client before deletion.
+    Requires admin role.
+
+    Args:
+        client_id: Client UUID.
+
+    Raises:
+        HTTPException: 404 if not found or not in user's org.
+    """
+    from sqlalchemy import update
+
+    from app.models.line_item import InvoiceLineItem
+
+    result = await db.execute(
+        select(Client).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+
+    # Unlink invoices and line items
+    await db.execute(
+        update(Invoice).where(Invoice.client_id == client_id).values(client_id=None)
+    )
+    await db.execute(
+        update(InvoiceLineItem)
+        .where(InvoiceLineItem.client_id == client_id)
+        .values(client_id=None)
+    )
+
+    await db.delete(client)
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------

@@ -89,11 +89,8 @@ export async function deleteClient(id: string): Promise<void> {
 }
 
 /**
- * Reactivate a previously deactivated client.
- *
- * Args:
- *   id - UUID of the client to reactivate.
+ * Toggle client active/inactive status.
  */
-export async function reactivateClient(id: string): Promise<void> {
-  await apiClient<void>(`/api/v1/clients/${id}/reactivate`, { method: 'POST' });
+export async function toggleClientActive(id: string): Promise<{ is_active: boolean }> {
+  return apiClient<{ is_active: boolean }>(`/api/v1/clients/${id}/toggle-active`, { method: 'POST' });
 }
