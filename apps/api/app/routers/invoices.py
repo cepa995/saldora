@@ -1278,6 +1278,7 @@ async def verify_invoice(
     invoice_id: UUID,
     request: Request,
     background_tasks: BackgroundTasks,
+    force: bool = Query(default=False, description="Force verify even if duplicate (admin only)"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("operator")),
 ) -> InvoiceResponse:
@@ -1356,10 +1357,19 @@ async def verify_invoice(
     # Mathematical verification
     verification_warnings.extend(verify_calculations(invoice))
 
-    # Duplicate detection
+    # Duplicate detection — blocks verification unless force=True (admin only)
     dup_warning = await check_duplicates(db, invoice, user.organization_id)
     if dup_warning:
-        verification_warnings.append(dup_warning)
+        if force and user.role == "admin":
+            verification_warnings.append(
+                {**dup_warning, "message": dup_warning["message"] + " (admin override)"}
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=dup_warning["message"]
+                + ". Kontaktirajte administratora za ručno odobrenje.",
+            )
 
     # Append verification warnings to invoice
     if verification_warnings:

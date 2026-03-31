@@ -253,26 +253,28 @@ async def check_duplicates(
     conditions = [
         Invoice.organization_id == organization_id,
         Invoice.invoice_number == invoice.invoice_number,
-        Invoice.invoice_date == invoice.invoice_date,
         Invoice.id != invoice.id,
+        Invoice.status != "error",
     ]
 
-    query = select(Invoice.id).where(and_(*conditions)).limit(1)
-    result = await db.execute(query)
-    duplicate = result.scalar_one_or_none()
+    # Add seller PIB match if available (stronger duplicate signal)
+    if seller_pib:
+        conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
 
-    if duplicate is None and seller_pib:
-        # Also check with seller PIB match for stronger confidence
-        return None
+    query = select(Invoice.id, Invoice.invoice_number).where(and_(*conditions)).limit(1)
+    result = await db.execute(query)
+    duplicate = result.first()
 
     if duplicate is not None:
         return {
             "message": (
-                f"Moguć duplikat: faktura {invoice.invoice_number} sa istim datumom "
-                f"već postoji u sistemu"
+                f"Duplikat: faktura br. {invoice.invoice_number}"
+                + (f" od dobavljača sa PIB {seller_pib}" if seller_pib else "")
+                + " već postoji u sistemu"
             ),
-            "severity": "warning",
+            "severity": "error",
             "field_name": "invoice_number",
+            "duplicate_id": str(duplicate[0]),
         }
 
     return None
