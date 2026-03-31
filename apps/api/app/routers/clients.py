@@ -317,6 +317,41 @@ async def delete_client(
     await db.commit()
 
 
+@router.post("/{client_id}/reactivate", status_code=status.HTTP_200_OK)
+async def reactivate_client(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("manager")),
+) -> dict:
+    """Reactivate a previously deactivated client.
+
+    Args:
+        client_id: Client UUID.
+
+    Returns:
+        Reactivated client.
+
+    Raises:
+        HTTPException: 404 if not found or not in user's org.
+    """
+    result = await db.execute(
+        select(Client).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+
+    client.is_active = True
+    await db.commit()
+    await db.refresh(client)
+    return {"id": str(client.id), "name": client.name, "is_active": True}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

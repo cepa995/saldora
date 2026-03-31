@@ -87,3 +87,13 @@ export async function updateClient(
 export async function deleteClient(id: string): Promise<void> {
   await apiClient<void>(`/api/v1/clients/${id}`, { method: 'DELETE' });
 }
+
+/**
+ * Reactivate a previously deactivated client.
+ *
+ * Args:
+ *   id - UUID of the client to reactivate.
+ */
+export async function reactivateClient(id: string): Promise<void> {
+  await apiClient<void>(`/api/v1/clients/${id}/reactivate`, { method: 'POST' });
+}

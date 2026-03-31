@@ -56,6 +56,15 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setClients(result.data);
         setIsAgency(true);
+
+        // Clear selection if the selected client was deactivated
+        setSelectedClientId((prev) => {
+          if (prev && !result.data.some((c: ClientResponse) => c.id === prev)) {
+            try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+            return null;
+          }
+          return prev;
+        });
       } catch (err: unknown) {
         if (cancelled) return;
         if (isPlanError(err)) {

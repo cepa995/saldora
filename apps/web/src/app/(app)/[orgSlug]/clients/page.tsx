@@ -224,12 +224,27 @@ export default function ClientsPage() {
                     >
                       {tc('edit')}
                     </button>
-                    <button
-                      onClick={() => setDeleteConfirm(client.id)}
-                      className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      {tc('delete')}
-                    </button>
+                    {client.is_active ? (
+                      <button
+                        onClick={() => setDeleteConfirm(client.id)}
+                        className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        {tc('delete')}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const { reactivateClient } = await import('@/lib/api/clients');
+                            await reactivateClient(client.id);
+                            loadClients();
+                          } catch { /* ignore */ }
+                        }}
+                        className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      >
+                        Aktiviraj
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
