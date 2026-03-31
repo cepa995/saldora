@@ -96,7 +96,17 @@ async def create_client(
             detail=f"Klijent sa PIB-om {body.pib} već postoji",
         )
     await db.refresh(client)
-    return _build_client_response(client, invoice_count=0, total_amount=None)
+
+    # Retroactively assign unassigned invoices matching this client's PIB
+    assigned_count = await _retroactive_client_assignment(db, client)
+    logger.info(
+        "Client %s created (PIB: %s), retroactively assigned %d invoices",
+        client.id,
+        client.pib,
+        assigned_count,
+    )
+
+    return _build_client_response(client, invoice_count=assigned_count, total_amount=None)
 
 
 @router.get("/", response_model=ClientListResponse)
@@ -305,3 +315,63 @@ async def delete_client(
 
     client.is_active = False
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _retroactive_client_assignment(
+    db: AsyncSession,
+    client: Client,
+) -> int:
+    """Assign unassigned invoices to the newly created client by PIB match.
+
+    Scans all invoices in the same organization where:
+    - client_id is NULL
+    - seller.pib matches the client's PIB
+
+    Also updates corresponding invoice_line_items rows.
+
+    Args:
+        db: Active database session.
+        client: The newly created Client.
+
+    Returns:
+        Number of invoices assigned.
+    """
+    from sqlalchemy import update
+
+    from app.models.line_item import InvoiceLineItem
+
+    # Find unassigned invoices where seller PIB matches
+    result = await db.execute(
+        select(Invoice).where(
+            Invoice.organization_id == client.organization_id,
+            Invoice.client_id.is_(None),
+        )
+    )
+    invoices = result.scalars().all()
+
+    assigned = 0
+    for inv in invoices:
+        seller = inv.seller if isinstance(inv.seller, dict) else {}
+        if seller.get("pib") == client.pib:
+            inv.client_id = client.id
+            assigned += 1
+
+    if assigned:
+        # Also update denormalized line items
+        await db.execute(
+            update(InvoiceLineItem)
+            .where(
+                InvoiceLineItem.organization_id == client.organization_id,
+                InvoiceLineItem.seller_pib == client.pib,
+                InvoiceLineItem.client_id.is_(None),
+            )
+            .values(client_id=client.id)
+        )
+        await db.commit()
+
+    return assigned
