@@ -874,7 +874,7 @@ Selects a group (Opšti / Nabavka i prodaja / Upravljanje)
 Clicks a tab within the group
         │
         ▼
-Sets filters: date range, optional supplier, optional keyword
+Sets filters: date range, optional supplier, optional keyword, optional client (Agency plan)
         │
         ▼
 Results table loads instantly (SQL aggregation — no AI)

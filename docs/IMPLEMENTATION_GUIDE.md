@@ -1650,10 +1650,11 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
   - `ClientListResponse`: paginated list with `items[]`, `total`, `page`, `per_page`
 - Create `apps/api/app/routers/clients.py` with endpoints:
   - `GET /api/v1/clients` — list clients for organization (paginated, searchable by name/PIB)
-  - `POST /api/v1/clients` — create client (validate PIB uniqueness within org)
+  - `POST /api/v1/clients` — create client (validate PIB uniqueness within org); retroactively assigns existing unassigned invoices with matching seller PIB
   - `GET /api/v1/clients/{id}` — get client details with invoice count
   - `PUT /api/v1/clients/{id}` — update client
-  - `DELETE /api/v1/clients/{id}` — soft-delete (set `is_active = False`)
+  - `POST /api/v1/clients/{id}/toggle-active` — flip `is_active`; deactivated clients hidden from selector but data retained
+  - `DELETE /api/v1/clients/{id}` — hard delete; sets `client_id = NULL` on all linked invoices and line items before removing the client record
 - All endpoints gated behind `CLIENT_MANAGEMENT` feature flag
 - All endpoints scoped to authenticated user's `organization_id`
 - Register router in `apps/api/app/main.py`
@@ -1765,7 +1766,7 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
   - `GET /api/v1/reports/monthly-breakdown` — paginated flat line item list sorted by date DESC; supports `?page=` and `?page_size=`
   - `GET /api/v1/reports/price-comparison` — group by description, MIN/MAX/AVG unit_price, filter to items with >1 distinct supplier
   - `GET /api/v1/reports/expense-summary` — group by month or week (controlled by `?group_by=month|week`), SUM total, COUNT distinct invoices
-- All endpoints share common query params: `date_from`, `date_to`, `supplier_pib` (optional), `search` (optional, case-insensitive description filter)
+- All endpoints share common query params: `date_from`, `date_to`, `supplier_pib` (optional), `search` (optional, case-insensitive description filter), `client_id` (optional UUID, Agency plan — filters to a specific client's line items)
 - All endpoints accept `Accept: text/csv` or `?format=csv` and return UTF-8 BOM CSV with semicolon delimiter and Serbian column headers
 - Add `REPORTS` feature flag to `apps/api/app/plans.py` — enabled for Professional and Agency plans; Starter returns 403
 - Create `apps/api/app/schemas/reports.py` with Pydantic response models for each report type

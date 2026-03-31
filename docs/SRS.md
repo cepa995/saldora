@@ -1,7 +1,7 @@
 # Software Requirements Specification (SRS)
 # Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 2.9
+**Version:** 3.0
 **Date:** March 2026
 **Status:** Draft
 
@@ -476,10 +476,10 @@ FakturaAI operates as a standalone web application with the following integratio
 #### FR-4.4.3 Duplicate Detection
 | ID | FR-4.4.3 |
 |----|----------|
-| **Description** | System MUST detect and block duplicate invoices |
-| **Criteria** | Same invoice number + seller PIB within the same organization |
-| **Action** | 🚫 Block upload with "Faktura sa ovim brojem od ovog dobavljača već postoji" |
-| **Override** | Admin can force-process with explicit confirmation |
+| **Description** | System MUST detect and block duplicate invoices at verification time |
+| **Criteria** | Same invoice number + seller PIB within the same organization, where the existing invoice has status `verified` or `exported` |
+| **Action** | Return HTTP 409 with message "Faktura sa ovim brojem od ovog dobavljača već postoji" |
+| **Override** | Admin can force-verify by passing `?force=true` query parameter; non-admins always receive 409 |
 
 **Duplicate Detection Logic:**
 ```
@@ -488,11 +488,13 @@ DUPLICATE_CHECK(invoice, organization_id):
     invoice_number == invoice.invoice_number
     AND seller_pib == invoice.seller.pib
     AND organization_id == organization_id
-    AND status != 'error'
+    AND status IN ('verified', 'exported')
   ):
-    BLOCK("Faktura sa ovim brojem od ovog dobavljača već postoji")
-    SHOW_LINK_TO_EXISTING(existing_invoice_id)
-    ALLOW_ADMIN_OVERRIDE("Ipak obradi")
+    RETURN HTTP 409 ("Faktura sa ovim brojem od ovog dobavljača već postoji")
+    IF caller is admin AND force=true:
+      CONTINUE verification
+    ELSE:
+      BLOCK
 ```
 
 ### 4.5 Data Review & Editing
@@ -589,6 +591,7 @@ DUPLICATE_CHECK(invoice, organization_id):
 | **Description** | System MUST track usage against subscription limits |
 | **Display** | Current usage, remaining quota, usage history |
 | **Alerts** | Notification at 80%, 90%, 100% of limit |
+| **Implementation** | Monthly invoice counts are tracked in the write-only `usage_records` table (incremented on successful processing). Plan limits are checked against this counter, NOT by counting live invoices. This prevents billing exploits where deleting invoices would reset usage. |
 
 #### FR-4.7.3 Processing History
 | ID | FR-4.7.3 |
@@ -1661,21 +1664,23 @@ This section defines the Client Management feature available exclusively to orga
 #### FR-4.12.1 Client CRUD
 | ID | FR-4.12.1 |
 |----|-----------|
-| **Description** | System MUST allow Agency-plan users to create, list, update, and soft-delete clients |
+| **Description** | System MUST allow Agency-plan users to create, list, update, deactivate, and delete clients |
 | **Create** | Name (required), PIB (required, unique per organization, validated format), contact email, address, notes |
 | **List** | Paginated list with search by name or PIB; supports `?search=` and `?page=`/`?page_size=` query params |
 | **Update** | All client fields except `organization_id` and `id` |
-| **Soft-Delete** | Sets `is_active = false`; client data retained for audit; invoices remain linked |
+| **Toggle Active** | `POST /clients/{id}/toggle-active` flips `is_active`; deactivated clients are hidden from the selector but data is retained |
+| **Hard Delete** | `DELETE /clients/{id}` permanently removes the client record and sets `client_id = NULL` on all linked invoices and line items; no soft-delete |
 | **Authorization** | Only users in organizations with `CLIENT_MANAGEMENT` feature flag enabled |
 
 #### FR-4.12.2 Invoice Auto-Assignment via PIB Matching
 | ID | FR-4.12.2 |
 |----|-----------|
-| **Description** | After OCR extraction, the system MUST automatically assign an invoice to the matching client based on the seller PIB |
-| **Matching Logic** | Compare extracted `seller.pib` against all active clients' PIBs within the same organization |
+| **Description** | The system MUST automatically assign invoices to the matching client based on the seller PIB, both during OCR processing and retroactively when a new client is created |
+| **Matching Logic** | Compare `seller.pib` against all active clients' PIBs within the same organization |
 | **Match Found** | Set `invoice.client_id` to the matched client's ID |
 | **No Match** | Leave `invoice.client_id` as NULL; invoice remains unassigned |
-| **Timing** | Assignment occurs during the post-OCR processing pipeline, before the invoice is saved |
+| **Timing (OCR)** | Assignment occurs during the post-OCR processing pipeline, before the invoice is saved |
+| **Timing (Retroactive)** | When a new client is created, the system immediately searches for existing unassigned invoices (`client_id IS NULL`) whose `seller.pib` matches the new client's PIB and assigns them |
 
 #### FR-4.12.3 Invoice Scoping by Client
 | ID | FR-4.12.3 |
@@ -1717,6 +1722,7 @@ CREATE TABLE invoice_line_items (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    client_id     UUID REFERENCES clients(id) ON DELETE SET NULL,  -- nullable; set via PIB matching
     description   TEXT,
     quantity      NUMERIC(12, 4),
     unit_price    NUMERIC(15, 4),
@@ -1733,6 +1739,7 @@ CREATE INDEX ix_invoice_line_items_org     ON invoice_line_items(organization_id
 CREATE INDEX ix_invoice_line_items_invoice ON invoice_line_items(invoice_id);
 CREATE INDEX ix_invoice_line_items_date    ON invoice_line_items(invoice_date);
 CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
+CREATE INDEX ix_ili_client_id              ON invoice_line_items(client_id);
 ```
 
 #### 4.13.2 Report Templates
@@ -1745,6 +1752,7 @@ All report endpoints live under `/api/v1/reports/` and accept a common set of qu
 | `date_to` | `YYYY-MM-DD` | End of reporting period (required) |
 | `supplier_pib` | String | Optional — filter to a single supplier |
 | `search` | String | Optional — keyword filter on item description (case-insensitive) |
+| `client_id` | UUID | Optional — filter to a specific agency client (Agency plan only; ignored on other plans) |
 
 ##### FR-4.13.2.1 Received Goods Report (`/received-goods`)
 
@@ -2601,6 +2609,7 @@ CREATE TABLE invoice_line_items (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    client_id     UUID REFERENCES clients(id) ON DELETE SET NULL,  -- nullable; set via PIB matching (migration 0008)
     description   TEXT,
     quantity      NUMERIC(12, 4),
     unit_price    NUMERIC(15, 4),
@@ -2620,6 +2629,7 @@ CREATE INDEX ix_invoice_line_items_org      ON invoice_line_items(organization_i
 CREATE INDEX ix_invoice_line_items_invoice  ON invoice_line_items(invoice_id);
 CREATE INDEX ix_invoice_line_items_date     ON invoice_line_items(invoice_date);
 CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
+CREATE INDEX ix_ili_client_id              ON invoice_line_items(client_id);
 ```
 
 #### 7.2.6 product_catalog
@@ -5010,6 +5020,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
 | 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
 | 2.9 | March 2026 | Saldora Team | Added In-App Support System spec (4.16). Updated MiniMax API field reference (12.5.4). Updated security hardening details (10.1, 10.3). Added serverless GPU deployment options (9.7). Updated confidence display from percentages to text labels (4.3.3). |
+| 3.0 | March 2026 | Saldora Team | Client management: replaced soft-delete with hard DELETE (unlinks invoices); added toggle-active endpoint (4.12.1); added retroactive PIB assignment on client creation (4.12.2). Reports: added client_id filter to all report endpoints and query parameter table (4.13.2); added client_id FK to invoice_line_items schema (4.13.1, 7.2.5, migration 0008). Billing: documented write-only usage_records counter for plan limit checks; deleting invoices no longer resets monthly usage (4.7.2). Duplicate detection: clarified 409 response, verified/exported-only scope, and ?force=true admin override (4.4.3). |
 
 ---
 
