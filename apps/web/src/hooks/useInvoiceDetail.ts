@@ -92,13 +92,16 @@ export function useInvoiceDetail(id: string): UseInvoiceDetailReturn {
       setEditedFields({});
       return true;
     } catch (err: unknown) {
-      const apiErr = err as { message?: string; status?: number };
-      if (apiErr?.status === 400 && apiErr.message?.includes("'verified'")) {
+      const apiErr = err as { message?: string; status?: number; detail?: string };
+      const msg = apiErr?.detail || apiErr?.message || '';
+      if (apiErr?.status === 409) {
+        setError(msg || 'Duplikat fakture — faktura sa istim brojem već postoji');
+      } else if (apiErr?.status === 400 && msg.includes("'verified'")) {
         setError('Faktura je već verifikovana');
-      } else if (apiErr?.status === 400 && apiErr.message?.includes('status')) {
+      } else if (apiErr?.status === 400 && msg.includes('status')) {
         setError('Faktura nije u statusu za verifikaciju');
       } else {
-        setError(apiErr?.message || 'Greška pri verifikaciji fakture');
+        setError(msg || 'Greška pri verifikaciji fakture');
       }
       return false;
     } finally {

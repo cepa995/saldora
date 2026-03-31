@@ -1371,9 +1371,8 @@ async def verify_invoice(
                 + ". Kontaktirajte administratora za ručno odobrenje.",
             )
 
-    # Append verification warnings to invoice
-    if verification_warnings:
-        invoice.warnings = (invoice.warnings or []) + verification_warnings
+    # Replace verification warnings (not append — prevents duplicates on re-verify)
+    invoice.warnings = verification_warnings
 
     # Generate accounting intent (non-blocking).
     # Uses a savepoint so a failure here does not poison the parent transaction.
