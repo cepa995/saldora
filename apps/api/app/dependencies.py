@@ -8,13 +8,12 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-from sqlalchemy import extract, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import decode_token
 from app.database import get_db
 from app.models.invitation import Invitation
-from app.models.invoice import Invoice
 from app.models.organization import Organization
 from app.models.user import User
 from app.plans import PLANS, Feature, PlanTier, get_plan
@@ -229,17 +228,18 @@ def check_invoice_quota() -> Callable:
         plan_name = result.scalar_one_or_none() or "free"
         plan_def = get_plan(plan_name)
 
+        from app.models.usage_record import UsageRecord
+
         now = datetime.now(UTC)
-        count_result = await db.execute(
-            select(func.count())
-            .select_from(Invoice)
-            .where(
-                Invoice.organization_id == user.organization_id,
-                extract("year", Invoice.created_at) == now.year,
-                extract("month", Invoice.created_at) == now.month,
+        period_start = now.replace(day=1).date()
+
+        usage_result = await db.execute(
+            select(UsageRecord.invoices_count).where(
+                UsageRecord.organization_id == user.organization_id,
+                UsageRecord.period_start == period_start,
             )
         )
-        monthly_usage = count_result.scalar() or 0
+        monthly_usage = usage_result.scalar() or 0
 
         invoice_limit = plan_def.invoice_limit
         if invoice_limit is not None and monthly_usage >= invoice_limit:

@@ -470,7 +470,59 @@ async def upload_batch(
     # Commit all successful invoices in one transaction
     await db.commit()
 
+    # Increment usage record (never decremented — survives invoice deletion)
+    success_count = sum(1 for r in results if r.status == "processing")
+    if success_count > 0:
+        await _increment_usage(db, user.organization_id, success_count)
+
     return results
+
+
+async def _increment_usage(
+    db: AsyncSession,
+    organization_id: UUID,
+    count: int,
+) -> None:
+    """Increment monthly usage counter (write-only, never decremented).
+
+    Creates a usage_records row for the current month if it doesn't exist,
+    then increments invoices_count. This counter persists even if invoices
+    are deleted, preventing billing exploits.
+
+    Args:
+        db: Database session.
+        organization_id: Organization to increment for.
+        count: Number of invoices to add.
+    """
+    from app.models.usage_record import UsageRecord
+
+    now = datetime.now(UTC)
+    period_start = now.replace(day=1).date()
+    if now.month == 12:
+        period_end = now.replace(year=now.year + 1, month=1, day=1).date()
+    else:
+        period_end = now.replace(month=now.month + 1, day=1).date()
+
+    result = await db.execute(
+        select(UsageRecord).where(
+            UsageRecord.organization_id == organization_id,
+            UsageRecord.period_start == period_start,
+        )
+    )
+    record = result.scalar_one_or_none()
+
+    if record:
+        record.invoices_count += count
+    else:
+        record = UsageRecord(
+            organization_id=organization_id,
+            period_start=period_start,
+            period_end=period_end,
+            invoices_count=count,
+        )
+        db.add(record)
+
+    await db.commit()
 
 
 def _json_safe(obj):
