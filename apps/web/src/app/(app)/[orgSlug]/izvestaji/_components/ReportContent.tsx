@@ -206,37 +206,52 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
 }
 
 function PriceComparisonTable({ data, t }: { data: PriceComparisonResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
+  // Group flat rows by description for side-by-side comparison
+  const grouped = new Map<string, typeof data.items>();
+  for (const item of data.items) {
+    const key = item.description;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(item);
+  }
+
   return (
     <div className="space-y-3">
-      {data.items.map((item, i) => (
-        <div key={i} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3">
-            <span className="text-sm font-semibold text-gray-900 truncate">{item.description}</span>
-            <div className="flex items-center gap-3 shrink-0 text-xs text-gray-500">
-              <span>min <span className="font-medium text-gray-700">{fmtNum(item.global_min)}</span></span>
-              <span>avg <span className="font-medium text-gray-700">{fmtNum(item.global_avg)}</span></span>
-              <span>max <span className="font-medium text-gray-700">{fmtNum(item.global_max)}</span></span>
+      {Array.from(grouped.entries()).map(([desc, rows]) => {
+        const allPrices = rows.map((r) => r.avg_unit_price).filter((p): p is number => p != null);
+        const globalMin = allPrices.length ? Math.min(...allPrices) : null;
+        const globalMax = allPrices.length ? Math.max(...allPrices) : null;
+        const globalAvg = allPrices.length ? allPrices.reduce((a, b) => a + b, 0) / allPrices.length : null;
+
+        return (
+          <div key={desc} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-gray-900 truncate">{desc}</span>
+              <div className="flex items-center gap-3 shrink-0 text-xs text-gray-500">
+                <span>min <span className="font-medium text-gray-700">{fmtNum(globalMin)}</span></span>
+                <span>avg <span className="font-medium text-gray-700">{fmtNum(globalAvg)}</span></span>
+                <span>max <span className="font-medium text-gray-700">{fmtNum(globalMax)}</span></span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <TableHead cols={[t('sellerName'), t('sellerPib'), 'Min', 'Avg', 'Max', t('invoiceCount')]} />
+                <tbody>
+                  {rows.map((row, j) => (
+                    <tr key={j} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
+                      <td className="px-3 py-2.5 text-gray-900 font-medium">{row.seller_name || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{row.seller_pib || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.min_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.avg_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.max_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <TableHead cols={[t('sellerName'), t('sellerPib'), 'Min', 'Avg', 'Max', t('invoiceCount')]} />
-              <tbody>
-                {item.supplier_prices.map((sp, j) => (
-                  <tr key={j} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-3 py-2.5 text-gray-900 font-medium">{sp.seller_name || '—'}</td>
-                    <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{sp.seller_pib || '—'}</td>
-                    <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(sp.min_price)}</td>
-                    <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(sp.avg_price)}</td>
-                    <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(sp.max_price)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{sp.occurrence_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -446,19 +461,17 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
     ];
   } else if (templateId === 'priceComparison') {
     const d = data as PriceComparisonResponse;
-    rows = [['Opis', 'Dobavljac', 'PIB', 'Min', 'Avg', 'Max', 'Br.']];
+    rows = [['Opis', 'Dobavljac', 'PIB', 'Min', 'Avg', 'Max', 'Br. faktura']];
     for (const item of d.items) {
-      for (const sp of item.supplier_prices) {
-        rows.push([
-          item.description,
-          sp.seller_name ?? '',
-          sp.seller_pib ?? '',
-          String(sp.min_price),
-          String(sp.avg_price),
-          String(sp.max_price),
-          String(sp.occurrence_count),
-        ]);
-      }
+      rows.push([
+        item.description,
+        item.seller_name ?? '',
+        item.seller_pib ?? '',
+        String(item.min_unit_price ?? ''),
+        String(item.avg_unit_price ?? ''),
+        String(item.max_unit_price ?? ''),
+        String(item.invoice_count),
+      ]);
     }
   } else if (templateId === 'expenseSummary') {
     const d = data as ExpenseSummaryResponse;

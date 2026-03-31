@@ -125,17 +125,13 @@ export async function fetchMonthlyBreakdown(
 
 export interface PriceComparisonItem {
   description: string;
-  supplier_prices: {
-    seller_name: string | null;
-    seller_pib: string | null;
-    min_price: number;
-    max_price: number;
-    avg_price: number;
-    occurrence_count: number;
-  }[];
-  global_min: number;
-  global_max: number;
-  global_avg: number;
+  seller_name: string | null;
+  seller_pib: string | null;
+  avg_unit_price: number | null;
+  min_unit_price: number | null;
+  max_unit_price: number | null;
+  total_quantity: number | null;
+  invoice_count: number;
 }
 
 export interface PriceComparisonResponse {
