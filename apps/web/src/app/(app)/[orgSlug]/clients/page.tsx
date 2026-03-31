@@ -238,6 +238,7 @@ export default function ClientsPage() {
                             const { reactivateClient } = await import('@/lib/api/clients');
                             await reactivateClient(client.id);
                             loadClients();
+                            refreshContext();
                           } catch { /* ignore */ }
                         }}
                         className="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors"
