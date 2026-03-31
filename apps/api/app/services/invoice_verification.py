@@ -254,7 +254,7 @@ async def check_duplicates(
         Invoice.organization_id == organization_id,
         Invoice.invoice_number == invoice.invoice_number,
         Invoice.id != invoice.id,
-        Invoice.status != "error",
+        Invoice.status.in_(["verified", "exported"]),
     ]
 
     # Add seller PIB match if available (stronger duplicate signal)
