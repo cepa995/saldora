@@ -329,10 +329,9 @@ async def test_duplicate_detected(client: AsyncClient, test_engine):
     )
 
     resp = await client.post(f"/api/v1/invoices/{invoice_id}/verify", headers=headers)
-    assert resp.status_code == 200
+    assert resp.status_code == 409
     data = resp.json()
-    warning_messages = [w for w in data.get("warnings", []) if "duplikat" in w.lower()]
-    assert len(warning_messages) >= 1
+    assert "duplikat" in data.get("detail", "").lower() or "već postoji" in data.get("detail", "").lower()
 
 
 async def test_no_duplicate_different_number(client: AsyncClient, test_engine):
