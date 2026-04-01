@@ -350,13 +350,9 @@ async def delete_client(
         raise HTTPException(status_code=404, detail="Klijent nije pronađen")
 
     # Unlink invoices and line items
+    await db.execute(update(Invoice).where(Invoice.client_id == client_id).values(client_id=None))
     await db.execute(
-        update(Invoice).where(Invoice.client_id == client_id).values(client_id=None)
-    )
-    await db.execute(
-        update(InvoiceLineItem)
-        .where(InvoiceLineItem.client_id == client_id)
-        .values(client_id=None)
+        update(InvoiceLineItem).where(InvoiceLineItem.client_id == client_id).values(client_id=None)
     )
 
     await db.delete(client)
