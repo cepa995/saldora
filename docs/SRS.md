@@ -1,7 +1,7 @@
 # Software Requirements Specification (SRS)
 # Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 2.7
+**Version:** 3.0
 **Date:** March 2026
 **Status:** Draft
 
@@ -19,6 +19,8 @@
    - 4.12 [Client Management (Agency)](#412-client-management-agency)
    - 4.13 [Invoice Reports (Izveštaji)](#413-invoice-reports-izveštaji)
    - 4.14 [Email Ingestion Pipeline](#414-email-ingestion-pipeline)
+   - 4.15 [Product Catalog (Katalog proizvoda)](#415-product-catalog-katalog-proizvoda)
+   - 4.16 [In-App Support System](#416-in-app-support-system)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
@@ -442,7 +444,7 @@ FakturaAI operates as a standalone web application with the following integratio
 | **Description** | System MUST provide confidence scores at both overall and per-field level |
 | **Scale** | 0-100% confidence (stored as 0.0-1.0 in DB, scaled in API) |
 | **Threshold** | Fields below 80% confidence individually flagged with `needs_review: true` |
-| **Display** | Per-field confidence badges (color coded: green > 80%, yellow 60-80%, red < 60%) |
+| **Display** | Text labels instead of percentages: "Pouzdano" (green, ≥75%), "Proveriti" (amber, 50-74%), "Nepouzdano" (red, <50%) |
 | **Field Confidence** | Each extracted field has: `field_name`, `value`, `confidence`, `needs_review` |
 
 #### FR-4.3.4 Multi-Page Document Support
@@ -474,10 +476,10 @@ FakturaAI operates as a standalone web application with the following integratio
 #### FR-4.4.3 Duplicate Detection
 | ID | FR-4.4.3 |
 |----|----------|
-| **Description** | System MUST detect and block duplicate invoices |
-| **Criteria** | Same invoice number + seller PIB within the same organization |
-| **Action** | 🚫 Block upload with "Faktura sa ovim brojem od ovog dobavljača već postoji" |
-| **Override** | Admin can force-process with explicit confirmation |
+| **Description** | System MUST detect and block duplicate invoices at verification time |
+| **Criteria** | Same invoice number + seller PIB within the same organization, where the existing invoice has status `verified` or `exported` |
+| **Action** | Return HTTP 409 with message "Faktura sa ovim brojem od ovog dobavljača već postoji" |
+| **Override** | Admin can force-verify by passing `?force=true` query parameter; non-admins always receive 409 |
 
 **Duplicate Detection Logic:**
 ```
@@ -486,11 +488,13 @@ DUPLICATE_CHECK(invoice, organization_id):
     invoice_number == invoice.invoice_number
     AND seller_pib == invoice.seller.pib
     AND organization_id == organization_id
-    AND status != 'error'
+    AND status IN ('verified', 'exported')
   ):
-    BLOCK("Faktura sa ovim brojem od ovog dobavljača već postoji")
-    SHOW_LINK_TO_EXISTING(existing_invoice_id)
-    ALLOW_ADMIN_OVERRIDE("Ipak obradi")
+    RETURN HTTP 409 ("Faktura sa ovim brojem od ovog dobavljača već postoji")
+    IF caller is admin AND force=true:
+      CONTINUE verification
+    ELSE:
+      BLOCK
 ```
 
 ### 4.5 Data Review & Editing
@@ -587,6 +591,7 @@ DUPLICATE_CHECK(invoice, organization_id):
 | **Description** | System MUST track usage against subscription limits |
 | **Display** | Current usage, remaining quota, usage history |
 | **Alerts** | Notification at 80%, 90%, 100% of limit |
+| **Implementation** | Monthly invoice counts are tracked in the write-only `usage_records` table (incremented on successful processing). Plan limits are checked against this counter, NOT by counting live invoices. This prevents billing exploits where deleting invoices would reset usage. |
 
 #### FR-4.7.3 Processing History
 | ID | FR-4.7.3 |
@@ -1659,21 +1664,23 @@ This section defines the Client Management feature available exclusively to orga
 #### FR-4.12.1 Client CRUD
 | ID | FR-4.12.1 |
 |----|-----------|
-| **Description** | System MUST allow Agency-plan users to create, list, update, and soft-delete clients |
+| **Description** | System MUST allow Agency-plan users to create, list, update, deactivate, and delete clients |
 | **Create** | Name (required), PIB (required, unique per organization, validated format), contact email, address, notes |
 | **List** | Paginated list with search by name or PIB; supports `?search=` and `?page=`/`?page_size=` query params |
 | **Update** | All client fields except `organization_id` and `id` |
-| **Soft-Delete** | Sets `is_active = false`; client data retained for audit; invoices remain linked |
+| **Toggle Active** | `POST /clients/{id}/toggle-active` flips `is_active`; deactivated clients are hidden from the selector but data is retained |
+| **Hard Delete** | `DELETE /clients/{id}` permanently removes the client record and sets `client_id = NULL` on all linked invoices and line items; no soft-delete |
 | **Authorization** | Only users in organizations with `CLIENT_MANAGEMENT` feature flag enabled |
 
 #### FR-4.12.2 Invoice Auto-Assignment via PIB Matching
 | ID | FR-4.12.2 |
 |----|-----------|
-| **Description** | After OCR extraction, the system MUST automatically assign an invoice to the matching client based on the seller PIB |
-| **Matching Logic** | Compare extracted `seller.pib` against all active clients' PIBs within the same organization |
+| **Description** | The system MUST automatically assign invoices to the matching client based on the seller PIB, both during OCR processing and retroactively when a new client is created |
+| **Matching Logic** | Compare `seller.pib` against all active clients' PIBs within the same organization |
 | **Match Found** | Set `invoice.client_id` to the matched client's ID |
 | **No Match** | Leave `invoice.client_id` as NULL; invoice remains unassigned |
-| **Timing** | Assignment occurs during the post-OCR processing pipeline, before the invoice is saved |
+| **Timing (OCR)** | Assignment occurs during the post-OCR processing pipeline, before the invoice is saved |
+| **Timing (Retroactive)** | When a new client is created, the system immediately searches for existing unassigned invoices (`client_id IS NULL`) whose `seller.pib` matches the new client's PIB and assigns them |
 
 #### FR-4.12.3 Invoice Scoping by Client
 | ID | FR-4.12.3 |
@@ -1715,6 +1722,7 @@ CREATE TABLE invoice_line_items (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    client_id     UUID REFERENCES clients(id) ON DELETE SET NULL,  -- nullable; set via PIB matching
     description   TEXT,
     quantity      NUMERIC(12, 4),
     unit_price    NUMERIC(15, 4),
@@ -1731,11 +1739,12 @@ CREATE INDEX ix_invoice_line_items_org     ON invoice_line_items(organization_id
 CREATE INDEX ix_invoice_line_items_invoice ON invoice_line_items(invoice_id);
 CREATE INDEX ix_invoice_line_items_date    ON invoice_line_items(invoice_date);
 CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
+CREATE INDEX ix_ili_client_id              ON invoice_line_items(client_id);
 ```
 
 #### 4.13.2 Report Templates
 
-All five report endpoints live under `/api/v1/reports/` and accept a common set of query parameters:
+All report endpoints live under `/api/v1/reports/` and accept a common set of query parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -1743,6 +1752,7 @@ All five report endpoints live under `/api/v1/reports/` and accept a common set 
 | `date_to` | `YYYY-MM-DD` | End of reporting period (required) |
 | `supplier_pib` | String | Optional — filter to a single supplier |
 | `search` | String | Optional — keyword filter on item description (case-insensitive) |
+| `client_id` | UUID | Optional — filter to a specific agency client (Agency plan only; ignored on other plans) |
 
 ##### FR-4.13.2.1 Received Goods Report (`/received-goods`)
 
@@ -1790,6 +1800,42 @@ All five report endpoints live under `/api/v1/reports/` and accept a common set 
 | **Aggregates** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
 | **Use case** | "How did our spending change month by month?" |
 
+##### FR-4.13.2.6 Price Calculation (`/kalkulacija`)
+
+| ID | FR-4.13.2.6 |
+|----|-------------|
+| **Description** | Per-line-item price calculation showing purchase price (nabavna cena), margin (marža), and calculated selling price (prodajna cena) for each item |
+| **Data source** | `invoice_line_items` joined with `product_catalog` via `product_id` FK |
+| **Columns** | `description`, `unit_price` (nabavna cena), `default_margin_pct`, calculated `selling_price` |
+| **Use case** | "What is the selling price and margin for each item we purchased?" |
+
+##### FR-4.13.2.7 Markup Analysis — RUC (`/ruc`)
+
+| ID | FR-4.13.2.7 |
+|----|-------------|
+| **Description** | Razlika u ceni (markup/margin analysis) grouped by product catalog entry |
+| **Group by** | `product_id` (canonical product) |
+| **Aggregates** | `AVG(unit_price)` as average purchase price, `selling_price` from catalog, calculated markup amount and percentage |
+| **Use case** | "What is our markup across all purchases of each product?" |
+
+##### FR-4.13.2.8 Spending by Category (`/spending-by-category`)
+
+| ID | FR-4.13.2.8 |
+|----|-------------|
+| **Description** | Total spending grouped by product catalog category |
+| **Group by** | `category` from `product_catalog` |
+| **Aggregates** | `SUM(total)`, `COUNT(DISTINCT invoice_id)`, `array_agg(DISTINCT supplier_name)` |
+| **Use case** | "How much did we spend in each product category?" |
+
+##### FR-4.13.2.9 Daily Goods Tracking — Dnevna evidencija robe (`/dpu`)
+
+| ID | FR-4.13.2.9 |
+|----|-------------|
+| **Description** | All line items received on a specific date (replaces former "Šank lista" / DPU page) |
+| **Filter** | `invoice_date` (required — exact date) |
+| **Columns** | `description`, `quantity`, `unit_price`, `total`, `supplier_name`, `invoice_number` |
+| **Use case** | "What goods did we receive on a given day?" |
+
 #### 4.13.3 CSV Export
 
 Every report endpoint accepts an `Accept: text/csv` header (or `?format=csv` query parameter) and returns a UTF-8 BOM CSV with:
@@ -1801,14 +1847,18 @@ Every report endpoint accepts an `Accept: text/csv` header (or `?format=csv` que
 
 #### 4.13.4 Frontend Page
 
+The `/izvestaji` page is a unified hub for all reports, product catalog management, and daily goods tracking. It replaces the formerly separate `/katalog` and `/dpu` pages.
+
 | Requirement | Detail |
 |-------------|--------|
 | **Route** | `/{orgSlug}/izvestaji` |
-| **Template selection** | Card-based UI — one card per report template |
-| **Filters** | Date range picker, optional supplier PIB/name field, optional keyword search |
+| **Navigation** | Group pills at the top: "Opšti" (5 general reports), "Nabavka i prodaja" (kalkulacija, RUC, categories, daily tracking), "Upravljanje" (product catalog) |
+| **Tab layout** | Horizontal tabs within each group for individual report/management views |
+| **Filters** | Date range picker, optional supplier PIB/name field, optional keyword search (per-tab) |
 | **Results** | Rendered in a sortable table below the filter bar |
 | **Export** | "Izvezi CSV" button — triggers browser file download |
 | **Plan gate** | Non-PRO users see an upgrade modal instead of the filter form |
+| **Removed pages** | `/katalog` and `/dpu` routes removed; content consolidated here |
 
 ---
 
@@ -2052,6 +2102,116 @@ Saldora tim
 Ovo je automatska poruka. Za podešavanja email prijema,
 posetite Podešavanja → Integracije u aplikaciji.
 ```
+
+---
+
+### 4.15 Product Catalog (Katalog proizvoda)
+
+This section defines the Product Catalog feature, which provides a canonical list of products that enables accurate inventory tracking, margin analysis, and price comparison for restaurant and hospitality clients.
+
+**Feature Gate:** Product Catalog is available on Professional and Agency plans.
+
+#### 4.15.1 Overview
+
+The product catalog stores canonical product names with aliases (alternative names from different suppliers). When line items are linked to catalog entries, the system can normalize item descriptions across suppliers and enable procurement intelligence reports (Section 4.13.2.6–4.13.2.9).
+
+#### 4.15.2 Database Schema
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+**PostgreSQL `pg_trgm` extension** is used for trigram-based fuzzy matching of `description` values in `invoice_line_items` against catalog entries. This allows the system to suggest catalog matches even when supplier descriptions vary.
+
+The `invoice_line_items` table includes a `product_id` FK column (nullable) that links a line item to its canonical catalog entry after matching.
+
+#### 4.15.3 API Endpoints
+
+All catalog endpoints live under `/api/v1/products/`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/products/` | List all catalog entries for the organization |
+| `POST` | `/api/v1/products/` | Create a new catalog entry |
+| `GET` | `/api/v1/products/{id}` | Retrieve a single entry |
+| `PATCH` | `/api/v1/products/{id}` | Update canonical name, aliases, selling price, margin, category |
+| `DELETE` | `/api/v1/products/{id}` | Delete a catalog entry |
+| `GET` | `/api/v1/products/merge-suggestions` | Return pairs of catalog entries that are likely duplicates (trigram similarity above threshold) |
+| `POST` | `/api/v1/products/merge` | Merge two entries: keep one as canonical, move aliases from the other, reassign `product_id` FKs |
+
+#### 4.15.4 Matching Logic
+
+When a new line item is written to `invoice_line_items` (at OCR completion or on edit), the system attempts to match its `description` against the catalog using `pg_trgm` trigram similarity. On a successful match (similarity ≥ 0.6), the `product_id` FK is set on the line item.
+
+`match_count` on the catalog entry is incremented each time a line item is matched to it.
+
+#### 4.15.5 Frontend (within /izvestaji)
+
+Product catalog management is accessible from the "Upravljanje" group on the `/izvestaji` page:
+
+| Feature | Detail |
+|---------|--------|
+| **Entry list** | Table of catalog entries with canonical name, category, aliases count, selling price, margin |
+| **Add/edit entry** | Form to set canonical name, category, unit of measure, aliases (tag input), selling price, margin |
+| **Merge suggestions** | Tab showing pairs of likely-duplicate entries with a "Merge" action |
+| **Search/filter** | Search by canonical name or category |
+
+---
+
+### 4.16 In-App Support System
+
+Ticket-based support system built into the application. Clients create tickets from a Podrška page, attach files, and track status. Admins manage all tickets from a dedicated admin panel.
+
+**Feature Gate:** Available on all plans.
+
+#### 4.16.1 Data Model
+
+**support_tickets:**
+- id, organization_id, user_id (creator), subject, status (open/in_progress/resolved/closed), priority (low/normal/high), category (billing/technical/feature_request/other), created_at, updated_at
+
+**support_messages:**
+- id, ticket_id, user_id (sender), body (TEXT), is_admin_reply (BOOLEAN), created_at
+
+**support_attachments:**
+- id, message_id, file_name, file_path (S3 key), file_size, content_type, created_at
+
+#### 4.16.2 Client Endpoints
+- POST /api/v1/support/tickets — create ticket with initial message
+- GET /api/v1/support/tickets — list org tickets (paginated, filterable)
+- GET /api/v1/support/tickets/{id} — ticket detail with messages
+- POST /api/v1/support/tickets/{id}/messages — add reply (with file attachments)
+- POST /api/v1/support/tickets/{id}/close — close ticket
+
+#### 4.16.3 Admin Endpoints
+- GET /api/v1/admin/support/tickets — all tickets across orgs
+- PATCH /api/v1/admin/support/tickets/{id} — update status/priority
+- POST /api/v1/admin/support/tickets/{id}/messages — admin reply
+
+#### 4.16.4 Frontend
+- Client: /{orgSlug}/podrska — ticket list, create form, chat-like thread view
+- Admin: /{orgSlug}/admin/podrska — cross-org ticket management
+- Sidebar badge: unread reply count
+- Status badges: Otvoren (green), U obradi (yellow), Rešen (blue), Zatvoren (gray)
+
+#### 4.16.5 Notifications
+- Sidebar badge for unread replies (client) and open tickets (admin)
+- Optional email notification on admin reply and new ticket
 
 ---
 
@@ -2449,6 +2609,7 @@ CREATE TABLE invoice_line_items (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    client_id     UUID REFERENCES clients(id) ON DELETE SET NULL,  -- nullable; set via PIB matching (migration 0008)
     description   TEXT,
     quantity      NUMERIC(12, 4),
     unit_price    NUMERIC(15, 4),
@@ -2468,7 +2629,34 @@ CREATE INDEX ix_invoice_line_items_org      ON invoice_line_items(organization_i
 CREATE INDEX ix_invoice_line_items_invoice  ON invoice_line_items(invoice_id);
 CREATE INDEX ix_invoice_line_items_date     ON invoice_line_items(invoice_date);
 CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
+CREATE INDEX ix_ili_client_id              ON invoice_line_items(client_id);
 ```
+
+#### 7.2.6 product_catalog
+
+Canonical product entries for procurement intelligence (Section 4.15). Populated and managed by users via the catalog API. Used for fuzzy-matching line item descriptions.
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+Note: `invoice_line_items` includes a `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` column (added in migration 0007) for linking line items to their canonical catalog entry.
 
 ---
 
@@ -3105,6 +3293,17 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **Model Note:** The system uses pre-trained models (dots.ocr for OCR, Claude for field extraction) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
 
+**Deployment Options:**
+
+| Option | Cost | Cold Start | Use Case |
+|--------|------|------------|----------|
+| Local vLLM (Docker) | $0 (own GPU) | None | Development |
+| Hetzner GEX44 | ~$200/mo fixed | None | Production (10+ clients) |
+| Google Cloud Run (L4 GPU) | ~$0.0002/sec | 10-30s | Production (scale-to-zero) |
+| Cerebrium Serverless | ~$0.0006/invoice | 30-60s | Production (early stage) |
+
+The OCR worker connects to any OpenAI-compatible API endpoint via `DOTS_OCR_SERVER_URL` environment variable. Switching between local, Cloud Run, or Cerebrium requires only an env change — no code modifications.
+
 ### 9.8 Extraction Quality Monitoring
 
 The system MUST track extraction quality through correction logging, purely for quality monitoring and analytics purposes, NOT for model training.
@@ -3298,11 +3497,14 @@ The system MUST track LLM cost savings from template usage:
 | Requirement | Implementation |
 |-------------|----------------|
 | Password Hashing | Argon2id with salt |
-| JWT Tokens | RS256 signing, 1-hour expiry |
+| JWT Tokens | RS256 signing, 1-hour expiry; algorithm pinned to HS256 (no algorithm confusion) |
 | Refresh Tokens | Secure HTTP-only cookies, 7-day expiry |
 | MFA | TOTP-based 2FA (optional) |
 | Session Management | Redis-backed sessions |
 | Brute Force Protection | Rate limiting, account lockout |
+| Account Lockout | 5 failed attempts → 15 min lockout via Redis |
+| Token Blacklisting | Logout invalidates token via Redis set |
+| Rate Limiting | slowapi, per-plan limits (see 8.1) |
 
 ### 10.2 Data Security
 
@@ -3325,6 +3527,9 @@ The system MUST track LLM cost savings from template usage:
 | CSRF Protection | Token-based CSRF |
 | File Upload | Type validation, size limits, virus scan |
 | API Security | Rate limiting, API key rotation |
+| Security Headers | X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy via middleware |
+| JWT Algorithm | Pinned to HS256 (no algorithm confusion) |
+| PII Masking | Email and PIB values masked in application logs |
 
 ### 10.4 Infrastructure Security
 
@@ -3895,6 +4100,45 @@ Per-organization credentials stored in `minimax_configs` table:
 - `last_sync_at` — Timestamp of last successful push
 
 **API endpoints:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+#### 12.5.4 MiniMax API Field Reference (RS)
+
+Field names and IDs validated against the MiniMax RS Swagger API spec:
+
+**Country & Currency (Serbia):**
+- Country ID: 3 (Code: "RS", Name: "Republika Srbija")
+- Currency ID: 2 (Code: "RSD")
+
+**ReceivedInvoice required fields:**
+| API Field | Source | Notes |
+|-----------|--------|-------|
+| DocumentReference | invoice_number | Original invoice number (NOT InvoiceNumber) |
+| Customer | {ID: customer_id} | FK reference |
+| Currency | {ID: 2} | RSD default |
+| PaymentType | "N" | N=Neplaćen, D=Dospeo, Z=Zatvoreno, P=Plaćen, R=Rata |
+| DateIssued | invoice_date | ISO datetime |
+| DateTransaction | invoice_date | |
+| DateDue | due_date | |
+| DateReceived | invoice_date | |
+| InvoiceAmount | total_amount | Rounded to 2 decimals |
+| InvoiceAmountDomesticCurrency | total_amount | Must equal InvoiceAmount for RSD |
+
+**Customer creation required fields:**
+| Field | Value |
+|-------|-------|
+| Country | {ID: 3} |
+| CountryName | "Republika Srbija" |
+| Currency | {ID: 2} |
+| SubjectToVAT | "D" (not "Y") |
+| PostalCode | Required, non-empty |
+
+**VAT Rate mapping:**
+| Serbian rate | MiniMax VatRateId | Code |
+|-------------|-------------------|------|
+| 20% | 4 | S |
+| 10% | 5 | Z |
+| 8% | 3 | P |
+| 0% | 1 | N |
 
 ### 12.6 SEF Integration (eFaktura)
 
@@ -4774,6 +5018,9 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.5 | March 2026 | FakturaAI Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
 | 2.6 | March 2026 | Saldora Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
 | 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
+| 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
+| 2.9 | March 2026 | Saldora Team | Added In-App Support System spec (4.16). Updated MiniMax API field reference (12.5.4). Updated security hardening details (10.1, 10.3). Added serverless GPU deployment options (9.7). Updated confidence display from percentages to text labels (4.3.3). |
+| 3.0 | March 2026 | Saldora Team | Client management: replaced soft-delete with hard DELETE (unlinks invoices); added toggle-active endpoint (4.12.1); added retroactive PIB assignment on client creation (4.12.2). Reports: added client_id filter to all report endpoints and query parameter table (4.13.2); added client_id FK to invoice_line_items schema (4.13.1, 7.2.5, migration 0008). Billing: documented write-only usage_records counter for plan limit checks; deleting invoices no longer resets monthly usage (4.7.2). Duplicate detection: clarified 409 response, verified/exported-only scope, and ?force=true admin override (4.4.3). |
 
 ---
 

@@ -23,6 +23,7 @@ from app.routers import (
     invoices,
     join_requests,
     organizations,
+    products,
     reports,
     rules,
     sef,
@@ -144,6 +145,7 @@ app.include_router(sef.router, prefix="/api/v1/sef", tags=["SEF"])
 app.include_router(exchange_rates.router, prefix="/api/v1/exchange-rates", tags=["Exchange Rates"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["ZZPL Compliance"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(products.router, prefix="/api/v1/products", tags=["Product Catalog"])
 
 
 @app.get("/health")

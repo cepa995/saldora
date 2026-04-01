@@ -1457,7 +1457,7 @@ async def test_verify_invoice_missing_invoice_date(client: AsyncClient, test_eng
 
     resp = await client.post(f"/api/v1/invoices/{inv_id}/verify", headers=headers)
     assert resp.status_code == 400
-    assert "invoice_date" in resp.json()["detail"]
+    assert "Datum fakture" in resp.json()["detail"]
 
 
 async def test_verify_invoice_missing_total_amount(client: AsyncClient, test_engine):
@@ -1476,7 +1476,7 @@ async def test_verify_invoice_missing_total_amount(client: AsyncClient, test_eng
 
     resp = await client.post(f"/api/v1/invoices/{inv_id}/verify", headers=headers)
     assert resp.status_code == 400
-    assert "total_amount" in resp.json()["detail"]
+    assert "Ukupan iznos" in resp.json()["detail"]
 
 
 async def test_verify_invoice_already_verified_rejected(client: AsyncClient, test_engine):

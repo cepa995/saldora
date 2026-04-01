@@ -118,11 +118,11 @@ def draw_invoice(filename: str, data: dict):
         _draw_cell(c, 1, y, item.get("code", ""))
         _draw_cell(c, 2, y, item["name"])
         _draw_cell(c, 3, y, item["unit"])
-        _draw_cell(c, 4, y, f"{qty:,.2f}".replace(",", "."))
-        _draw_cell(c, 5, y, f"{price:,.2f}".replace(",", "."))
+        _draw_cell(c, 4, y, f"{qty:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        _draw_cell(c, 5, y, f"{price:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         if discount_col:
             _draw_cell(c, 6, y, f"{discount:.1f}" if discount else "")
-        _draw_cell(c, 7, y, f"{line_total:,.2f}".replace(",", "."))
+        _draw_cell(c, 7, y, f"{line_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
         y -= ROW_HEIGHT * mm
 
     # Totals
@@ -135,14 +135,14 @@ def draw_invoice(filename: str, data: dict):
 
     c.setFont("Helvetica", 9)
     c.drawString(130 * mm, y, "Osnovica:")
-    c.drawRightString(186 * mm, y, f"{subtotal:,.2f} RSD".replace(",", "."))
+    c.drawRightString(186 * mm, y, f"{subtotal:,.2f} RSD".replace(",", "X").replace(".", ",").replace("X", "."))
     y -= 5 * mm
     c.drawString(130 * mm, y, f"PDV ({tax_rate}%):")
-    c.drawRightString(186 * mm, y, f"{tax_amount:,.2f} RSD".replace(",", "."))
+    c.drawRightString(186 * mm, y, f"{tax_amount:,.2f} RSD".replace(",", "X").replace(".", ",").replace("X", "."))
     y -= 5 * mm
     c.setFont("Helvetica-Bold", 10)
     c.drawString(130 * mm, y, "UKUPNO:")
-    c.drawRightString(186 * mm, y, f"{total_amount:,.2f} RSD".replace(",", "."))
+    c.drawRightString(186 * mm, y, f"{total_amount:,.2f} RSD".replace(",", "X").replace(".", ",").replace("X", "."))
 
     c.save()
     print(f"  Created: {filepath} ({len(data['items'])} stavki)")

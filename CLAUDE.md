@@ -40,9 +40,10 @@ We work issue-by-issue from GitHub milestones. For each issue:
 
 ### Tests
 - pytest with `asyncio_mode = "auto"` — no need for `@pytest.mark.asyncio`
-- Test DB: `fakturaai_test` on localhost:5433
+- Test DB: `saldora_test` on localhost:5433
 - Use the `client` fixture from `conftest.py` for API tests
 - Mock external services (S3, Celery, Redis) — never depend on running infra in tests
+- **CRITICAL: Run relevant tests every time you modify a feature.** Do not commit changes to billing, auth, export, or verification without running the corresponding test suite. At minimum run `pytest apps/api/tests/ -x -k <feature>` for the affected area.
 
 ## Key Architecture Decisions
 

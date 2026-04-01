@@ -1,6 +1,6 @@
 """Tests for dashboard analytics endpoint."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -116,7 +116,7 @@ async def test_dashboard_stats_monthly_volume(client: AsyncClient, test_engine):
     data = resp.json()
 
     # Current month should have count=3
-    current_month = "2026-03"
+    current_month = datetime.now().strftime("%Y-%m")
     month_data = [m for m in data["monthly_volume"] if m["month"] == current_month]
     assert len(month_data) == 1
     assert month_data[0]["count"] == 3
@@ -152,7 +152,7 @@ async def test_dashboard_stats_monthly_totals(client: AsyncClient, test_engine):
     assert resp.status_code == 200
     data = resp.json()
 
-    current_month = "2026-03"
+    current_month = datetime.now().strftime("%Y-%m")
     month_data = [m for m in data["monthly_totals"] if m["month"] == current_month]
     assert len(month_data) == 1
     assert month_data[0]["total_rsd"] == 8000.50

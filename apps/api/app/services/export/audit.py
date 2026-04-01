@@ -261,12 +261,20 @@ async def _build_audit_trail(
     Returns:
         UTF-8 encoded CSV bytes with BOM.
     """
+    # Exclude noisy system actions that aren't relevant for auditors
+    excluded_actions = [
+        "token_refresh",
+        "auth.refresh",
+        "health_check",
+    ]
+
     result = await db.execute(
         select(AuditLog)
         .where(
             AuditLog.organization_id == organization_id,
             AuditLog.created_at >= datetime.combine(date_from, datetime.min.time()),
             AuditLog.created_at <= datetime.combine(date_to, datetime.max.time()),
+            AuditLog.action.notin_(excluded_actions),
         )
         .order_by(AuditLog.created_at)
     )

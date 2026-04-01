@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
-import { fetchClients, createClient, updateClient, deleteClient } from '@/lib/api/clients';
+import { fetchClients, createClient, updateClient, deleteClient, toggleClientActive } from '@/lib/api/clients';
 import { isPlanError } from '@/lib/api-client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 import type { ClientResponse, ClientCreate, ClientUpdate } from '@/lib/types/client';
@@ -184,37 +184,57 @@ export default function ClientsPage() {
             {clients.map((client) => (
               <div
                 key={client.id}
-                className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow"
+                className={`bg-white border rounded-xl flex flex-col transition-shadow hover:shadow-md ${
+                  client.is_active ? 'border-gray-200' : 'border-gray-200 opacity-60'
+                }`}
               >
-                <div className="flex items-start justify-between mb-3">
+                {/* Header with toggle */}
+                <div className="flex items-start justify-between p-5 pb-0">
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-semibold text-gray-900 truncate">{client.name}</h3>
-                    <p className="text-sm text-gray-500">{t('pib')}: {client.pib}</p>
+                    <p className="text-sm text-gray-500 mt-0.5">{t('pib')}: {client.pib}</p>
                   </div>
-                  {!client.is_active && (
-                    <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">
-                      {t('inactive')}
-                    </span>
+                  {hasRole('manager') && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await toggleClientActive(client.id);
+                          loadClients();
+                          refreshContext();
+                        } catch { /* ignore */ }
+                      }}
+                      className={`relative ml-2 shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        client.is_active ? 'bg-violet-600' : 'bg-gray-300'
+                      }`}
+                      title={client.is_active ? 'Deaktiviraj' : 'Aktiviraj'}
+                    >
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                        client.is_active ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
                   )}
                 </div>
 
-                {(client.city || client.address) && (
-                  <p className="text-sm text-gray-500 mb-2 truncate">
-                    {[client.address, client.city].filter(Boolean).join(', ')}
-                  </p>
-                )}
-
-                <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                  <span>{t('invoiceCount')}: {client.invoice_count}</span>
-                  {client.total_amount && (
-                    <span className="font-medium text-gray-700">
-                      {Number(client.total_amount).toLocaleString('sr-Latn-RS')} RSD
-                    </span>
+                {/* Body — grows to fill space */}
+                <div className="flex-1 px-5 py-3">
+                  {(client.city || client.address) && (
+                    <p className="text-sm text-gray-500 mb-2 truncate">
+                      {[client.address, client.city].filter(Boolean).join(', ')}
+                    </p>
                   )}
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <span>{t('invoiceCount')}: {client.invoice_count}</span>
+                    {client.total_amount != null && Number(client.total_amount) > 0 && (
+                      <span className="font-medium text-gray-700">
+                        {Number(client.total_amount).toLocaleString('sr-Latn-RS')} RSD
+                      </span>
+                    )}
+                  </div>
                 </div>
 
+                {/* Footer — always at bottom */}
                 {hasRole('manager') && (
-                  <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-100 mt-auto">
                     <button
                       onClick={() => {
                         setEditingClient(client);

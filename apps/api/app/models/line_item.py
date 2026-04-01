@@ -31,6 +31,16 @@ class InvoiceLineItem(Base, UUIDMixin):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
     )
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("clients.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("product_catalog.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     quantity: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
     unit_price: Mapped[float | None] = mapped_column(Numeric(15, 4), nullable=True)
@@ -54,4 +64,5 @@ class InvoiceLineItem(Base, UUIDMixin):
         Index("ix_ili_seller_pib", "seller_pib"),
         Index("ix_ili_invoice_date", "invoice_date"),
         Index("ix_ili_org_date", "organization_id", "invoice_date"),
+        Index("ix_ili_client_id", "client_id"),
     )

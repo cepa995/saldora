@@ -782,17 +782,19 @@ Attempting to access any client endpoint (`/clients`, `/{invoice_id}/client`) on
 
 ---
 
-## 17. Invoice Reports (Izveštaji)
+## 17. Invoice Reports & Procurement Intelligence (Izveštaji)
 
-**Goal:** Give accountants instant analytical views of their invoice data — without any AI calls and at zero LLM cost.
+**Goal:** Give accountants and restaurant/hospitality managers instant analytical views of their invoice data — without any AI calls and at zero LLM cost.
 
 ### What Replaces What
 
-The Reports feature replaces the earlier PDV knjige (KPR/KIR) plan. Instead of generating VAT-register exports mapped to PP-PDV form fields, the system now provides five general-purpose analytical report templates that are more broadly useful across day-to-day accounting work.
+The Reports feature replaces the earlier PDV knjige (KPR/KIR) plan. Instead of generating VAT-register exports mapped to PP-PDV form fields, the system provides general-purpose analytical report templates that are more broadly useful across day-to-day accounting work.
+
+The former separate `/katalog` (product catalog) and `/dpu` (daily goods tracking) pages have been consolidated into the unified `/izvestaji` page.
 
 ### How the Denormalized Table Works
 
-To make reports fast and query-simple, a separate `invoice_line_items` table mirrors every line item from every verified invoice in a flat, denormalized form. This table is populated at two points in the workflow:
+To make reports fast and query-simple, a separate `invoice_line_items` table mirrors every line item from every processed invoice in a flat, denormalized form. This table is populated at three points in the workflow:
 
 ```
 OCR completes ──► Line items extracted into invoices.line_items JSON
@@ -808,32 +810,71 @@ User edits invoice ──► Line items updated in invoices.line_items JSON
                         invoice_line_items rows
                         deleted and re-inserted
                         for that invoice
+
+User verifies invoice ──► Same sync as on edit
+                                │
+                                ▼
+                        invoice_line_items rows refreshed
 ```
 
-The denormalized table stores: `invoice_id`, `description`, `quantity`, `unit_price`, `total`, `tax_rate`, `supplier_name`, `supplier_pib`, `invoice_date`, and `currency`. Reports query this table directly with SQL aggregations — no JSON unpacking needed.
+### Product Catalog
 
-### The Five Report Templates
+For restaurant and hospitality clients, the `product_catalog` table stores canonical product names with aliases (alternative descriptions from different suppliers), categories, selling prices, and default margins.
+
+When a line item is written to `invoice_line_items`, the system attempts to match its description to a catalog entry using PostgreSQL trigram similarity (`pg_trgm`). On a successful match the `product_id` FK is set, enabling the procurement intelligence reports.
+
+```
+Line item written ──► pg_trgm fuzzy match against product_catalog
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+               Match (≥0.6)         No match
+                    │                   │
+                    ▼                   ▼
+              product_id FK set    product_id = NULL
+              match_count++        (item remains unlinked)
+```
+
+### Report Templates
+
+All reports live under `/api/v1/reports/`. The `/izvestaji` page organizes them into three groups:
+
+#### Group: Opšti (General Reports)
 
 | Report | URL | What It Shows |
 |--------|-----|---------------|
-| **Pregled primljene robe** | `/api/v1/reports/received-goods` | Line items grouped by description; sums quantity and total; shows all suppliers for that item |
-| **Troškovi po dobavljaču** | `/api/v1/reports/spending-by-supplier` | Total amount spent per supplier over the selected period |
-| **Mesečni pregled stavki** | `/api/v1/reports/monthly-breakdown` | Paginated flat list of all line items for a selected date range |
-| **Poređenje cena** | `/api/v1/reports/price-comparison` | Same item description sourced from multiple suppliers, with min/max/avg unit price |
-| **Pregled troškova** | `/api/v1/reports/expense-summary` | Expense totals grouped by month or week |
+| **Pregled primljene robe** | `/received-goods` | Line items grouped by description; sums quantity and total; all suppliers per item |
+| **Troškovi po dobavljaču** | `/spending-by-supplier` | Total amount spent per supplier over the selected period |
+| **Mesečni pregled stavki** | `/monthly-breakdown` | Paginated flat list of all line items for a selected date range |
+| **Poređenje cena** | `/price-comparison` | Items from multiple suppliers with min/max/avg unit price |
+| **Pregled troškova** | `/expense-summary` | Expense totals grouped by month or week |
 
-All five reports accept common query parameters: `date_from`, `date_to`, `supplier_pib` (optional filter), and `search` (optional keyword filter on item description).
+#### Group: Nabavka i prodaja (Procurement & Sales)
 
-### How the User Uses Reports
+| Report | URL | What It Shows |
+|--------|-----|---------------|
+| **Kalkulacija** | `/kalkulacija` | Purchase price, margin %, and calculated selling price per line item |
+| **RUC** | `/ruc` | Razlika u ceni — markup analysis grouped by canonical product |
+| **Troškovi po kategoriji** | `/spending-by-category` | Total spending grouped by product catalog category |
+| **Dnevna evidencija robe** | `/dpu` | All goods received on a specific date |
+
+#### Group: Upravljanje (Management)
+
+Product catalog management — add/edit canonical products, manage aliases, review merge suggestions for likely-duplicate entries.
+
+### How the User Navigates Reports
 
 ```
 User opens Izveštaji page
         │
         ▼
-Selects a report template (card-based UI)
+Selects a group (Opšti / Nabavka i prodaja / Upravljanje)
         │
         ▼
-Sets filters: date range, optional supplier, optional keyword
+Clicks a tab within the group
+        │
+        ▼
+Sets filters: date range, optional supplier, optional keyword, optional client (Agency plan)
         │
         ▼
 Results table loads instantly (SQL aggregation — no AI)
@@ -848,7 +889,7 @@ CSV file downloads with Serbian locale formatting
 
 ### Zero Cost, Instant Results
 
-Unlike invoice processing (which uses the OCR engine and Claude LLM), reports involve no AI calls whatsoever. Every report is a single SQL query over the `invoice_line_items` table. Response times are typically under 200 ms for organizations with tens of thousands of line items.
+Unlike invoice processing (which uses the OCR engine and Claude LLM), reports involve no AI calls whatsoever. Every report is a single SQL query over the `invoice_line_items` table (joined with `product_catalog` where needed). Response times are typically under 200 ms for organizations with tens of thousands of line items.
 
 ### Feature Gate
 
@@ -856,4 +897,4 @@ Reports are a PRO plan feature. Starter-plan users see an upgrade prompt when th
 
 ---
 
-*This document describes Saldora through the Reports feature (Milestone 13). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*
+*This document describes Saldora through the Procurement Intelligence feature (Milestone 16). For detailed technical documentation of specific subsystems, see [AUTOMATION_RULES.md](AUTOMATION_RULES.md) and [SRS.md](SRS.md).*

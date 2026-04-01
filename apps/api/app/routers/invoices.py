@@ -155,6 +155,9 @@ async def upload_invoice(
     await db.commit()
     await db.refresh(invoice)
 
+    # Increment usage counter (write-only, survives deletion)
+    await _increment_usage(db, user.organization_id, 1)
+
     # 5. Queue Celery OCR task (graceful fallback if Redis/Celery is down)
     celery_queued = False
     try:
@@ -470,7 +473,59 @@ async def upload_batch(
     # Commit all successful invoices in one transaction
     await db.commit()
 
+    # Increment usage record (never decremented — survives invoice deletion)
+    success_count = sum(1 for r in results if r.status == "processing")
+    if success_count > 0:
+        await _increment_usage(db, user.organization_id, success_count)
+
     return results
+
+
+async def _increment_usage(
+    db: AsyncSession,
+    organization_id: UUID,
+    count: int,
+) -> None:
+    """Increment monthly usage counter (write-only, never decremented).
+
+    Creates a usage_records row for the current month if it doesn't exist,
+    then increments invoices_count. This counter persists even if invoices
+    are deleted, preventing billing exploits.
+
+    Args:
+        db: Database session.
+        organization_id: Organization to increment for.
+        count: Number of invoices to add.
+    """
+    from app.models.usage_record import UsageRecord
+
+    now = datetime.now(UTC)
+    period_start = now.replace(day=1).date()
+    if now.month == 12:
+        period_end = now.replace(year=now.year + 1, month=1, day=1).date()
+    else:
+        period_end = now.replace(month=now.month + 1, day=1).date()
+
+    result = await db.execute(
+        select(UsageRecord).where(
+            UsageRecord.organization_id == organization_id,
+            UsageRecord.period_start == period_start,
+        )
+    )
+    record = result.scalar_one_or_none()
+
+    if record:
+        record.invoices_count += count
+    else:
+        record = UsageRecord(
+            organization_id=organization_id,
+            period_start=period_start,
+            period_end=period_end,
+            invoices_count=count,
+        )
+        db.add(record)
+
+    await db.commit()
 
 
 def _json_safe(obj):
@@ -1118,6 +1173,15 @@ async def delete_invoice(
         old_values=old_values,
     )
 
+    # Delete related records that don't have ON DELETE CASCADE
+    from sqlalchemy import delete as sa_delete
+
+    from app.models.correction_log import CorrectionLog
+    from app.models.line_item import InvoiceLineItem
+
+    await db.execute(sa_delete(CorrectionLog).where(CorrectionLog.invoice_id == invoice.id))
+    await db.execute(sa_delete(InvoiceLineItem).where(InvoiceLineItem.invoice_id == invoice.id))
+
     await db.delete(invoice)
     await db.commit()
 
@@ -1269,6 +1333,7 @@ async def verify_invoice(
     invoice_id: UUID,
     request: Request,
     background_tasks: BackgroundTasks,
+    force: bool = Query(default=False, description="Force verify even if duplicate (admin only)"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("operator")),
 ) -> InvoiceResponse:
@@ -1297,6 +1362,12 @@ async def verify_invoice(
         )
 
     # Check required fields
+    field_labels = {
+        "invoice_number": "Broj fakture",
+        "invoice_date": "Datum fakture",
+        "seller": "Podaci o prodavcu",
+        "total_amount": "Ukupan iznos",
+    }
     missing = []
     if not invoice.invoice_number:
         missing.append("invoice_number")
@@ -1307,9 +1378,10 @@ async def verify_invoice(
     if not invoice.total_amount:
         missing.append("total_amount")
     if missing:
+        labels = ", ".join(field_labels.get(f, f) for f in missing)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Missing required fields for verification: {', '.join(missing)}",
+            detail=f"Nedostaju obavezna polja za verifikaciju: {labels}",
         )
 
     # Run verification checks (warnings, non-blocking)
@@ -1340,14 +1412,22 @@ async def verify_invoice(
     # Mathematical verification
     verification_warnings.extend(verify_calculations(invoice))
 
-    # Duplicate detection
+    # Duplicate detection — blocks verification unless force=True (admin only)
     dup_warning = await check_duplicates(db, invoice, user.organization_id)
     if dup_warning:
-        verification_warnings.append(dup_warning)
+        if force and user.role == "admin":
+            verification_warnings.append(
+                {**dup_warning, "message": dup_warning["message"] + " (admin override)"}
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=dup_warning["message"]
+                + ". Kontaktirajte administratora za ručno odobrenje.",
+            )
 
-    # Append verification warnings to invoice
-    if verification_warnings:
-        invoice.warnings = (invoice.warnings or []) + verification_warnings
+    # Replace verification warnings (not append — prevents duplicates on re-verify)
+    invoice.warnings = verification_warnings
 
     # Generate accounting intent (non-blocking).
     # Uses a savepoint so a failure here does not poison the parent transaction.
@@ -1356,6 +1436,14 @@ async def verify_invoice(
             await generate_accounting_intent(db, invoice, user.organization_id)
     except Exception:
         logger.exception("Failed to generate AccountingIntent for invoice %s", invoice.id)
+
+    # Sync denormalized line items for reports
+    try:
+        from app.services.line_item_sync import sync_line_items_orm
+
+        await sync_line_items_orm(db, invoice)
+    except Exception:
+        logger.exception("Failed to sync line items for invoice %s", invoice.id)
 
     old_status = invoice.status
     invoice.status = "verified"

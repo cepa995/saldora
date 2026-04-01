@@ -1,8 +1,8 @@
 # Specifikacija softverskih zahteva (SRS)
 # FakturaAI - Platforma za obradu faktura pomoću veštačke inteligencije
 
-**Verzija:** 2.0
-**Datum:** Februar 2026
+**Verzija:** 2.9
+**Datum:** Mart 2026
 **Status:** Aktivan
 
 ---
@@ -18,6 +18,8 @@
    - 4.11 [Motor za automatizaciju pravila](#411-motor-za-automatizaciju-pravila)
    - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
    - 4.13 [Izveštaji o fakturama (Izveštaji)](#413-izveštaji-o-fakturama-izveštaji)
+   - 4.15 [Katalog proizvoda](#415-katalog-proizvoda)
+   - 4.16 [Sistem podrške u aplikaciji](#416-sistem-podrške-u-aplikaciji)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -416,7 +418,7 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | **Opis** | Sistem MORA da pruži ocene pouzdanosti za ekstraktovana polja |
 | **Skala** | 0-100% pouzdanost |
 | **Prag** | Polja ispod 80% pouzdanosti se označavaju za manuelni pregled |
-| **Prikaz** | Vizuelna indikacija (kodiranje bojom) nivoa pouzdanosti |
+| **Prikaz** | Tekstualne oznake umesto procenata: "Pouzdano" (zeleno, ≥75%), "Proveriti" (žuto, 50-74%), "Nepouzdano" (crveno, <50%) |
 
 #### FZ-4.3.4 Podrška za višestranična dokumenta
 | ID | FZ-4.3.4 |
@@ -1502,7 +1504,7 @@ CREATE INDEX ix_invoice_line_items_supplier ON invoice_line_items(supplier_pib);
 
 #### 4.13.2 Šabloni izveštaja
 
-Svih pet endpoint-a za izveštaje su pod `/api/v1/reports/` i prihvataju zajednički skup parametara upita:
+Svi endpoint-i za izveštaje su pod `/api/v1/reports/` i prihvataju zajednički skup parametara upita:
 
 | Parametar | Tip | Opis |
 |-----------|-----|------|
@@ -1557,6 +1559,42 @@ Svih pet endpoint-a za izveštaje su pod `/api/v1/reports/` i prihvataju zajedni
 | **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)` |
 | **Primena** | "Kako su se naši troškovi menjali od meseca do meseca?" |
 
+##### FZ-4.13.2.6 Kalkulacija cena (`/kalkulacija`)
+
+| ID | FZ-4.13.2.6 |
+|----|-------------|
+| **Opis** | Kalkulacija cene po stavci: nabavna cena, marža i prodajna cena za svaki artikal |
+| **Izvor podataka** | `invoice_line_items` spojen sa `product_catalog` putem FK `product_id` |
+| **Kolone** | `description`, `unit_price` (nabavna cena), `default_margin_pct`, izračunata `selling_price` |
+| **Primena** | "Koja je prodajna cena i marža za svaki kupljeni artikal?" |
+
+##### FZ-4.13.2.7 Razlika u ceni — RUC (`/ruc`)
+
+| ID | FZ-4.13.2.7 |
+|----|-------------|
+| **Opis** | Analiza razlike u ceni (RUC) grupisana po unosu u katalogu proizvoda |
+| **Grupisanje** | `product_id` (kanonički proizvod) |
+| **Agregati** | `AVG(unit_price)` kao prosečna nabavna cena, `selling_price` iz kataloga, izračunati iznos i procenat RUC-a |
+| **Primena** | "Kolika je naša marža za sve nabavke svakog proizvoda?" |
+
+##### FZ-4.13.2.8 Troškovi po kategoriji (`/spending-by-category`)
+
+| ID | FZ-4.13.2.8 |
+|----|-------------|
+| **Opis** | Ukupni troškovi grupisani po kategoriji iz kataloga proizvoda |
+| **Grupisanje** | `category` iz `product_catalog` |
+| **Agregati** | `SUM(total)`, `COUNT(DISTINCT invoice_id)`, `array_agg(DISTINCT supplier_name)` |
+| **Primena** | "Koliko smo potrošili po svakoj kategoriji proizvoda?" |
+
+##### FZ-4.13.2.9 Dnevna evidencija robe (`/dpu`)
+
+| ID | FZ-4.13.2.9 |
+|----|-------------|
+| **Opis** | Sve stavke primljene na određeni datum (zamenjuje nekadašnju stranicu "Šank lista" / DPU) |
+| **Filter** | `invoice_date` (obavezno — tačan datum) |
+| **Kolone** | `description`, `quantity`, `unit_price`, `total`, `supplier_name`, `invoice_number` |
+| **Primena** | "Koja roba je primljena određenog dana?" |
+
 #### 4.13.3 CSV izvoz
 
 Svaki endpoint za izveštaj prihvata zaglavlje `Accept: text/csv` (ili parametar `?format=csv`) i vraća CSV sa UTF-8 BOM oznakom:
@@ -1568,14 +1606,120 @@ Svaki endpoint za izveštaj prihvata zaglavlje `Accept: text/csv` (ili parametar
 
 #### 4.13.4 Stranica u aplikaciji
 
+Stranica `/izvestaji` je objedinjeni centar za sve izveštaje, upravljanje katalogom proizvoda i dnevnu evidenciju robe. Zamenjuje ranije odvojene stranice `/katalog` i `/dpu`.
+
 | Zahtev | Detalj |
 |--------|--------|
 | **Ruta** | `/{orgSlug}/izvestaji` |
-| **Izbor šablona** | UI sa karticama — po jedna kartica za svaki šablon izveštaja |
-| **Filteri** | Birač opsega datuma, opcionalno polje za PIB/naziv dobavljača, opcionalna pretraga po ključnoj reči |
+| **Navigacija** | Dugmad za grupe na vrhu: "Opšti" (5 opštih izveštaja), "Nabavka i prodaja" (kalkulacija, RUC, kategorije, dnevna evidencija), "Upravljanje" (katalog proizvoda) |
+| **Raspored tabova** | Horizontalni tabovi unutar svake grupe za pojedinačne izveštaje/upravljanje |
+| **Filteri** | Birač opsega datuma, opcionalno polje za PIB/naziv dobavljača, opcionalna pretraga (po tabu) |
 | **Rezultati** | Prikazani u tabeli sa mogućnošću sortiranja ispod trake filtera |
 | **Izvoz** | Dugme "Izvezi CSV" — pokreće preuzimanje fajla u pregledaču |
 | **Kontrola plana** | Korisnici koji nisu na PRO planu vide modal za nadogradnju umesto forme za filtere |
+| **Uklonjene stranice** | Rute `/katalog` i `/dpu` su uklonjene; sadržaj je objedinjen ovde |
+
+---
+
+### 4.15 Katalog proizvoda
+
+Ovaj odeljak definiše funkcionalnost Kataloga proizvoda, koja obezbeđuje kanonički spisak proizvoda za tačno praćenje zaliha, analizu marže i poređenje cena — pre svega za ugostiteljske i hotelijerske klijente.
+
+**Kontrola pristupa:** Katalog proizvoda je dostupan na Professional i Agency planovima.
+
+#### 4.15.1 Pregled
+
+Katalog proizvoda čuva kanonička imena proizvoda sa aliasima (alternativna imena od različitih dobavljača). Kada su stavke faktura povezane sa unosima u katalogu, sistem može normalizovati opise stavki između dobavljača i omogućiti izveštaje o nabavci (Odeljak 4.13.2.6–4.13.2.9).
+
+#### 4.15.2 Šema baze podataka
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+PostgreSQL ekstenzija **`pg_trgm`** se koristi za trigramsko fuzzy poređenje vrednosti `description` u `invoice_line_items` sa unosima u katalogu. Tabela `invoice_line_items` sadrži nullable FK kolonu `product_id` (dodata u migraciji 0007) za povezivanje stavki sa kanonički unosom u katalogu.
+
+#### 4.15.3 API endpoint-i
+
+Svi endpoint-i za katalog su pod `/api/v1/products/`:
+
+| Metod | Endpoint | Opis |
+|-------|----------|------|
+| `GET` | `/api/v1/products/` | Lista svih unosa u katalogu za organizaciju |
+| `POST` | `/api/v1/products/` | Kreiranje novog unosa |
+| `GET` | `/api/v1/products/{id}` | Preuzimanje jednog unosa |
+| `PATCH` | `/api/v1/products/{id}` | Izmena kanonijskog imena, aliasa, prodajne cene, marže, kategorije |
+| `DELETE` | `/api/v1/products/{id}` | Brisanje unosa |
+| `GET` | `/api/v1/products/merge-suggestions` | Lista parova unosa koji su verovatno duplikati (trigramska sličnost iznad praga) |
+| `POST` | `/api/v1/products/merge` | Spajanje dva unosa: zadržava jedan kao kanonički, premešta aliase, ažurira FK veze |
+
+#### 4.15.4 Frontend (u okviru /izvestaji)
+
+Upravljanje katalogom proizvoda je dostupno iz grupe "Upravljanje" na stranici `/izvestaji`:
+
+| Funkcionalnost | Detalj |
+|----------------|--------|
+| **Lista unosa** | Tabela kanonijskih naziva, kategorija, broja aliasa, prodajne cene, marže |
+| **Dodavanje/izmena unosa** | Forma za kanonijsko ime, kategoriju, jedinicu mere, aliase (unos tagova), prodajnu cenu, maržu |
+| **Predlozi spajanja** | Tab sa parovima verovatnih duplikata i akcijom "Spoji" |
+| **Pretraga/filtriranje** | Pretraga po kanonijskom imenu ili kategoriji |
+
+---
+
+### 4.16 Sistem podrške u aplikaciji
+
+Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju tikete sa stranice Podrška, dodaju fajlove i prate status. Administratori upravljaju svim tiketima iz posebnog admin panela.
+
+**Kontrola pristupa:** Dostupno na svim planovima.
+
+#### 4.16.1 Model podataka
+
+**support_tickets:**
+- id, organization_id, user_id (kreator), subject, status (open/in_progress/resolved/closed), priority (low/normal/high), category (billing/technical/feature_request/other), created_at, updated_at
+
+**support_messages:**
+- id, ticket_id, user_id (pošiljalac), body (TEXT), is_admin_reply (BOOLEAN), created_at
+
+**support_attachments:**
+- id, message_id, file_name, file_path (S3 ključ), file_size, content_type, created_at
+
+#### 4.16.2 Klijentski endpoint-i
+- POST /api/v1/support/tickets — kreiranje tiketa sa inicijalnom porukom
+- GET /api/v1/support/tickets — lista tiketa organizacije (paginirano, sa filterima)
+- GET /api/v1/support/tickets/{id} — detalji tiketa sa porukama
+- POST /api/v1/support/tickets/{id}/messages — dodavanje odgovora (sa fajlovima)
+- POST /api/v1/support/tickets/{id}/close — zatvaranje tiketa
+
+#### 4.16.3 Admin endpoint-i
+- GET /api/v1/admin/support/tickets — svi tiketi svih organizacija
+- PATCH /api/v1/admin/support/tickets/{id} — izmena statusa/prioriteta
+- POST /api/v1/admin/support/tickets/{id}/messages — admin odgovor
+
+#### 4.16.4 Frontend
+- Klijent: /{orgSlug}/podrska — lista tiketa, forma za kreiranje, prikaz konverzacije
+- Admin: /{orgSlug}/admin/podrska — upravljanje tiketima svih organizacija
+- Bedž u bočnoj traci: broj nepročitanih odgovora
+- Status bedževi: Otvoren (zeleni), U obradi (žuti), Rešen (plavi), Zatvoren (sivi)
+
+#### 4.16.5 Obaveštenja
+- Bedž u bočnoj traci za nepročitane odgovore (klijent) i otvorene tikete (admin)
+- Opciono email obaveštenje pri admin odgovoru i novom tiketu
 
 ---
 
@@ -1925,6 +2069,32 @@ CREATE TABLE documents (
 
 CREATE INDEX idx_documents_organization ON documents(organization_id);
 ```
+
+#### 7.2.6 product_catalog
+
+Kanonički unosi proizvoda za nabavnu inteligenciju (Odeljak 4.15). Popunjava se i upravlja se putem API-ja za katalog.
+
+```sql
+CREATE TABLE product_catalog (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    canonical_name  TEXT NOT NULL,
+    unit_of_measure VARCHAR(20),
+    category        VARCHAR(50),
+    aliases         JSONB NOT NULL DEFAULT '[]',
+    selling_price   NUMERIC(15, 2),
+    default_margin_pct NUMERIC(5, 2),
+    match_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ix_pc_org_name ON product_catalog(organization_id, canonical_name);
+CREATE INDEX ix_pc_org_id ON product_catalog(organization_id);
+CREATE INDEX ix_pc_category ON product_catalog(category);
+```
+
+Napomena: tabela `invoice_line_items` sadrži nullable FK kolonu `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` (dodata u migraciji 0007).
 
 ---
 
@@ -2384,6 +2554,17 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **Napomena o modelu:** Sistem koristi unapred trenirane modele (dots.ocr, spaCy) bez naknadnog treniranja na korisničkim podacima. Ovaj pristup eliminiše potrebu za prikupljanjem podataka za trening, upravljanjem saglasnošću i složenom MLOps infrastrukturom, dok istovremeno obezbeđuje zaštitu privatnosti korisnika.
 
+**Opcije deployovanja:**
+
+| Opcija | Trošak | Hladno pokretanje | Slučaj korišćenja |
+|--------|--------|-------------------|--------------------|
+| Lokalni vLLM (Docker) | $0 (sopstveni GPU) | Bez | Razvoj |
+| Hetzner GEX44 | ~$200/mes. fiksno | Bez | Produkcija (10+ klijenata) |
+| Google Cloud Run (L4 GPU) | ~$0.0002/sek. | 10-30s | Produkcija (skaliranje do nule) |
+| Cerebrium Serverless | ~$0.0006/fakturi | 30-60s | Produkcija (rana faza) |
+
+OCR radnik se povezuje na bilo koji OpenAI-kompatibilan API endpoint putem environment varijable `DOTS_OCR_SERVER_URL`. Prelaz između lokalnog, Cloud Run ili Cerebrium okruženja zahteva samo promenu environment varijable — bez izmena koda.
+
 ### 9.8 Praćenje kvaliteta ekstrakcije
 
 Sistem MORA da prati kvalitet ekstrakcije putem logovanja korekcija korisnika, ali isključivo u svrhu monitoringa kvaliteta i analitike, NE za treniranje modela.
@@ -2445,11 +2626,14 @@ Ove metrike služe za identifikaciju sistemskih problema i informisanje tima o p
 | Zahtev | Implementacija |
 |--------|---------------|
 | Heširanje lozinki | Argon2id sa salt-om |
-| JWT tokeni | RS256 potpisivanje, istek od 1 sata |
+| JWT tokeni | RS256 potpisivanje, istek od 1 sata; algoritam fiksiran na HS256 (bez konfuzije algoritma) |
 | Refresh tokeni | Bezbedni HTTP-only kolačići, istek od 7 dana |
 | MFA | TOTP-bazirana 2FA (opciona) |
 | Upravljanje sesijama | Sesije podržane u Redis-u |
 | Zaštita od brute force | Ograničenje stope, zaključavanje naloga |
+| Zaključavanje naloga | 5 neuspelih pokušaja → 15 min zaključavanja putem Redis-a |
+| Crna lista tokena | Odjava poništava token putem Redis seta |
+| Ograničenje stope | slowapi, ograničenja po planu (videti 8.1) |
 
 ### 10.2 Bezbednost podataka
 
@@ -2472,6 +2656,9 @@ Ove metrike služe za identifikaciju sistemskih problema i informisanje tima o p
 | CSRF zaštita | CSRF baziran na tokenima |
 | Otpremanje fajlova | Validacija tipa, ograničenja veličine, skeniranje virusa |
 | API bezbednost | Ograničenje stope, rotacija API ključeva |
+| Bezbednosna zaglavlja | X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy putem middleware-a |
+| JWT algoritam | Fiksiran na HS256 (bez konfuzije algoritma) |
+| PII maskiranje | Email i PIB vrednosti maskirane u logovima aplikacije |
 
 ### 10.4 Bezbednost infrastrukture
 
@@ -3089,6 +3276,45 @@ Kredencijali po organizaciji čuvani u tabeli `minimax_configs`:
 - `last_sync_at` — Vreme poslednjeg uspešnog slanja
 
 **API endpointi:** GET/PUT/PATCH `/api/v1/export/minimax/config`
+
+#### 12.5.4 Referenca API polja MiniMax (RS)
+
+Nazivi polja i ID-ovi validirani prema MiniMax RS Swagger API specifikaciji:
+
+**Zemlja i valuta (Srbija):**
+- ID zemlje: 3 (Kod: "RS", Naziv: "Republika Srbija")
+- ID valute: 2 (Kod: "RSD")
+
+**Obavezna polja ReceivedInvoice:**
+| API polje | Izvor | Napomena |
+|-----------|-------|----------|
+| DocumentReference | invoice_number | Originalni broj fakture (NE InvoiceNumber) |
+| Customer | {ID: customer_id} | FK referenca |
+| Currency | {ID: 2} | RSD podrazumevano |
+| PaymentType | "N" | N=Neplaćen, D=Dospeo, Z=Zatvoreno, P=Plaćen, R=Rata |
+| DateIssued | invoice_date | ISO datetime |
+| DateTransaction | invoice_date | |
+| DateDue | due_date | |
+| DateReceived | invoice_date | |
+| InvoiceAmount | total_amount | Zaokruženo na 2 decimale |
+| InvoiceAmountDomesticCurrency | total_amount | Mora biti jednako InvoiceAmount za RSD |
+
+**Obavezna polja pri kreiranju kupca:**
+| Polje | Vrednost |
+|-------|----------|
+| Country | {ID: 3} |
+| CountryName | "Republika Srbija" |
+| Currency | {ID: 2} |
+| SubjectToVAT | "D" (ne "Y") |
+| PostalCode | Obavezno, neprazno |
+
+**Mapiranje PDV stopa:**
+| Srpska stopa | MiniMax VatRateId | Kod |
+|-------------|-------------------|-----|
+| 20% | 4 | S |
+| 10% | 5 | Z |
+| 8% | 3 | P |
+| 0% | 1 | N |
 
 ### 12.6 SEF integracija (eFaktura)
 
@@ -3959,6 +4185,8 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 2.0 | Februar 2026 | FakturaAI Tim | Srpska verzija sa svim ispravkama: uklonjen model training/retraining, ZZPL kao primarni zakon, Paddle umesto Stripe, KPR/KIR terminologija, SEF polling umesto webhook-ova, NBS kursna lista, podrška za ćirilicu i latinicu, PIB constraint za strane entitete, retencija dokumenata 10 godina |
 | 2.1 | Februar 2026 | FakturaAI Tim | dots.ocr arhitektura: vLLM HTTP server sidecar (GPU) + lak OCR radnik (CPU, OpenAI klijent), uklonjen EasyOCR kao rezerva (ručni pregled umesto toga), preskakanje predprocesiranja za VLM |
 | 2.2 | Mart 2026 | FakturaAI Tim | Generacija PDV knjiga (KPR/KIR) zamenjena funkcionalnosti Izveštaja (4.13): denormalizovana tabela invoice_line_items koja se popunjava pri završetku OCR obrade i pri izmenama; pet unapred definisanih šablona izveštaja (pregled primljene robe, troškovi po dobavljaču, mesečni pregled stavki, poređenje cena, pregled troškova) na /api/v1/reports/; nulti LLM trošak; CSV izvoz; stranica na /{orgSlug}/izvestaji; kontrola PRO plana. Dodato upravljanje klijentima za Agency plan (4.12). |
+| 2.8 | Mart 2026 | Saldora Tim | Dodat Katalog proizvoda (4.15): kanonička imena, aliasi (JSONB), kategorije, prodajne cene, marže, pg_trgm fuzzy matching, FK product_id na invoice_line_items, CRUD + merge API na /api/v1/products/. Dodata četiri endpoint-a za nabavnu inteligenciju (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Stranica /izvestaji objedinjena sa tri grupe: Opšti, Nabavka i prodaja, Upravljanje; uklonjene odvojene stranice /katalog i /dpu. Dodat product_catalog u šemu baze (7.2.6). Preimenovano: "Šank lista" → "Dnevna evidencija robe"; "Ugostiteljstvo" → "Nabavka i prodaja". Ispravke: sinhronizacija stavki pri verifikaciji fakture; kaskadno brisanje pri grupnom brisanju; mesečni pregled prikazuje PDV % i PDV iznos; poruke o greškama verifikacije prevedene na srpski. |
+| 2.9 | Mart 2026 | Saldora Tim | Dodat sistem podrške u aplikaciji (4.16). Ažurirana referenca MiniMax API polja (12.5.4). Ažurirani detalji bezbednosnih poboljšanja (10.1, 10.3). Dodate serverless GPU opcije deployovanja (9.7). Ažuriran prikaz pouzdanosti sa procenata na tekstualne oznake (4.3.3). |
 
 ---
 

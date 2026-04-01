@@ -1,8 +1,8 @@
 # Saldora - Specifikacija proizvoda
 ## Platforma za obradu faktura pomoću veštačke inteligencije
 
-**Verzija:** 2.0
-**Datum:** Februar 2026
+**Verzija:** 2.9
+**Datum:** Mart 2026
 **Namena dokumenta:** Poslovni pregled za računovođe, partnere i investitore
 
 ---
@@ -78,6 +78,9 @@ Računovođa ostaje u potpunoj kontroli - pregleda predloge sistema, ispravlja g
 | Pravila automatizacije | Definisanje pravila za automatsko knjiženje | Srednji |
 | Kontrolna tabla | Statistike obrade, praćenje korišćenja | Srednji |
 | NBS kursna lista | Automatska konverzija stranih valuta po kursu NBS | Srednji |
+| Izveštaji o nabavci | Kalkulacija cena, RUC analiza, troškovi po kategoriji, dnevna evidencija robe | Srednji |
+| Katalog proizvoda | Kanonička lista proizvoda sa aliasima za normalizaciju stavki faktura | Srednji |
+| Sistem podrške (Podrška) | Tiketi za podršku sa chat pregledom i fajlovima — dostupno na svim planovima | Srednji |
 | API pristup | REST API za integracije sa trećim sistemima | Nizak |
 
 ---
@@ -471,6 +474,15 @@ Saldora se integriše sa SEF-om (eFaktura) za automatsko preuzimanje elektronski
 - Paddle preuzima odgovornost za obračun PDV-a u svim jurisdikcijama
 - Korisnici plaćaju pretplatu putem kartice ili PayPal-a
 
+### 9.5 MiniMax integracija
+
+Saldora se integriše sa MiniMax-om (minimax.rs), najkorišćenijim cloud računovodstvenim softverom u Srbiji:
+
+- **XML izvoz:** Generiše XML fajl za uvoz u MiniMax (Stranke + Temeljnice format)
+- **Direktno slanje putem API-ja:** Automatsko slanje primljenih faktura u MiniMax putem REST API-ja (OAuth 2.0)
+- **Upravljanje kupcima:** Automatska pretraga ili kreiranje kupca po PIB-u
+- **Konfiguracija po organizaciji:** Svaka organizacija čuva sopstvene MiniMax kredencijale
+
 ---
 
 ## 10. Pretplatni planovi
@@ -554,6 +566,7 @@ Kada Poreska uprava zatraži podatke, sistem omogućava izvoz:
 | Lista faktura | Pretražuje, filtrira, sortira sve fakture |
 | SEF Inbox | Upravlja fakturama iz Sistema Elektronskih Faktura |
 | Izvoz | Bira format, prilagođava šablon, preuzima fajl |
+| Podrška | Kreira tikete, prati status, razmenjuje poruke sa timom Saldore |
 | Podešavanja | Profil, tim, pravila automatizacije, API ključevi |
 | Naplata | Bira plan, prati korišćenje, upravlja pretplatom |
 
@@ -571,6 +584,17 @@ Aplikacija radi na svim uređajima:
 - Desktop (optimalno iskustvo za svakodnevni rad)
 - Tablet (pregled i odobravanje faktura)
 - Mobilni telefon (otpremanje faktura kamerom, pregled statusa)
+
+### 12.4 Sistem podrške (Podrška)
+
+Saldora ima ugrađen sistem podrške dostupan na svim planovima. Korisnici mogu:
+
+- Kreirati tikete za podršku direktno iz aplikacije (bez odlaska na email ili spoljni portal)
+- Priložiti fajlove (snimke ekrana, PDF-ove) uz poruke
+- Pratiti status tiketa: **Otvoren** → **U obradi** → **Rešen** → **Zatvoren**
+- Primati odgovore tima Saldore u obliku chat-like konverzacije
+
+Bedž u bočnoj traci označava broj nepročitanih odgovora.
 
 ---
 
@@ -618,6 +642,29 @@ Aplikacija radi na svim uređajima:
 │                                  UKUPNO:        72.000 RSD │
 └────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Dodatak: Nabavna inteligencija (M16)
+
+### Katalog proizvoda
+
+Za ugostiteljske i maloprodajne klijente, Saldora omogućava kreiranje kataloga proizvoda — kanonijskog spiska artikala sa alternativnim imenima (aliasima), kategorijama, prodajnim cenama i maržama. Sistem automatski pokušava da poveže stavke faktura sa unosima u katalogu koristeći fuzzy poređenje teksta (pg_trgm). Ovo normalizuje različite opise istog proizvoda od različitih dobavljača.
+
+### Izveštaji o nabavci i prodaji
+
+Na stranici Izveštaji ("Nabavka i prodaja" grupa) dostupna su četiri nova izveštaja:
+
+| Izveštaj | Šta prikazuje |
+|----------|--------------|
+| **Kalkulacija** | Nabavna cena, marža i prodajna cena po stavci |
+| **RUC** | Razlika u ceni grupisana po proizvodu iz kataloga |
+| **Troškovi po kategoriji** | Ukupni troškovi grupisani po kategorijama iz kataloga |
+| **Dnevna evidencija robe** | Sve primljene stavke za određeni datum |
+
+### Objedinjena stranica izveštaja
+
+Stranica `/izvestaji` sada objedinjuje sve izveštaje, katalog proizvoda i dnevnu evidenciju robe u jednom mestu. Navigacija se vrši putem tri grupe: **Opšti** (5 opštih izveštaja), **Nabavka i prodaja** (4 nabavna izveštaja), **Upravljanje** (katalog proizvoda).
 
 ---
 

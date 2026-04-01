@@ -150,8 +150,10 @@ export default function InvoiceDetailPage({
     if (ok) {
       setToast({ message: t('verifySuccess'), type: 'success' });
       fetchAccountingIntent(id).then(setAccountingIntent);
+    } else if (error) {
+      setToast({ message: error, type: 'error' });
     }
-  }, [verify, t, id]);
+  }, [verify, t, id, error]);
 
   const handleReviewIntent = useCallback(async () => {
     setIsReviewingIntent(true);

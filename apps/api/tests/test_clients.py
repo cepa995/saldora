@@ -204,7 +204,7 @@ async def test_update_client(client: AsyncClient, test_engine):
 
 
 async def test_soft_delete_client(client: AsyncClient, test_engine):
-    """Delete (soft-delete) sets is_active=false."""
+    """Delete (hard delete) removes the client from the database."""
     headers = await _setup_agency(client, test_engine, "delete-client@example.com")
     create_resp = await client.post(
         "/api/v1/clients/",
@@ -216,10 +216,9 @@ async def test_soft_delete_client(client: AsyncClient, test_engine):
     resp = await client.delete(f"/api/v1/clients/{client_id}", headers=headers)
     assert resp.status_code == 204
 
-    # Verify it's inactive
+    # Verify it's gone entirely
     get_resp = await client.get(f"/api/v1/clients/{client_id}", headers=headers)
-    assert get_resp.status_code == 200
-    assert get_resp.json()["is_active"] is False
+    assert get_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -452,8 +451,8 @@ async def test_delete_client_not_found(client: AsyncClient, test_engine):
 async def test_list_clients_filter_by_is_active(client: AsyncClient, test_engine):
     """GET /api/v1/clients/?is_active= filters correctly by active status.
 
-    Creates two clients, soft-deletes one, then verifies the is_active
-    filter returns the correct subset.
+    Creates two clients, deactivates one via toggle-active, then verifies
+    the is_active filter returns the correct subset.
 
     Args:
         client: Async HTTP client fixture.
@@ -474,8 +473,8 @@ async def test_list_clients_filter_by_is_active(client: AsyncClient, test_engine
     )
     client_id_2 = r2.json()["id"]
 
-    # Soft-delete the second client
-    await client.delete(f"/api/v1/clients/{client_id_2}", headers=headers)
+    # Deactivate the second client via toggle-active (starts active, toggle → inactive)
+    await client.post(f"/api/v1/clients/{client_id_2}/toggle-active", headers=headers)
 
     # Filter: only active clients
     resp_active = await client.get("/api/v1/clients/?is_active=true", headers=headers)
@@ -615,7 +614,7 @@ async def test_create_client_full_details(client: AsyncClient, test_engine):
 
 
 async def test_reactivate_soft_deleted_client(client: AsyncClient, test_engine):
-    """A soft-deleted client can be reactivated by PATCHing is_active=True.
+    """A deactivated client can be reactivated via POST /{id}/toggle-active.
 
     Args:
         client: Async HTTP client fixture.
@@ -630,18 +629,14 @@ async def test_reactivate_soft_deleted_client(client: AsyncClient, test_engine):
     )
     client_id = create_resp.json()["id"]
 
-    # Soft-delete
-    await client.delete(f"/api/v1/clients/{client_id}", headers=headers)
+    # Deactivate via toggle-active (starts active → toggle → inactive)
+    toggle_resp = await client.post(f"/api/v1/clients/{client_id}/toggle-active", headers=headers)
+    assert toggle_resp.status_code == 200
+    assert toggle_resp.json()["is_active"] is False
 
-    # Verify inactive
-    get_resp = await client.get(f"/api/v1/clients/{client_id}", headers=headers)
-    assert get_resp.json()["is_active"] is False
-
-    # Reactivate via PATCH
-    patch_resp = await client.patch(
-        f"/api/v1/clients/{client_id}",
-        json={"is_active": True},
-        headers=headers,
+    # Reactivate via toggle-active again (inactive → toggle → active)
+    reactivate_resp = await client.post(
+        f"/api/v1/clients/{client_id}/toggle-active", headers=headers
     )
-    assert patch_resp.status_code == 200
-    assert patch_resp.json()["is_active"] is True
+    assert reactivate_resp.status_code == 200
+    assert reactivate_resp.json()["is_active"] is True

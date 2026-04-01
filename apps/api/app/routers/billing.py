@@ -5,14 +5,14 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import extract, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
 from app.dependencies import require_role
-from app.models.invoice import Invoice
 from app.models.organization import Organization
+from app.models.usage_record import UsageRecord
 from app.models.user import User
 from app.plans import PlanTier, get_plan
 from app.schemas.billing import (
@@ -81,12 +81,9 @@ async def get_subscription(
     # Count invoices created this month.
     now = datetime.now(UTC)
     invoice_count_result = await db.execute(
-        select(func.count())
-        .select_from(Invoice)
-        .where(
-            Invoice.organization_id == org_id,
-            extract("year", Invoice.created_at) == now.year,
-            extract("month", Invoice.created_at) == now.month,
+        select(UsageRecord.invoices_count).where(
+            UsageRecord.organization_id == org_id,
+            UsageRecord.period_start == now.replace(day=1).date(),
         )
     )
     monthly_usage = invoice_count_result.scalar() or 0

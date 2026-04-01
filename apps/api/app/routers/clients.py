@@ -96,7 +96,17 @@ async def create_client(
             detail=f"Klijent sa PIB-om {body.pib} već postoji",
         )
     await db.refresh(client)
-    return _build_client_response(client, invoice_count=0, total_amount=None)
+
+    # Retroactively assign unassigned invoices matching this client's PIB
+    assigned_count = await _retroactive_client_assignment(db, client)
+    logger.info(
+        "Client %s created (PIB: %s), retroactively assigned %d invoices",
+        client.id,
+        client.pib,
+        assigned_count,
+    )
+
+    return _build_client_response(client, invoice_count=assigned_count, total_amount=None)
 
 
 @router.get("/", response_model=ClientListResponse)
@@ -274,22 +284,19 @@ async def update_client(
     )
 
 
-@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_client(
+@router.post("/{client_id}/toggle-active", status_code=status.HTTP_200_OK)
+async def toggle_client_active(
     client_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("manager")),
-) -> None:
-    """Deactivate a client (soft-delete).
-
-    Sets is_active=False. Does not hard-delete because invoices
-    reference this client.
+) -> dict:
+    """Toggle client active/inactive status.
 
     Args:
         client_id: Client UUID.
 
-    Raises:
-        HTTPException: 404 if not found or not in user's org.
+    Returns:
+        Updated client with new is_active status.
     """
     result = await db.execute(
         select(Client).where(
@@ -303,5 +310,110 @@ async def delete_client(
     if client is None:
         raise HTTPException(status_code=404, detail="Klijent nije pronađen")
 
-    client.is_active = False
+    client.is_active = not client.is_active
     await db.commit()
+    await db.refresh(client)
+    return {"id": str(client.id), "name": client.name, "is_active": client.is_active}
+
+
+@router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_client(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+) -> None:
+    """Permanently delete a client.
+
+    Unlinks all invoices and line items from this client before deletion.
+    Requires admin role.
+
+    Args:
+        client_id: Client UUID.
+
+    Raises:
+        HTTPException: 404 if not found or not in user's org.
+    """
+    from sqlalchemy import update
+
+    from app.models.line_item import InvoiceLineItem
+
+    result = await db.execute(
+        select(Client).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+
+    # Unlink invoices and line items
+    await db.execute(update(Invoice).where(Invoice.client_id == client_id).values(client_id=None))
+    await db.execute(
+        update(InvoiceLineItem).where(InvoiceLineItem.client_id == client_id).values(client_id=None)
+    )
+
+    await db.delete(client)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _retroactive_client_assignment(
+    db: AsyncSession,
+    client: Client,
+) -> int:
+    """Assign unassigned invoices to the newly created client by PIB match.
+
+    Scans all invoices in the same organization where:
+    - client_id is NULL
+    - seller.pib matches the client's PIB
+
+    Also updates corresponding invoice_line_items rows.
+
+    Args:
+        db: Active database session.
+        client: The newly created Client.
+
+    Returns:
+        Number of invoices assigned.
+    """
+    from sqlalchemy import update
+
+    from app.models.line_item import InvoiceLineItem
+
+    # Find unassigned invoices where seller PIB matches
+    result = await db.execute(
+        select(Invoice).where(
+            Invoice.organization_id == client.organization_id,
+            Invoice.client_id.is_(None),
+        )
+    )
+    invoices = result.scalars().all()
+
+    assigned = 0
+    for inv in invoices:
+        seller = inv.seller if isinstance(inv.seller, dict) else {}
+        if seller.get("pib") == client.pib:
+            inv.client_id = client.id
+            assigned += 1
+
+    if assigned:
+        # Also update denormalized line items
+        await db.execute(
+            update(InvoiceLineItem)
+            .where(
+                InvoiceLineItem.organization_id == client.organization_id,
+                InvoiceLineItem.seller_pib == client.pib,
+                InvoiceLineItem.client_id.is_(None),
+            )
+            .values(client_id=client.id)
+        )
+        await db.commit()
+
+    return assigned

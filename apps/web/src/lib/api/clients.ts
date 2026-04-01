@@ -87,3 +87,10 @@ export async function updateClient(
 export async function deleteClient(id: string): Promise<void> {
   await apiClient<void>(`/api/v1/clients/${id}`, { method: 'DELETE' });
 }
+
+/**
+ * Toggle client active/inactive status.
+ */
+export async function toggleClientActive(id: string): Promise<{ is_active: boolean }> {
+  return apiClient<{ is_active: boolean }>(`/api/v1/clients/${id}/toggle-active`, { method: 'POST' });
+}

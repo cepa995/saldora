@@ -563,8 +563,8 @@ async def test_verify_invoice_missing_fields(client: AsyncClient, test_engine):
 
     resp = await client.post(f"/api/v1/invoices/{inv_id}/verify", headers=headers)
     assert resp.status_code == 400
-    assert "invoice_number" in resp.json()["detail"]
-    assert "seller" in resp.json()["detail"]
+    assert "Broj fakture" in resp.json()["detail"]
+    assert "Podaci o prodavcu" in resp.json()["detail"]
 
 
 async def test_verify_invoice_wrong_status(client: AsyncClient, test_engine):
