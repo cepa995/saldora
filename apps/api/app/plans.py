@@ -24,7 +24,6 @@ class Feature(StrEnum):
     MINIMAX_XML_EXPORT = "minimax_xml_export"
     NBS_EXCHANGE_RATES = "nbs_exchange_rates"
     ACCOUNTING_INTENT = "accounting_intent"
-    SEF_INTEGRATION = "sef_integration"
     MINIMAX_DIRECT_PUSH = "minimax_direct_push"
     AUTOMATION_RULES = "automation_rules"
     AUDIT_EXPORT = "audit_export"
@@ -68,7 +67,6 @@ _BASE_FEATURES: frozenset[Feature] = frozenset(
 _PRO_FEATURES: frozenset[Feature] = _BASE_FEATURES | frozenset(
     {
         Feature.ACCOUNTING_INTENT,
-        Feature.SEF_INTEGRATION,
         Feature.MINIMAX_DIRECT_PUSH,
         Feature.AUDIT_EXPORT,
         Feature.PDV_BOOKS,

@@ -1495,7 +1495,6 @@ function PricingSection() {
         "OCR obrada",
         "Svi formati izvoza",
         "Računovodstvena klasifikacija",
-        "SEF integracija",
         "MiniMax direktan uvoz",
         "NBS kursna lista",
       ],

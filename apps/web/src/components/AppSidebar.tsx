@@ -17,7 +17,6 @@ interface NavItem {
   labelKey:
     | "dashboard"
     | "invoices"
-    | "sefInbox"
     | "upload"
     | "clients"
     | "rules"
@@ -98,26 +97,6 @@ const NAV_GROUPS: NavGroup[] = [
               strokeLinejoin="round"
               strokeWidth={1.75}
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/sef-inbox",
-        labelKey: "sefInbox",
-        planBadge: "PRO",
-        icon: (
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.75}
-              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
             />
           </svg>
         ),
