@@ -57,12 +57,12 @@
     "groupTools": "Alati",
     "clients": "Klijenti",
     "allClients": "Svi klijenti",
-    "audit": "Revizija",
     "pdvBooks": "PDV knjige",
     "reports": "Izveštaji",
     "catalog": "Katalog proizvoda",
     "dpu": "Dnevna evidencija robe",
-    "billing": "Naplata"
+    "billing": "Naplata",
+    "archive": "Arhiviranje"
   },
   "script": {
     "latin": "Lat",
@@ -1108,5 +1108,33 @@
     "totalRevenue": "Ukupan prihod",
     "noData": "Nema podataka za izabrani datum",
     "exportXlsx": "Izvezi XLSX"
+  },
+  "archive": {
+    "title": "Arhiviranje i izvoz podataka",
+    "subtitle": "Automatski mesečni izvoz i izvoz za poresku inspekciju",
+    "monthlyExportTitle": "Automatski mesečni izvoz",
+    "monthlyExportDesc": "Saldora automatski generiše arhivski izvoz prvog u mesecu i šalje ga na vašu email adresu.",
+    "enabled": "Automatski izvoz aktivan",
+    "includePdfs": "Uključi originalna PDF dokumenta",
+    "deliveryEmail": "Email za dostavu",
+    "changeEmail": "Promenite u Podešavanja → Organizacija",
+    "testNow": "Testiraj sada",
+    "generating": "Generisanje...",
+    "exportSuccess": "Arhiva uspešno generisana i poslata",
+    "exportFailed": "Greška pri generisanju arhive",
+    "deliveryHistory": "Istorija dostave",
+    "period": "Period",
+    "status": "Status",
+    "deliveredTo": "Dostavljeno na",
+    "invoiceCount": "Br. faktura",
+    "fileSize": "Veličina",
+    "deliveredAt": "Datum",
+    "delivered": "Dostavljeno",
+    "failed": "Neuspešno",
+    "skipped": "Preskočeno",
+    "noHistory": "Nema prethodnih izvoza",
+    "selectPeriod": "Izaberite period za testni izvoz",
+    "taxExportTitle": "Izvoz za poresku inspekciju",
+    "taxExportDesc": "Generišite kompletnu arhivu za potrebe poreske kontrole"
   }
 }

@@ -20,6 +20,7 @@ from app.models.join_request import JoinRequest
 from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
+from app.models.scheduled_export_log import ScheduledExportLog
 from app.models.usage_record import UsageRecord
 from app.models.user import User
 
@@ -44,6 +45,7 @@ __all__ = [
     "Organization",
     "ProductCatalog",
     "RuleExecution",
+    "ScheduledExportLog",
     "UsageRecord",
     "User",
 ]

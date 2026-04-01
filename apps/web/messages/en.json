@@ -57,12 +57,12 @@
     "groupTools": "Tools",
     "clients": "Clients",
     "allClients": "All clients",
-    "audit": "Audit",
     "pdvBooks": "PDV Books",
     "reports": "Reports",
     "catalog": "Product catalog",
     "dpu": "Daily goods tracking",
-    "billing": "Billing"
+    "billing": "Billing",
+    "archive": "Archiving"
   },
   "script": {
     "latin": "Lat",
@@ -1088,5 +1088,33 @@
     "totalRevenue": "Total revenue",
     "noData": "No data for selected date",
     "exportXlsx": "Export XLSX"
+  },
+  "archive": {
+    "title": "Archiving & Data Export",
+    "subtitle": "Automatic monthly export and tax inspection export",
+    "monthlyExportTitle": "Automatic Monthly Export",
+    "monthlyExportDesc": "Saldora automatically generates an archive export on the first of each month and sends it to your email address.",
+    "enabled": "Automatic export active",
+    "includePdfs": "Include original PDF documents",
+    "deliveryEmail": "Delivery email",
+    "changeEmail": "Change in Settings → Organization",
+    "testNow": "Test now",
+    "generating": "Generating...",
+    "exportSuccess": "Archive successfully generated and sent",
+    "exportFailed": "Error generating archive",
+    "deliveryHistory": "Delivery history",
+    "period": "Period",
+    "status": "Status",
+    "deliveredTo": "Delivered to",
+    "invoiceCount": "No. invoices",
+    "fileSize": "File size",
+    "deliveredAt": "Date",
+    "delivered": "Delivered",
+    "failed": "Failed",
+    "skipped": "Skipped",
+    "noHistory": "No previous exports",
+    "selectPeriod": "Select period for test export",
+    "taxExportTitle": "Tax Inspection Export",
+    "taxExportDesc": "Generate a complete archive for tax audit purposes"
   }
 }

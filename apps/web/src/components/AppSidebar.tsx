@@ -21,7 +21,7 @@ interface NavItem {
     | "clients"
     | "rules"
     | "templates"
-    | "audit"
+    | "archive"
     | "reports"
     | "billing";
   icon: React.ReactNode;
@@ -127,8 +127,8 @@ const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
-        href: "/revizija",
-        labelKey: "audit",
+        href: "/arhiviranje",
+        labelKey: "archive",
         minRole: "admin",
         planBadge: "PRO",
         icon: (
