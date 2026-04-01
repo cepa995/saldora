@@ -537,14 +537,14 @@ async def test_monthly_breakdown_pagination(client: AsyncClient, test_engine) ->
 
 
 async def test_price_comparison_requires_search(client: AsyncClient, test_engine) -> None:
-    """Price-comparison returns 422 when the mandatory search parameter is missing."""
+    """Price-comparison returns 200 when no search parameter is provided (search is optional)."""
     headers = await _auth_headers(
         client, test_engine, "rpt-pc-nosearch@example.com", "RPT PC NoSearch"
     )
 
     resp = await client.get("/api/v1/reports/price-comparison", headers=headers)
 
-    assert resp.status_code == 422
+    assert resp.status_code == 200
 
 
 async def test_price_comparison_shows_suppliers(client: AsyncClient, test_engine) -> None:

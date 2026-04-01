@@ -185,14 +185,32 @@ class TestInvoiceLimit:
     """Test plan limit enforcement on invoice upload."""
 
     async def test_free_plan_limit_enforced(self, client, test_engine):
-        """Exceeding free plan limit (10) returns 429."""
+        """Exceeding free plan limit (10) returns 402."""
         headers = await _register_and_login(client, email="limit-free@example.com")
         org_id = _get_org_id(headers)
 
-        # Insert 10 invoices (the free limit)
-        await _insert_invoices(test_engine, org_id, 10)
+        # Insert a usage_record showing 10 invoices used this month (the free limit)
+        session_factory = async_sessionmaker(
+            test_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        async with session_factory() as session:
+            import calendar
+            from datetime import UTC, datetime
 
-        # 11th upload should be rejected with 429
+            now = datetime.now(UTC)
+            period_start = now.date().replace(day=1)
+            last_day = calendar.monthrange(now.year, now.month)[1]
+            period_end = now.date().replace(day=last_day)
+            usage = UsageRecord(
+                organization_id=org_id,
+                period_start=period_start,
+                period_end=period_end,
+                invoices_count=10,
+            )
+            session.add(usage)
+            await session.commit()
+
+        # Next upload should be rejected with 402
         resp = await client.post(
             "/api/v1/invoices/upload",
             headers=headers,
