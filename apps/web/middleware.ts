@@ -13,7 +13,6 @@ const APP_PAGES = new Set([
   "rules",
   "templates",
   "revizija",
-  "sef-inbox",
 ]);
 
 const AUTH_ROUTES = ["/login", "/register", "/password-reset", "/invite"];

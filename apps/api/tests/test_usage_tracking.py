@@ -108,8 +108,8 @@ class TestSubscriptionEndpoint:
         assert isinstance(data["features"], list)
         assert "ocr_extraction" in data["features"]
 
-    async def test_pro_plan_has_sef_feature(self, client, test_engine):
-        """Pro plan subscription includes SEF in features."""
+    async def test_pro_plan_has_accounting_feature(self, client, test_engine):
+        """Pro plan subscription includes accounting_intent in features."""
         headers = await _register_and_login(client, email="sub-pro@example.com")
         org_id = _get_org_id(headers)
         await _set_org_plan(test_engine, org_id, "pro")
@@ -118,7 +118,6 @@ class TestSubscriptionEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["plan"] == "pro"
-        assert "sef_integration" in data["features"]
         assert "accounting_intent" in data["features"]
 
 
@@ -141,26 +140,6 @@ class TestUsageEndpoint:
 
 class TestFeatureGate:
     """Test require_feature dependency on gated endpoints."""
-
-    async def test_free_plan_blocked_from_sef(self, client, test_engine):
-        """Free plan user gets 403 when accessing SEF endpoints."""
-        headers = await _register_and_login(client, email="gate-sef@example.com")
-
-        resp = await client.get("/api/v1/sef/inbox", headers=headers)
-        assert resp.status_code == 403
-        data = resp.json()["detail"]
-        assert data["code"] == "feature_unavailable"
-        assert data["plan"] == "free"
-
-    async def test_pro_plan_allowed_sef(self, client, test_engine):
-        """Pro plan user can access SEF endpoints."""
-        headers = await _register_and_login(client, email="gate-sef-pro@example.com")
-        org_id = _get_org_id(headers)
-        await _set_org_plan(test_engine, org_id, "pro")
-
-        resp = await client.get("/api/v1/sef/inbox", headers=headers)
-        # 200 or other non-403 status (may fail for other reasons like missing config)
-        assert resp.status_code != 403
 
     async def test_starter_blocked_from_rules(self, client, test_engine):
         """Starter plan user gets 403 when accessing automation rules."""

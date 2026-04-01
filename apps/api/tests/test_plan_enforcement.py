@@ -70,28 +70,6 @@ async def _create_user_with_plan(
 # ---------------------------------------------------------------------------
 
 
-async def test_free_user_blocked_from_sef(client: AsyncClient):
-    """Free user accessing SEF endpoints gets 403 with feature_unavailable code."""
-    headers = await _create_user_with_plan(client, "free-sef@test.com", "free")
-    response = await client.get("/api/v1/sef/inbox", headers=headers)
-
-    assert response.status_code == 403
-    body = response.json()
-    detail = body["detail"]
-    assert detail["code"] == "feature_unavailable"
-    assert detail["plan"] == "free"
-    assert "Pro" in detail["required_plan"]
-
-
-async def test_pro_user_can_access_sef(client: AsyncClient):
-    """Pro user can access SEF endpoints (feature gate passes)."""
-    headers = await _create_user_with_plan(client, "pro-sef@test.com", "pro")
-    response = await client.get("/api/v1/sef/inbox", headers=headers)
-
-    # Should not be 403 — may be 200 or another status depending on SEF setup
-    assert response.status_code != 403
-
-
 async def test_free_user_blocked_from_rules(client: AsyncClient):
     """Free user accessing rules endpoints gets 403 with feature_unavailable code."""
     headers = await _create_user_with_plan(client, "free-rules@test.com", "free")
@@ -207,7 +185,7 @@ async def test_free_user_member_limit(client: AsyncClient):
 async def test_feature_gate_error_is_serbian(client: AsyncClient):
     """Feature gate error messages are in Serbian."""
     headers = await _create_user_with_plan(client, "serbian-test@test.com", "free")
-    response = await client.get("/api/v1/sef/inbox", headers=headers)
+    response = await client.get("/api/v1/rules/", headers=headers)
 
     assert response.status_code == 403
     body = response.json()

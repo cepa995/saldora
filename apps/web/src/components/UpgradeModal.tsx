@@ -48,7 +48,6 @@ const UPGRADE_PLANS: Record<string, UpgradePlanInfo> = {
     userLimit: 5,
     features: [
       "Sve iz Starter plana",
-      "SEF integracija",
       "Automatsko knjiženje",
       "MiniMax direktan import",
       "Revizorski izvoz",

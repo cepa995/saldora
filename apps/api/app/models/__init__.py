@@ -20,9 +20,6 @@ from app.models.join_request import JoinRequest
 from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
-from app.models.product_catalog import ProductCatalog
-from app.models.sef_connection import SefConnection
-from app.models.sef_invoice import SefInvoice
 from app.models.usage_record import UsageRecord
 from app.models.user import User
 
@@ -47,8 +44,6 @@ __all__ = [
     "Organization",
     "ProductCatalog",
     "RuleExecution",
-    "SefConnection",
-    "SefInvoice",
     "UsageRecord",
     "User",
 ]

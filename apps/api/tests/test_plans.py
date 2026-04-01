@@ -39,10 +39,9 @@ class TestPlanDefinitions:
         assert Feature.MINIMAX_XML_EXPORT in free_plan.features
         assert Feature.NBS_EXCHANGE_RATES in free_plan.features
 
-    def test_pro_has_sef_and_accounting(self):
-        """Pro plan should include SEF, accounting intent, and MiniMax push."""
+    def test_pro_has_accounting(self):
+        """Pro plan should include accounting intent and MiniMax push."""
         pro_plan = PLANS[PlanTier.PRO]
-        assert Feature.SEF_INTEGRATION in pro_plan.features
         assert Feature.ACCOUNTING_INTENT in pro_plan.features
         assert Feature.MINIMAX_DIRECT_PUSH in pro_plan.features
 
@@ -55,7 +54,6 @@ class TestPlanDefinitions:
     def test_starter_does_not_have_pro_features(self):
         """Starter should NOT have Pro-only features."""
         starter = PLANS[PlanTier.STARTER]
-        assert Feature.SEF_INTEGRATION not in starter.features
         assert Feature.ACCOUNTING_INTENT not in starter.features
         assert Feature.AUTOMATION_RULES not in starter.features
 
@@ -101,14 +99,6 @@ class TestPlanHasFeature:
     def test_starter_has_ocr(self):
         """Starter plan includes OCR."""
         assert plan_has_feature("starter", Feature.OCR_EXTRACTION) is True
-
-    def test_starter_lacks_sef(self):
-        """Starter plan does not include SEF."""
-        assert plan_has_feature("starter", Feature.SEF_INTEGRATION) is False
-
-    def test_pro_has_sef(self):
-        """Pro plan includes SEF."""
-        assert plan_has_feature("pro", Feature.SEF_INTEGRATION) is True
 
     def test_agency_has_automation(self):
         """Agency plan includes automation rules."""

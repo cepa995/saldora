@@ -26,7 +26,6 @@ from app.routers import (
     products,
     reports,
     rules,
-    sef,
     team,
     users,
     webhooks,
@@ -141,7 +140,6 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(team.router, prefix="/api/v1/team", tags=["Team"])
 app.include_router(invitations.router, prefix="/api/v1/invitations", tags=["Invitations"])
 app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["Join Requests"])
-app.include_router(sef.router, prefix="/api/v1/sef", tags=["SEF"])
 app.include_router(exchange_rates.router, prefix="/api/v1/exchange-rates", tags=["Exchange Rates"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["ZZPL Compliance"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
