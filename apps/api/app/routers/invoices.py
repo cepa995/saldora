@@ -155,6 +155,9 @@ async def upload_invoice(
     await db.commit()
     await db.refresh(invoice)
 
+    # Increment usage counter (write-only, survives deletion)
+    await _increment_usage(db, user.organization_id, 1)
+
     # 5. Queue Celery OCR task (graceful fallback if Redis/Celery is down)
     celery_queued = False
     try:
