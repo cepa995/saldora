@@ -15,7 +15,10 @@ from app.dependencies import get_current_user
 from app.models.line_item import InvoiceLineItem
 from app.models.product_catalog import ProductCatalog
 from app.models.user import User
+from app.models.invoice import Invoice
 from app.schemas.report import (
+    AgingBucket,
+    AgingResponse,
     CategorySpendingItem,
     CategorySpendingResponse,
     ExpenseSummaryBucket,
@@ -24,6 +27,8 @@ from app.schemas.report import (
     KalkulacijaResponse,
     MonthlyBreakdownItem,
     MonthlyBreakdownResponse,
+    OpenItemsResponse,
+    OpenItemsRow,
     PriceComparisonItem,
     PriceComparisonResponse,
     ReceivedGoodsItem,
@@ -810,3 +815,213 @@ async def spending_by_category(
 
     grand_total = sum(i.total_amount for i in items)
     return CategorySpendingResponse(items=items, grand_total=grand_total)
+
+
+# ---------------------------------------------------------------------------
+# Open Items (Otvorene stavke)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/open-items", response_model=OpenItemsResponse)
+async def open_items_report(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    seller_pib: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    payment_status: str | None = Query(
+        default=None, description="Filter: 'unpaid' or 'partially_paid'"
+    ),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> OpenItemsResponse:
+    """List unpaid and partially paid invoices with days overdue.
+
+    Shows all invoices that haven't been fully paid, ordered by
+    due date. Calculates days overdue from due_date.
+
+    Args:
+        date_from: Filter invoices on or after this date.
+        date_to: Filter invoices on or before this date.
+        seller_pib: Filter to a specific supplier.
+        client_id: Filter by client (Agency feature).
+        payment_status: Filter by 'unpaid' or 'partially_paid'.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Open items with totals.
+    """
+    from uuid import UUID as PyUUID
+
+    conditions = [
+        Invoice.organization_id == user.organization_id,
+        Invoice.payment_status.in_(["unpaid", "partially_paid"]),
+        Invoice.status.in_(["verified", "exported"]),
+    ]
+
+    if payment_status and payment_status in ("unpaid", "partially_paid"):
+        conditions.append(Invoice.payment_status == payment_status)
+
+    if date_from:
+        conditions.append(Invoice.invoice_date >= date_from)
+    if date_to:
+        conditions.append(Invoice.invoice_date <= date_to)
+    if seller_pib:
+        conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
+    if client_id:
+        conditions.append(Invoice.client_id == PyUUID(client_id))
+
+    result = await db.execute(
+        select(Invoice)
+        .where(*conditions)
+        .order_by(Invoice.due_date.asc().nullslast(), Invoice.invoice_date.asc())
+    )
+    invoices = result.scalars().all()
+
+    today = date.today()
+    items: list[OpenItemsRow] = []
+    total_open = 0.0
+    total_overdue = 0.0
+
+    for inv in invoices:
+        total = float(inv.total_amount) if inv.total_amount else 0.0
+        paid = float(inv.paid_amount) if inv.paid_amount else 0.0
+        remaining = total - paid
+
+        days_overdue = 0
+        if inv.due_date and inv.due_date < today:
+            days_overdue = (today - inv.due_date).days
+
+        seller_name = None
+        s_pib = None
+        if inv.seller and isinstance(inv.seller, dict):
+            seller_name = inv.seller.get("name")
+            s_pib = inv.seller.get("pib")
+
+        items.append(
+            OpenItemsRow(
+                invoice_id=str(inv.id),
+                invoice_number=inv.invoice_number,
+                invoice_date=inv.invoice_date,
+                due_date=inv.due_date,
+                seller_name=seller_name,
+                seller_pib=s_pib,
+                total_amount=total,
+                paid_amount=paid,
+                remaining_amount=remaining,
+                payment_status=inv.payment_status or "unpaid",
+                days_overdue=days_overdue,
+                currency=inv.currency or "RSD",
+            )
+        )
+        total_open += remaining
+        if days_overdue > 0:
+            total_overdue += remaining
+
+    return OpenItemsResponse(
+        items=items,
+        total_open_amount=round(total_open, 2),
+        total_overdue_amount=round(total_overdue, 2),
+        count=len(items),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Aging Analysis (Analiza dospeća)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/aging", response_model=AgingResponse)
+async def aging_report(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    seller_pib: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AgingResponse:
+    """Aging analysis of unpaid invoices grouped by overdue buckets.
+
+    Groups outstanding invoices into 0-30, 31-60, 61-90, and 90+ day
+    buckets based on how many days past due_date.
+
+    Args:
+        date_from: Filter invoices on or after this date.
+        date_to: Filter invoices on or before this date.
+        seller_pib: Filter to a specific supplier.
+        client_id: Filter by client (Agency feature).
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Aging buckets with totals.
+    """
+    from uuid import UUID as PyUUID
+
+    conditions = [
+        Invoice.organization_id == user.organization_id,
+        Invoice.payment_status.in_(["unpaid", "partially_paid"]),
+        Invoice.status.in_(["verified", "exported"]),
+    ]
+
+    if date_from:
+        conditions.append(Invoice.invoice_date >= date_from)
+    if date_to:
+        conditions.append(Invoice.invoice_date <= date_to)
+    if seller_pib:
+        conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
+    if client_id:
+        conditions.append(Invoice.client_id == PyUUID(client_id))
+
+    result = await db.execute(
+        select(Invoice).where(*conditions)
+    )
+    invoices = result.scalars().all()
+
+    today = date.today()
+    buckets_data: dict[str, dict] = {
+        "0-30": {"count": 0, "total": 0.0},
+        "31-60": {"count": 0, "total": 0.0},
+        "61-90": {"count": 0, "total": 0.0},
+        "90+": {"count": 0, "total": 0.0},
+    }
+
+    for inv in invoices:
+        total = float(inv.total_amount) if inv.total_amount else 0.0
+        paid = float(inv.paid_amount) if inv.paid_amount else 0.0
+        remaining = total - paid
+
+        days_overdue = 0
+        if inv.due_date and inv.due_date < today:
+            days_overdue = (today - inv.due_date).days
+
+        if days_overdue <= 30:
+            bucket_key = "0-30"
+        elif days_overdue <= 60:
+            bucket_key = "31-60"
+        elif days_overdue <= 90:
+            bucket_key = "61-90"
+        else:
+            bucket_key = "90+"
+
+        buckets_data[bucket_key]["count"] += 1
+        buckets_data[bucket_key]["total"] += remaining
+
+    buckets = [
+        AgingBucket(
+            bucket=key,
+            count=data["count"],
+            total_amount=round(data["total"], 2),
+        )
+        for key, data in buckets_data.items()
+    ]
+
+    grand_total = sum(b.total_amount for b in buckets)
+    # Overdue = everything past 30 days
+    overdue_total = sum(b.total_amount for b in buckets if b.bucket != "0-30")
+
+    return AgingResponse(
+        buckets=buckets,
+        grand_total=round(grand_total, 2),
+        overdue_total=round(overdue_total, 2),
+    )

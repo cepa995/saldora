@@ -312,3 +312,76 @@ export async function fetchCategorySpending(
     `/api/v1/reports/spending-by-category${buildQuery(params)}`,
   );
 }
+
+// ── Open Items (Otvorene stavke) ──────────────────────────────────────
+
+export interface OpenItemsRow {
+  invoice_id: string;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  due_date: string | null;
+  seller_name: string | null;
+  seller_pib: string | null;
+  total_amount: number | null;
+  paid_amount: number;
+  remaining_amount: number;
+  payment_status: 'unpaid' | 'partially_paid' | 'paid';
+  days_overdue: number;
+  currency: string;
+}
+
+export interface OpenItemsResponse {
+  items: OpenItemsRow[];
+  total_open_amount: number;
+  total_overdue_amount: number;
+  count: number;
+}
+
+/**
+ * Fetch unpaid and partially paid invoices.
+ *
+ * @param params - Filter parameters.
+ * @returns Open items with totals.
+ */
+export async function fetchOpenItems(
+  params: ReportParams & { payment_status?: string },
+): Promise<OpenItemsResponse> {
+  const qs = new URLSearchParams();
+  if (params.date_from) qs.set('date_from', params.date_from);
+  if (params.date_to) qs.set('date_to', params.date_to);
+  if (params.seller_pib) qs.set('seller_pib', params.seller_pib);
+  if (params.client_id) qs.set('client_id', params.client_id);
+  if (params.payment_status) qs.set('payment_status', params.payment_status);
+  const str = qs.toString();
+  return apiClient<OpenItemsResponse>(
+    `/api/v1/reports/open-items${str ? `?${str}` : ''}`,
+  );
+}
+
+// ── Aging Analysis (Analiza dospeća) ──────────────────────────────────
+
+export interface AgingBucket {
+  bucket: string;
+  count: number;
+  total_amount: number;
+}
+
+export interface AgingResponse {
+  buckets: AgingBucket[];
+  grand_total: number;
+  overdue_total: number;
+}
+
+/**
+ * Fetch aging analysis of unpaid invoices.
+ *
+ * @param params - Filter parameters.
+ * @returns Aging buckets with totals.
+ */
+export async function fetchAging(
+  params: ReportParams,
+): Promise<AgingResponse> {
+  return apiClient<AgingResponse>(
+    `/api/v1/reports/aging${buildQuery(params)}`,
+  );
+}

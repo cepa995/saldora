@@ -20,6 +20,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'monthlyBreakdown', label: 'Mesečni pregled stavki', shortLabel: 'Mesečni pregled', group: 'general' },
   { id: 'priceComparison', label: 'Poređenje cena', shortLabel: 'Poređenje cena', group: 'general' },
   { id: 'expenseSummary', label: 'Pregled troškova', shortLabel: 'Troškovi', group: 'general' },
+  { id: 'openItems', label: 'Otvorene stavke', shortLabel: 'Otvorene stavke', group: 'general' },
+  { id: 'aging', label: 'Analiza dospeća', shortLabel: 'Dospeća', group: 'general' },
   { id: 'kalkulacija', label: 'Kalkulacija cene', shortLabel: 'Kalkulacija', group: 'hospitality' },
   { id: 'ruc', label: 'Razlika u ceni (RUC)', shortLabel: 'RUC', group: 'hospitality' },
   { id: 'categorySpending', label: 'Potrošnja po kategorijama', shortLabel: 'Po kategorijama', group: 'hospitality' },

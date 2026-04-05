@@ -68,6 +68,14 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     # Tax breakdown by rate (multi-rate invoices)
     tax_groups: Mapped[list | None] = mapped_column(JSON)
 
+    # Payment tracking
+    payment_status: Mapped[str] = mapped_column(
+        String(20), default="unpaid", server_default="unpaid", index=True
+    )  # unpaid, partially_paid, paid
+    paid_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2))
+    paid_date: Mapped[date | None] = mapped_column(Date)
+    payment_notes: Mapped[str | None] = mapped_column(Text)
+
     # Document reference
     document_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     document_path: Mapped[str | None] = mapped_column(String(500))
