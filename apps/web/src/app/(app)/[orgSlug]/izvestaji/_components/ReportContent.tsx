@@ -292,29 +292,29 @@ function PriceComparisonTable({ data, t }: { data: PriceComparisonResponse; t: R
 
 function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden max-w-xl mx-auto">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50/60">
-              <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('period')}</th>
-              <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('itemCount')}</th>
-              <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('total')}</th>
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('period')}</th>
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('itemCount')}</th>
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('total')}</th>
             </tr>
           </thead>
           <tbody>
             {data.buckets.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                <td className="px-3 py-2.5 text-gray-900 font-medium">{row.period}</td>
-                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{row.item_count}</td>
-                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-4 py-2.5 text-center text-gray-900 font-medium">{row.period}</td>
+                <td className="px-4 py-2.5 text-center text-gray-700 tabular-nums">{row.item_count}</td>
+                <td className="px-4 py-2.5 text-center text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
-              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={2}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase" colSpan={2}>{t('grandTotal')}</td>
+              <td className="px-4 py-2 text-center text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
             </tr>
           </tfoot>
         </table>
