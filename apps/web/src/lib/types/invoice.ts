@@ -94,10 +94,6 @@ export interface InvoiceResponse {
   field_warnings: Record<string, 'error' | 'warning'>;
   accounting_review_needed: boolean | null;
   pdv_book_type: string | null;
-  payment_status: 'unpaid' | 'partially_paid' | 'paid';
-  paid_amount: string | null;
-  paid_date: string | null;
-  payment_notes: string | null;
   client_id: string | null;
   client: { id: string; name: string; pib: string } | null;
   document_url: string | null;
@@ -192,6 +188,5 @@ export interface InvoiceFilters {
   order: SortOrder;
   accounting_review?: boolean;
   book_type?: 'KPR' | 'KIR';
-  payment_status?: 'unpaid' | 'partially_paid' | 'paid';
   client_id?: string;
 }

@@ -38,7 +38,6 @@ export async function fetchInvoices(
   if (filters.accounting_review !== undefined)
     params.set('accounting_review', String(filters.accounting_review));
   if (filters.book_type) params.set('book_type', filters.book_type);
-  if (filters.payment_status) params.set('payment_status', filters.payment_status);
   if (filters.client_id) params.set('client_id', filters.client_id);
 
   const query = params.toString();
@@ -198,33 +197,3 @@ export async function reviewAccountingIntent(
   );
 }
 
-/**
- * Record a payment against an invoice.
- */
-export async function recordPayment(
-  invoiceId: string,
-  data: { amount: number; payment_date?: string; notes?: string },
-): Promise<InvoiceResponse> {
-  return apiClient<InvoiceResponse>(
-    `/api/v1/invoices/${invoiceId}/payment`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    },
-  );
-}
-
-/**
- * Batch mark invoices as fully paid.
- */
-export async function batchMarkAsPaid(
-  invoiceIds: string[],
-): Promise<{ updated: number; skipped: number; skipped_ids: string[] }> {
-  return apiClient<{ updated: number; skipped: number; skipped_ids: string[] }>(
-    '/api/v1/invoices/batch-payment',
-    {
-      method: 'POST',
-      body: JSON.stringify({ invoice_ids: invoiceIds }),
-    },
-  );
-}

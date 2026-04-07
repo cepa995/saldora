@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchInvoices, deleteInvoice, verifyInvoice, batchMarkAsPaid } from '@/lib/api/invoices';
+import { fetchInvoices, deleteInvoice, verifyInvoice } from '@/lib/api/invoices';
 import { useClient } from '@/contexts/ClientContext';
 import type {
   InvoiceResponse,
@@ -29,7 +29,6 @@ interface UseInvoiceListReturn {
   setStatus: (status: InvoiceStatus | undefined) => void;
   setAccountingReview: (value: boolean | undefined) => void;
   setBookType: (value: 'KPR' | 'KIR' | undefined) => void;
-  setPaymentStatus: (value: 'unpaid' | 'partially_paid' | 'paid' | undefined) => void;
   setSearch: (search: string) => void;
   setDateRange: (from?: string, to?: string) => void;
   setSort: (column: SortColumn) => void;
@@ -39,7 +38,6 @@ interface UseInvoiceListReturn {
   clearSelection: () => void;
   batchVerify: () => Promise<void>;
   batchDelete: () => Promise<void>;
-  batchMarkPaid: () => Promise<void>;
   refresh: () => void;
 }
 
@@ -92,11 +90,6 @@ export function useInvoiceList(): UseInvoiceListReturn {
 
   const setBookType = useCallback((value: 'KPR' | 'KIR' | undefined) => {
     setFilters((prev) => ({ ...prev, book_type: value, page: 1 }));
-    setSelectedIds(new Set());
-  }, []);
-
-  const setPaymentStatus = useCallback((value: 'unpaid' | 'partially_paid' | 'paid' | undefined) => {
-    setFilters((prev) => ({ ...prev, payment_status: value, page: 1 }));
     setSelectedIds(new Set());
   }, []);
 
@@ -179,17 +172,6 @@ export function useInvoiceList(): UseInvoiceListReturn {
     }
   }, [selectedIds, filters, selectedClientId, load]);
 
-  const batchMarkPaid = useCallback(async () => {
-    const ids = Array.from(selectedIds);
-    try {
-      await batchMarkAsPaid(ids);
-      setSelectedIds(new Set());
-      load(filters, selectedClientId);
-    } catch {
-      setError('Greška pri označavanju faktura kao plaćene');
-    }
-  }, [selectedIds, filters, selectedClientId, load]);
-
   const refresh = useCallback(() => {
     load(filters, selectedClientId);
   }, [filters, selectedClientId, load]);
@@ -204,7 +186,6 @@ export function useInvoiceList(): UseInvoiceListReturn {
     setStatus,
     setAccountingReview,
     setBookType,
-    setPaymentStatus,
     setSearch,
     setDateRange,
     setSort,
@@ -214,7 +195,6 @@ export function useInvoiceList(): UseInvoiceListReturn {
     clearSelection,
     batchVerify,
     batchDelete,
-    batchMarkPaid,
     refresh,
   };
 }

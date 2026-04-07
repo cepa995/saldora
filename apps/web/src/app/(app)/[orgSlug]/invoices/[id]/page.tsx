@@ -54,7 +54,6 @@ export default function InvoiceDetailPage({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [accountingIntent, setAccountingIntent] = useState<AccountingIntentResponse | null>(null);
@@ -314,24 +313,6 @@ export default function InvoiceDetailPage({
               {invoice.invoice_number || '#\u2014'}
             </h1>
             <StatusBadge status={invoice.status} />
-            {(invoice.status === 'verified' || invoice.status === 'exported') && (
-              <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
-                invoice.payment_status === 'paid'
-                  ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20'
-                  : invoice.payment_status === 'partially_paid'
-                  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
-                  : 'bg-gray-100 text-gray-600'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  invoice.payment_status === 'paid' ? 'bg-green-500'
-                    : invoice.payment_status === 'partially_paid' ? 'bg-amber-500'
-                    : 'bg-gray-400'
-                }`} />
-                {invoice.payment_status === 'paid' ? t('paid')
-                  : invoice.payment_status === 'partially_paid' ? t('partiallyPaid')
-                  : t('unpaid')}
-              </span>
-            )}
             {invoice.confidence_score !== null && (
               <>
                 <div className="hidden sm:block w-px h-5 bg-gray-200" />
@@ -377,17 +358,6 @@ export default function InvoiceDetailPage({
                 className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-xl hover:bg-violet-700 disabled:opacity-50 transition-colors"
               >
                 {isSaving ? tCommon('saving') : t('saveChanges')}
-              </button>
-            )}
-            {(invoice.status === 'verified' || invoice.status === 'exported') && invoice.payment_status !== 'paid' && (
-              <button
-                onClick={() => setShowPaymentModal(true)}
-                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors inline-flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-                </svg>
-                <span className="hidden sm:inline">{t('recordPayment')}</span>
               </button>
             )}
             {/* More actions menu */}
@@ -1357,61 +1327,6 @@ export default function InvoiceDetailPage({
             )}
           </FieldGroup>
 
-          {/* Payment modal */}
-          {showPaymentModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowPaymentModal(false)} />
-              <div className="relative bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-md mx-4 p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">{t('recordPayment')}</h3>
-                  <button onClick={() => setShowPaymentModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-
-                {/* Payment summary */}
-                <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">{t('totalAmount')}</span>
-                    <span className="font-semibold text-gray-900">
-                      {invoice.total_amount ? new Intl.NumberFormat('sr-Latn-RS', { minimumFractionDigits: 2 }).format(parseFloat(invoice.total_amount)) : '—'} {invoice.currency}
-                    </span>
-                  </div>
-                  {invoice.paid_amount && parseFloat(invoice.paid_amount) > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">{t('paidAmount')}</span>
-                      <span className="font-medium text-green-600">
-                        {new Intl.NumberFormat('sr-Latn-RS', { minimumFractionDigits: 2 }).format(parseFloat(invoice.paid_amount))} {invoice.currency}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between text-sm pt-1 border-t border-gray-200">
-                    <span className="text-gray-500 font-medium">{t('remainingAmount')}</span>
-                    <span className="font-bold text-red-600">
-                      {new Intl.NumberFormat('sr-Latn-RS', { minimumFractionDigits: 2 }).format(
-                        parseFloat(invoice.total_amount || '0') - parseFloat(invoice.paid_amount || '0')
-                      )} {invoice.currency}
-                    </span>
-                  </div>
-                </div>
-
-                <PaymentForm
-                  invoiceId={invoice.id}
-                  totalAmount={invoice.total_amount}
-                  paidAmount={invoice.paid_amount}
-                  currency={invoice.currency}
-                  onSuccess={() => {
-                    setShowPaymentModal(false);
-                    refresh();
-                    setToast({ message: t('paymentRecorded'), type: 'success' });
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
           {/* Raw OCR output (debug) */}
           {invoice.raw_ocr_text && (
             <FieldGroup
@@ -1548,105 +1463,3 @@ function FieldGroup({
   );
 }
 
-// ── Payment form ────────────────────────────────────────────────────
-
-function PaymentForm({
-  invoiceId,
-  totalAmount,
-  paidAmount,
-  currency,
-  onSuccess,
-}: {
-  invoiceId: string;
-  totalAmount: string | null;
-  paidAmount: string | null;
-  currency: string;
-  onSuccess: () => void;
-}) {
-  const t = useTranslations('detail');
-  const [amount, setAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  const remaining = totalAmount
-    ? Math.round((parseFloat(totalAmount) - parseFloat(paidAmount || '0')) * 100) / 100
-    : 0;
-
-  useEffect(() => {
-    setAmount(remaining > 0 ? remaining.toFixed(2) : '');
-  }, [remaining]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const parsed = parseFloat(amount);
-    if (!amount || parsed <= 0) return;
-    if (parsed > remaining) {
-      setError(t('overpaymentError'));
-      return;
-    }
-
-    setSubmitting(true);
-    setError('');
-    try {
-      const { recordPayment } = await import('@/lib/api/invoices');
-      await recordPayment(invoiceId, {
-        amount: parseFloat(amount),
-        payment_date: paymentDate || undefined,
-        notes: notes || undefined,
-      });
-      onSuccess();
-      setNotes('');
-    } catch (err: unknown) {
-      const apiErr = err as { message?: string };
-      setError(apiErr?.message || 'Greška pri evidentiranju uplate');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2 pt-2 border-t border-gray-100">
-      <p className="text-xs font-medium text-gray-700">{t('recordPayment')}</p>
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            max={remaining}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder={t('amount')}
-            className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
-            required
-          />
-        </div>
-        <div>
-          <input
-            type="date"
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
-          />
-        </div>
-      </div>
-      <input
-        type="text"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder={t('paymentNotes')}
-        className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
-      />
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={submitting || !amount || parseFloat(amount) <= 0}
-        className="w-full py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 rounded-lg transition-colors"
-      >
-        {submitting ? '...' : `${t('recordPayment')} (${amount || '0'} ${currency})`}
-      </button>
-    </form>
-  );
-}

@@ -50,7 +50,6 @@ export default function InvoicesPage() {
     setStatus,
     setAccountingReview,
     setBookType,
-    setPaymentStatus,
     setSearch,
     setDateRange,
     setSort,
@@ -60,7 +59,6 @@ export default function InvoicesPage() {
     clearSelection,
     batchVerify,
     batchDelete,
-    batchMarkPaid,
     refresh,
   } = useInvoiceList();
 
@@ -258,37 +256,6 @@ export default function InvoicesPage() {
               KIR
             </button>
 
-            {/* Separator */}
-            <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
-
-            {/* Payment status filters */}
-            {(['unpaid', 'partially_paid', 'paid'] as const).map((ps) => {
-              const isActive = filters.payment_status === ps;
-              const labels: Record<string, string> = {
-                unpaid: t('unpaid'),
-                partially_paid: t('partiallyPaid'),
-                paid: t('paid'),
-              };
-              const colors: Record<string, string> = {
-                unpaid: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
-                partially_paid: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
-                paid: 'bg-green-50 text-green-700 ring-1 ring-green-600/20',
-              };
-              return (
-                <button
-                  key={ps}
-                  onClick={() => setPaymentStatus(filters.payment_status === ps ? undefined : ps)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
-                    isActive ? colors[ps] : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    ps === 'paid' ? 'bg-green-500' : ps === 'partially_paid' ? 'bg-amber-500' : 'bg-gray-400'
-                  }`} />
-                  {labels[ps]}
-                </button>
-              );
-            })}
           </div>
 
           {/* Date range */}
@@ -335,14 +302,6 @@ export default function InvoicesPage() {
             >
               {t('batchExport')}
             </button>
-            {canWrite && (
-              <button
-                onClick={batchMarkPaid}
-                className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-              >
-                {t('markAsPaid')}
-              </button>
-            )}
             {canDelete && (
               <button
                 onClick={handleBatchDelete}
@@ -474,16 +433,6 @@ export default function InvoicesPage() {
                             <svg className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20" role="img" aria-label={t('needsAccountingReview')}>
                               <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                             </svg>
-                          )}
-                          {invoice.payment_status === 'paid' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none bg-green-50 text-green-700">
-                              {t('paid')}
-                            </span>
-                          )}
-                          {invoice.payment_status === 'partially_paid' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none bg-amber-50 text-amber-700">
-                              {t('partiallyPaid')}
-                            </span>
                           )}
                         </div>
                       </td>

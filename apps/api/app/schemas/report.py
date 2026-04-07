@@ -79,7 +79,6 @@ class SpendingBySupplierItem(BaseModel):
     seller_pib: str | None
     total_amount: float
     invoice_count: int
-    unpaid_amount: float = 0
 
 
 class SpendingBySupplierResponse(BaseModel):
@@ -112,7 +111,6 @@ class MonthlyBreakdownItem(BaseModel):
         tax_rate: Applied tax rate percentage (may be None).
         seller_name: Supplier name (may be None).
         invoice_date: Invoice date as an ISO-8601 string (may be None).
-        payment_status: Invoice payment status (unpaid/partially_paid/paid).
     """
 
     id: str
@@ -125,7 +123,6 @@ class MonthlyBreakdownItem(BaseModel):
     tax_amount: float | None
     seller_name: str | None
     invoice_date: str | None
-    payment_status: str = "unpaid"
 
 
 class MonthlyBreakdownResponse(BaseModel):
@@ -319,89 +316,3 @@ class CategorySpendingResponse(BaseModel):
 
     items: list[CategorySpendingItem]
     grand_total: float
-
-
-# ---------------------------------------------------------------------------
-# Open Items (Otvorene stavke)
-# ---------------------------------------------------------------------------
-
-
-class OpenItemsRow(BaseModel):
-    """A single unpaid or partially paid invoice row.
-
-    Attributes:
-        invoice_id: UUID of the invoice.
-        invoice_number: Invoice number from OCR.
-        invoice_date: Date of the invoice.
-        due_date: Payment due date.
-        seller_name: Supplier name.
-        seller_pib: Supplier PIB.
-        total_amount: Invoice total.
-        paid_amount: Amount paid so far.
-        remaining_amount: Unpaid balance.
-        payment_status: 'unpaid' or 'partially_paid'.
-        days_overdue: Days past due date (0 if not overdue).
-        currency: Invoice currency.
-    """
-
-    invoice_id: str
-    invoice_number: str | None
-    invoice_date: date | None
-    due_date: date | None
-    seller_name: str | None
-    seller_pib: str | None
-    total_amount: float | None
-    paid_amount: float
-    remaining_amount: float
-    payment_status: str
-    days_overdue: int
-    currency: str
-
-
-class OpenItemsResponse(BaseModel):
-    """Response for open items report.
-
-    Attributes:
-        items: List of open invoice rows.
-        total_open_amount: Total remaining balance across all items.
-        total_overdue_amount: Total remaining balance for overdue items only.
-        count: Number of open items.
-    """
-
-    items: list[OpenItemsRow]
-    total_open_amount: float
-    total_overdue_amount: float
-    count: int
-
-
-# ---------------------------------------------------------------------------
-# Aging Analysis (Analiza dospeća)
-# ---------------------------------------------------------------------------
-
-
-class AgingBucket(BaseModel):
-    """A single aging bucket.
-
-    Attributes:
-        bucket: Label for the bucket (e.g. '0-30', '31-60', '61-90', '90+').
-        count: Number of invoices in this bucket.
-        total_amount: Total remaining amount in this bucket.
-    """
-
-    bucket: str
-    count: int
-    total_amount: float
-
-
-class AgingResponse(BaseModel):
-    """Response for aging analysis report.
-
-    Attributes:
-        buckets: List of aging buckets.
-        grand_total: Total outstanding amount across all buckets.
-        overdue_total: Total amount that is past due (excludes 0-30 current).
-    """
-
-    buckets: list[AgingBucket]
-    grand_total: float
-    overdue_total: float

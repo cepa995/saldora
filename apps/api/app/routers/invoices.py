@@ -38,14 +38,11 @@ from app.schemas.accounting_intent import (
 )
 from app.schemas.client import ClientSummary
 from app.schemas.invoice import (
-    BatchPaymentRequest,
-    BatchPaymentResponse,
     CompanyInfo,
     FieldConfidence,
     InvoiceListResponse,
     InvoiceResponse,
     InvoiceUpdate,
-    PaymentUpdate,
     ProcessingStatus,
     TaxGroup,
 )
@@ -688,10 +685,6 @@ def _build_invoice_response(
         field_warnings=field_warnings,
         accounting_review_needed=accounting_review_needed,
         pdv_book_type=pdv_book_type,
-        payment_status=invoice.payment_status or "unpaid",
-        paid_amount=invoice.paid_amount,
-        paid_date=invoice.paid_date,
-        payment_notes=invoice.payment_notes,
         client_id=invoice.client_id,
         client=client_summary,
         document_url=document_url,
@@ -799,7 +792,6 @@ async def list_invoices(
     accounting_review: bool | None = Query(default=None),
     book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
     client_id: UUID | None = Query(default=None, description="Filter by client ID"),
-    payment_status: str | None = Query(default=None, description="Filter by payment status"),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -900,17 +892,6 @@ async def list_invoices(
     # Client filter (Agency feature)
     if client_id:
         conditions.append(Invoice.client_id == client_id)
-
-    # Payment status filter
-    if payment_status:
-        valid_payment_statuses = {"unpaid", "partially_paid", "paid"}
-        if payment_status not in valid_payment_statuses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid payment_status. Must be one of: "
-                f"{', '.join(valid_payment_statuses)}",
-            )
-        conditions.append(Invoice.payment_status == payment_status)
 
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)
@@ -1704,187 +1685,3 @@ async def assign_client(
             logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
 
     return _build_invoice_response(invoice, document_url, client_summary=client_summary)
-
-
-# ---------------------------------------------------------------------------
-# Payment tracking
-# ---------------------------------------------------------------------------
-
-
-@router.patch("/{invoice_id}/payment", response_model=InvoiceResponse)
-async def record_payment(
-    invoice_id: UUID,
-    body: PaymentUpdate,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("operator")),
-) -> InvoiceResponse:
-    """Record a payment against an invoice.
-
-    Adds the payment amount to the existing paid_amount. Automatically
-    sets payment_status based on how much has been paid relative to
-    total_amount.
-
-    Args:
-        invoice_id: UUID of the invoice to record payment for.
-        body: Payment details (amount, date, notes).
-        request: HTTP request for audit logging.
-        db: Database session.
-        user: Authenticated user.
-
-    Returns:
-        Updated invoice response.
-    """
-    from datetime import date as date_type
-    from decimal import Decimal
-
-    invoice = await _get_invoice_or_404(invoice_id, db, user)
-
-    # Only allow payment on verified or exported invoices
-    if invoice.status not in ("verified", "exported"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Uplata se može evidentirati samo za verifikovane ili izvezene fakture",
-        )
-
-    if invoice.total_amount is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Faktura nema ukupan iznos",
-        )
-
-    # Calculate new paid_amount
-    current_paid = invoice.paid_amount or Decimal("0")
-    new_paid = current_paid + body.amount
-
-    if new_paid > invoice.total_amount:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Ukupan plaćeni iznos ({new_paid}) premašuje "
-            f"iznos fakture ({invoice.total_amount})",
-        )
-
-    # Update payment fields
-    old_status = invoice.payment_status
-    old_amount = invoice.paid_amount
-
-    invoice.paid_amount = new_paid
-    invoice.paid_date = body.payment_date or date_type.today()
-    if body.notes:
-        existing_notes = invoice.payment_notes or ""
-        if existing_notes:
-            invoice.payment_notes = f"{existing_notes}\n{body.notes}"
-        else:
-            invoice.payment_notes = body.notes
-
-    # Auto-set payment_status
-    if new_paid >= invoice.total_amount:
-        invoice.payment_status = "paid"
-    elif new_paid > 0:
-        invoice.payment_status = "partially_paid"
-    else:
-        invoice.payment_status = "unpaid"
-
-    await audit.log(
-        db=db,
-        action="invoice.record_payment",
-        request=request,
-        organization_id=user.organization_id,
-        user_id=user.id,
-        entity_type="invoice",
-        entity_id=invoice.id,
-        old_values={
-            "payment_status": old_status,
-            "paid_amount": str(old_amount) if old_amount else None,
-        },
-        new_values={
-            "payment_status": invoice.payment_status,
-            "paid_amount": str(invoice.paid_amount),
-            "paid_date": str(invoice.paid_date),
-        },
-    )
-
-    await db.commit()
-    await db.refresh(invoice)
-
-    document_url = None
-    if invoice.document_path:
-        try:
-            document_url = await asyncio.to_thread(get_presigned_url, invoice.document_path)
-        except Exception:
-            logger.warning("Failed to generate presigned URL for invoice %s", invoice_id)
-
-    return _build_invoice_response(invoice, document_url)
-
-
-@router.post("/batch-payment", response_model=BatchPaymentResponse)
-async def batch_mark_as_paid(
-    body: BatchPaymentRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_role("operator")),
-) -> BatchPaymentResponse:
-    """Mark multiple invoices as fully paid.
-
-    Sets payment_status='paid', paid_amount=total_amount, paid_date=today
-    for each invoice. Skips invoices that aren't verified/exported.
-
-    Args:
-        body: List of invoice IDs to mark as paid.
-        request: HTTP request for audit logging.
-        db: Database session.
-        user: Authenticated user.
-
-    Returns:
-        Summary of updated and skipped invoices.
-    """
-    from datetime import date as date_type
-
-    result = await db.execute(
-        select(Invoice).where(
-            Invoice.id.in_(body.invoice_ids),
-            Invoice.organization_id == user.organization_id,
-        )
-    )
-    invoices = list(result.scalars().all())
-
-    updated = 0
-    skipped_ids: list[UUID] = []
-    today = date_type.today()
-
-    for inv in invoices:
-        if inv.status not in ("verified", "exported") or inv.total_amount is None:
-            skipped_ids.append(inv.id)
-            continue
-
-        old_status = inv.payment_status
-        inv.payment_status = "paid"
-        inv.paid_amount = inv.total_amount
-        inv.paid_date = today
-        updated += 1
-
-        await audit.log(
-            db=db,
-            action="invoice.batch_payment",
-            request=request,
-            organization_id=user.organization_id,
-            user_id=user.id,
-            entity_type="invoice",
-            entity_id=inv.id,
-            old_values={"payment_status": old_status},
-            new_values={"payment_status": "paid", "paid_amount": str(inv.total_amount)},
-        )
-
-    # IDs that weren't found in this org
-    found_ids = {inv.id for inv in invoices}
-    for req_id in body.invoice_ids:
-        if req_id not in found_ids:
-            skipped_ids.append(req_id)
-
-    await db.commit()
-
-    return BatchPaymentResponse(
-        updated=updated,
-        skipped=len(skipped_ids),
-        skipped_ids=skipped_ids,
-    )

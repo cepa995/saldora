@@ -155,12 +155,6 @@ class InvoiceResponse(BaseModel):
         description="PDV book type: KPR (received) or KIR (issued), None if no intent exists",
     )
 
-    # Payment tracking
-    payment_status: Literal["unpaid", "partially_paid", "paid"] = "unpaid"
-    paid_amount: Decimal | None = None
-    paid_date: date | None = None
-    payment_notes: str | None = None
-
     # Client (Agency feature)
     client_id: UUID | None = None
     client: ClientSummary | None = Field(default=None, description="Assigned client info")
@@ -191,28 +185,6 @@ class InvoiceListResponse(BaseModel):
             "total_pages": 0,
         }
     )
-
-
-class PaymentUpdate(BaseModel):
-    """Schema for recording a payment against an invoice."""
-
-    amount: Decimal = Field(gt=0, description="Payment amount to record")
-    payment_date: date | None = Field(default=None, description="Payment date (defaults to today)")
-    notes: str | None = Field(default=None, description="Payment reference or notes")
-
-
-class BatchPaymentRequest(BaseModel):
-    """Schema for batch marking invoices as paid."""
-
-    invoice_ids: list[UUID] = Field(min_length=1, description="Invoice IDs to mark as paid")
-
-
-class BatchPaymentResponse(BaseModel):
-    """Response for batch payment operation."""
-
-    updated: int
-    skipped: int
-    skipped_ids: list[UUID] = Field(default_factory=list)
 
 
 class ProcessingStatus(BaseModel):

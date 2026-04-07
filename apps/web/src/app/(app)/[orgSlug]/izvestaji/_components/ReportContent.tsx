@@ -12,8 +12,6 @@ import {
   fetchKalkulacija,
   fetchRuc,
   fetchCategorySpending,
-  fetchOpenItems,
-  fetchAging,
   type ReportParams,
   type ReceivedGoodsResponse,
   type SpendingBySupplierResponse,
@@ -23,8 +21,6 @@ import {
   type KalkulacijaResponse,
   type RucResponse,
   type CategorySpendingResponse,
-  type OpenItemsResponse,
-  type AgingResponse,
 } from '@/lib/api/reports';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -37,9 +33,7 @@ export type TemplateId =
   | 'expenseSummary'
   | 'kalkulacija'
   | 'ruc'
-  | 'categorySpending'
-  | 'openItems'
-  | 'aging';
+  | 'categorySpending';
 
 type ReportData =
   | ReceivedGoodsResponse
@@ -50,8 +44,6 @@ type ReportData =
   | KalkulacijaResponse
   | RucResponse
   | CategorySpendingResponse
-  | OpenItemsResponse
-  | AgingResponse
   | null;
 
 // ── Formatting ───────────────────────────────────────────────────────
@@ -161,7 +153,7 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total'), t('unpaidAmount')]} align={['left', 'left', 'right', 'right', 'right']} />
+          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total')]} align={['left', 'left', 'right', 'right']} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -169,9 +161,6 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
                 <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{row.seller_pib || '—'}</td>
                 <td className="px-3 py-2.5 text-right text-gray-700">{row.invoice_count}</td>
                 <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
-                <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${row.unpaid_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {fmtAmount(row.unpaid_amount)}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -179,9 +168,6 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
               <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
-              <td className="px-3 py-2 text-right text-sm font-bold text-red-600 tabular-nums">
-                {fmtAmount(data.items.reduce((s, r) => s + r.unpaid_amount, 0))}
-              </td>
             </tr>
           </tfoot>
         </table>
@@ -440,134 +426,6 @@ function CategorySpendingTable({ data, t }: { data: CategorySpendingResponse; t:
   );
 }
 
-function OpenItemsTable({ data, t }: { data: OpenItemsResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
-  return (
-    <div className="space-y-3">
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <p className="text-xs text-gray-500">{t('openItemsCount')}</p>
-          <p className="text-lg font-bold text-gray-900">{data.count}</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <p className="text-xs text-gray-500">{t('totalOpenAmount')}</p>
-          <p className="text-lg font-bold text-gray-900">{fmtAmount(data.total_open_amount)}</p>
-        </div>
-        <div className="bg-white border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-xs text-red-500">{t('totalOverdueAmount')}</p>
-          <p className="text-lg font-bold text-red-600">{fmtAmount(data.total_overdue_amount)}</p>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <TableHead
-              cols={[
-                'Br. fakture',
-                t('sellerName'),
-                'Datum fakture',
-                'Valuta',
-                t('total'),
-                t('remaining'),
-                t('paymentStatus'),
-                t('daysOverdue'),
-              ]}
-              align={['left', 'left', 'left', 'left', 'right', 'right', 'center', 'center']}
-            />
-            <tbody>
-              {data.items.map((row, i) => (
-                <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-3 py-2.5 text-gray-900 font-medium">{row.invoice_number || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{row.seller_name || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{row.invoice_date || '—'}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{row.due_date || '—'}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-900 tabular-nums">{row.total_amount != null ? fmtAmount(row.total_amount) : '—'}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.remaining_amount)}</td>
-                  <td className="px-3 py-2.5">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                      row.payment_status === 'partially_paid'
-                        ? 'bg-amber-50 text-amber-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        row.payment_status === 'partially_paid' ? 'bg-amber-500' : 'bg-gray-400'
-                      }`} />
-                      {row.payment_status === 'partially_paid' ? t('partiallyPaid') : t('unpaid')}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    {row.days_overdue > 0 ? (
-                      <span className="text-red-600 font-medium">{row.days_overdue}</span>
-                    ) : (
-                      <span className="text-green-600">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AgingTable({ data, t }: { data: AgingResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
-  const bucketColors: Record<string, string> = {
-    '0-30': 'bg-green-50 text-green-700',
-    '31-60': 'bg-amber-50 text-amber-700',
-    '61-90': 'bg-orange-50 text-orange-700',
-    '90+': 'bg-red-50 text-red-700',
-  };
-
-  return (
-    <div className="space-y-3">
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <p className="text-xs text-gray-500">{t('grandTotal')}</p>
-          <p className="text-lg font-bold text-gray-900">{fmtAmount(data.grand_total)}</p>
-        </div>
-        <div className="bg-white border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-xs text-red-500">{t('overdue')}</p>
-          <p className="text-lg font-bold text-red-600">{fmtAmount(data.overdue_total)}</p>
-        </div>
-      </div>
-
-      {/* Buckets */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <TableHead cols={[t('bucket'), t('bucketCount'), t('bucketTotal')]} align={['left', 'right', 'right']} />
-            <tbody>
-              {data.buckets.map((b, i) => (
-                <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-3 py-2.5">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-semibold ${bucketColors[b.bucket] || 'bg-gray-100 text-gray-700'}`}>
-                      {b.bucket} {t('daysOverdue').toLowerCase()}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-right text-gray-700">{b.count}</td>
-                  <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(b.total_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-200 bg-gray-50/80">
-                <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase">{t('grandTotal')}</td>
-                <td className="px-3 py-2 text-right text-gray-700">{data.buckets.reduce((s, b) => s + b.count, 0)}</td>
-                <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── CSV export ───────────────────────────────────────────────────────
 
 function exportToCsv(templateId: TemplateId, data: ReportData) {
@@ -592,9 +450,9 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'spendingBySupplier') {
     const d = data as SpendingBySupplierResponse;
     rows = [
-      ['Dobavljac', 'PIB', 'Br. faktura', 'Ukupno', 'Neplaceno'],
-      ...d.items.map((r) => [r.seller_name ?? '', r.seller_pib ?? '', String(r.invoice_count), String(r.total_amount), String(r.unpaid_amount)]),
-      ['', '', '', String(d.grand_total), String(d.items.reduce((s, r) => s + r.unpaid_amount, 0))],
+      ['Dobavljac', 'PIB', 'Br. faktura', 'Ukupno'],
+      ...d.items.map((r) => [r.seller_name ?? '', r.seller_pib ?? '', String(r.invoice_count), String(r.total_amount)]),
+      ['', '', '', String(d.grand_total)],
     ];
   } else if (templateId === 'monthlyBreakdown') {
     const d = data as MonthlyBreakdownResponse;
@@ -672,29 +530,6 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
       ...d.items.map((r) => [r.category, String(r.total_amount), String(r.item_count), String(r.invoice_count)]),
       ['', String(d.grand_total), '', ''],
     ];
-  } else if (templateId === 'openItems') {
-    const d = data as OpenItemsResponse;
-    rows = [
-      ['Br. fakture', 'Dobavljac', 'Datum', 'Valuta', 'Iznos', 'Preostalo', 'Status', 'Dana kasnjenja'],
-      ...d.items.map((r) => [
-        r.invoice_number ?? '',
-        r.seller_name ?? '',
-        r.invoice_date ?? '',
-        r.due_date ?? '',
-        String(r.total_amount ?? ''),
-        String(r.remaining_amount),
-        r.payment_status === 'partially_paid' ? 'Delimicno' : 'Neplaceno',
-        String(r.days_overdue),
-      ]),
-      ['', '', '', '', '', String(d.total_open_amount), '', ''],
-    ];
-  } else if (templateId === 'aging') {
-    const d = data as AgingResponse;
-    rows = [
-      ['Period', 'Broj faktura', 'Iznos'],
-      ...d.buckets.map((b) => [b.bucket, String(b.count), String(b.total_amount)]),
-      ['Ukupno', '', String(d.grand_total)],
-    ];
   }
 
   const csv = rows
@@ -747,14 +582,6 @@ const EMPTY_HINTS: Record<string, { title: string; hint: string }> = {
     title: 'Nema kategorisanih stavki',
     hint: 'Dodelite kategorije artiklima u Katalogu proizvoda (tab Upravljanje). Nekategorisani artikli se prikazuju kao "Nekategorisano".',
   },
-  openItems: {
-    title: 'Nema otvorenih stavki',
-    hint: 'Sve fakture su plaćene ili nema verifikovanih faktura. Evidentiranje uplata možete uraditi na stranici faktura.',
-  },
-  aging: {
-    title: 'Nema dospelih potraživanja',
-    hint: 'Sve fakture su plaćene. Ovaj izveštaj prikazuje neplaćene fakture grupisane po danima kašnjenja.',
-  },
 };
 
 function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'reports'>>; templateId?: string }) {
@@ -783,8 +610,6 @@ const SKELETON_COLS: Record<TemplateId, number> = {
   kalkulacija: 8,
   ruc: 7,
   categorySpending: 4,
-  openItems: 8,
-  aging: 3,
 };
 
 // ── Props ────────────────────────────────────────────────────────────
@@ -849,8 +674,6 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
       else if (templateId === 'kalkulacija') result = await fetchKalkulacija(params);
       else if (templateId === 'ruc') result = await fetchRuc(params);
       else if (templateId === 'categorySpending') result = await fetchCategorySpending(params);
-      else if (templateId === 'openItems') result = await fetchOpenItems(params);
-      else if (templateId === 'aging') result = await fetchAging(params);
       setData(result);
     } catch {
       setError(t('noData'));
@@ -998,12 +821,6 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             )}
             {templateId === 'categorySpending' && (
               <CategorySpendingTable data={data as CategorySpendingResponse} t={t} />
-            )}
-            {templateId === 'openItems' && (
-              <OpenItemsTable data={data as OpenItemsResponse} t={t} />
-            )}
-            {templateId === 'aging' && (
-              <AgingTable data={data as AgingResponse} t={t} />
             )}
           </>
         )}
