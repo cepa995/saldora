@@ -907,7 +907,8 @@ async def list_invoices(
         if payment_status not in valid_payment_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid payment_status. Must be one of: {', '.join(valid_payment_statuses)}",
+                detail=f"Invalid payment_status. Must be one of: "
+                f"{', '.join(valid_payment_statuses)}",
             )
         conditions.append(Invoice.payment_status == payment_status)
 
@@ -1759,7 +1760,8 @@ async def record_payment(
     if new_paid > invoice.total_amount:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Ukupan plaćeni iznos ({new_paid}) premašuje iznos fakture ({invoice.total_amount})",
+            detail=f"Ukupan plaćeni iznos ({new_paid}) premašuje "
+            f"iznos fakture ({invoice.total_amount})",
         )
 
     # Update payment fields

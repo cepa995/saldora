@@ -538,7 +538,9 @@ def _calc_line_total(item: dict) -> float:
             except (ValueError, TypeError):
                 pass
     try:
-        return round(float(item.get("quantity") or 0) * float(item.get("unit_price") or 0), 2)
+        return round(
+            float(item.get("quantity") or 0) * float(item.get("unit_price") or 0), 2
+        )
     except (ValueError, TypeError):
         return 0
 
@@ -573,8 +575,11 @@ def _calc_line_tax(item: dict, total: float) -> float | None:
 
 
 def _sync_line_items(
-    session, invoice_id: str, line_items: list[dict],
-    seller: dict | None, invoice_data: dict,
+    session,
+    invoice_id: str,
+    line_items: list[dict],
+    seller: dict | None,
+    invoice_data: dict,
 ) -> None:
     """Sync denormalized line items table from extraction result.
 

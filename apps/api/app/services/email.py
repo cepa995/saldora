@@ -74,9 +74,7 @@ async def _send_email(to_email: str, subject: str, html: str) -> bool:
         True if email was sent successfully, False otherwise.
     """
     if not settings.resend_api_key:
-        raise RuntimeError(
-            f"RESEND_API_KEY not set, cannot send email to {to_email}"
-        )
+        raise RuntimeError(f"RESEND_API_KEY not set, cannot send email to {to_email}")
 
     import resend
 

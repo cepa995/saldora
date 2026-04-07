@@ -72,9 +72,7 @@ async def _create_verified_invoice(
                 "due_date": date.fromisoformat(due_date),
                 "inv_num": f"INV-{inv_id[:8]}",
                 "inv_date": date.fromisoformat("2026-02-15"),
-                "seller": json.dumps(
-                    {"pib": seller_pib, "name": seller_name}, ensure_ascii=False
-                ),
+                "seller": json.dumps({"pib": seller_pib, "name": seller_name}, ensure_ascii=False),
             },
         )
         await session.commit()
@@ -334,10 +332,16 @@ async def test_aging_report(client: AsyncClient, test_engine):
 
     # Create invoices with different due dates
     await _create_verified_invoice(
-        test_engine, org_id, total_amount=10000, due_date="2026-04-01"  # 0-30 days
+        test_engine,
+        org_id,
+        total_amount=10000,
+        due_date="2026-04-01",  # 0-30 days
     )
     await _create_verified_invoice(
-        test_engine, org_id, total_amount=20000, due_date="2026-01-01"  # 90+ days
+        test_engine,
+        org_id,
+        total_amount=20000,
+        due_date="2026-01-01",  # 90+ days
     )
 
     resp = await client.get("/api/v1/reports/aging", headers=headers)

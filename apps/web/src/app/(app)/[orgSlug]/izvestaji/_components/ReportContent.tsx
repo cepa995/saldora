@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useClient } from '@/contexts/ClientContext';
 import {
@@ -190,23 +190,6 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
   );
 }
 
-function PaymentBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    paid: 'bg-green-50 text-green-700',
-    partially_paid: 'bg-amber-50 text-amber-700',
-    unpaid: 'bg-gray-100 text-gray-600',
-  };
-  const labels: Record<string, string> = {
-    paid: 'Plaćeno',
-    partially_paid: 'Delimično',
-    unpaid: 'Neplaćeno',
-  };
-  return (
-    <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${colors[status] || colors.unpaid}`}>
-      {labels[status] || labels.unpaid}
-    </span>
-  );
-}
 
 function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
   return (

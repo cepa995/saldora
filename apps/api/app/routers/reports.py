@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.invoice import Invoice
 from app.models.line_item import InvoiceLineItem
 from app.models.product_catalog import ProductCatalog
 from app.models.user import User
-from app.models.invoice import Invoice
 from app.schemas.report import (
     AgingBucket,
     AgingResponse,
@@ -306,19 +306,20 @@ async def get_monthly_breakdown(
 
     items = [
         MonthlyBreakdownItem(
-            id=str(row.InvoiceLineItem.id),
-            invoice_id=str(row.InvoiceLineItem.invoice_id),
-            description=row.InvoiceLineItem.description,
-            quantity=float(row.InvoiceLineItem.quantity) if row.InvoiceLineItem.quantity is not None else None,
-            unit_price=float(row.InvoiceLineItem.unit_price) if row.InvoiceLineItem.unit_price is not None else None,
-            total=float(row.InvoiceLineItem.total),
-            tax_rate=float(row.InvoiceLineItem.tax_rate) if row.InvoiceLineItem.tax_rate is not None else None,
-            tax_amount=float(row.InvoiceLineItem.tax_amount) if row.InvoiceLineItem.tax_amount is not None else None,
-            seller_name=row.InvoiceLineItem.seller_name,
-            invoice_date=row.InvoiceLineItem.invoice_date.isoformat() if row.InvoiceLineItem.invoice_date is not None else None,
+            id=str(li.id),
+            invoice_id=str(li.invoice_id),
+            description=li.description,
+            quantity=float(li.quantity) if li.quantity is not None else None,
+            unit_price=float(li.unit_price) if li.unit_price is not None else None,
+            total=float(li.total),
+            tax_rate=float(li.tax_rate) if li.tax_rate is not None else None,
+            tax_amount=float(li.tax_amount) if li.tax_amount is not None else None,
+            seller_name=li.seller_name,
+            invoice_date=li.invoice_date.isoformat() if li.invoice_date else None,
             payment_status=row.payment_status or "unpaid",
         )
         for row in rows
+        for li in [row.InvoiceLineItem]
     ]
 
     return MonthlyBreakdownResponse(
@@ -877,7 +878,7 @@ async def open_items_report(
     Returns:
         Open items with totals.
     """
-    from uuid import UUID as PyUUID
+    from uuid import UUID as _UUID
 
     conditions = [
         Invoice.organization_id == user.organization_id,
@@ -895,7 +896,7 @@ async def open_items_report(
     if seller_pib:
         conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
     if client_id:
-        conditions.append(Invoice.client_id == PyUUID(client_id))
+        conditions.append(Invoice.client_id == _UUID(client_id))
 
     result = await db.execute(
         select(Invoice)
@@ -982,7 +983,7 @@ async def aging_report(
     Returns:
         Aging buckets with totals.
     """
-    from uuid import UUID as PyUUID
+    from uuid import UUID as _UUID
 
     conditions = [
         Invoice.organization_id == user.organization_id,
@@ -997,11 +998,9 @@ async def aging_report(
     if seller_pib:
         conditions.append(Invoice.seller["pib"].as_string() == seller_pib)
     if client_id:
-        conditions.append(Invoice.client_id == PyUUID(client_id))
+        conditions.append(Invoice.client_id == _UUID(client_id))
 
-    result = await db.execute(
-        select(Invoice).where(*conditions)
-    )
+    result = await db.execute(select(Invoice).where(*conditions))
     invoices = result.scalars().all()
 
     today = date.today()
