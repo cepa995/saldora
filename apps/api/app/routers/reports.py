@@ -191,7 +191,19 @@ async def get_spending_by_supplier(
         user.organization_id, date_from, date_to, seller_pib, search, client_id
     )
 
-    from sqlalchemy import case, literal
+    # Subquery: remaining amount per invoice (total - paid)
+    remaining_expr = Invoice.total_amount - func.coalesce(Invoice.paid_amount, 0)
+
+    # Per line item, its share of the invoice remaining amount:
+    # line_remaining = line_total / invoice_total * invoice_remaining
+    # This correctly handles partial payments proportionally.
+    line_remaining = case(
+        (
+            Invoice.total_amount > 0,
+            InvoiceLineItem.total / Invoice.total_amount * remaining_expr,
+        ),
+        else_=InvoiceLineItem.total,
+    )
 
     query = (
         select(
@@ -199,15 +211,7 @@ async def get_spending_by_supplier(
             InvoiceLineItem.seller_name,
             func.sum(InvoiceLineItem.total).label("total_amount"),
             func.count(func.distinct(InvoiceLineItem.invoice_id)).label("invoice_count"),
-            func.coalesce(
-                func.sum(
-                    case(
-                        (Invoice.payment_status != literal("paid"), InvoiceLineItem.total),
-                        else_=literal(0),
-                    )
-                ),
-                literal(0),
-            ).label("unpaid_amount"),
+            func.coalesce(func.sum(line_remaining), 0).label("unpaid_amount"),
         )
         .join(Invoice, InvoiceLineItem.invoice_id == Invoice.id)
         .where(*conditions)
