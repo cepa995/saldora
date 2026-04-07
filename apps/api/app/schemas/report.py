@@ -111,6 +111,7 @@ class MonthlyBreakdownItem(BaseModel):
         tax_rate: Applied tax rate percentage (may be None).
         seller_name: Supplier name (may be None).
         invoice_date: Invoice date as an ISO-8601 string (may be None).
+        payment_status: Invoice payment status (unpaid/partially_paid/paid).
     """
 
     id: str
@@ -123,6 +124,7 @@ class MonthlyBreakdownItem(BaseModel):
     tax_amount: float | None
     seller_name: str | None
     invoice_date: str | None
+    payment_status: str = "unpaid"
 
 
 class MonthlyBreakdownResponse(BaseModel):

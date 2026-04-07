@@ -264,10 +264,11 @@ async def get_monthly_breakdown(
     total_amount = float(agg_row.total_amount or 0)
     item_count = agg_row.item_count or 0
 
-    # Paginated rows
+    # Paginated rows with payment status from parent invoice
     offset = (page - 1) * per_page
     rows_query = (
-        select(InvoiceLineItem)
+        select(InvoiceLineItem, Invoice.payment_status)
+        .join(Invoice, InvoiceLineItem.invoice_id == Invoice.id)
         .where(*conditions)
         .order_by(
             InvoiceLineItem.invoice_date.desc().nullslast(),
@@ -277,20 +278,21 @@ async def get_monthly_breakdown(
         .limit(per_page)
     )
     rows_result = await db.execute(rows_query)
-    rows = rows_result.scalars().all()
+    rows = rows_result.all()
 
     items = [
         MonthlyBreakdownItem(
-            id=str(row.id),
-            invoice_id=str(row.invoice_id),
-            description=row.description,
-            quantity=float(row.quantity) if row.quantity is not None else None,
-            unit_price=float(row.unit_price) if row.unit_price is not None else None,
-            total=float(row.total),
-            tax_rate=float(row.tax_rate) if row.tax_rate is not None else None,
-            tax_amount=float(row.tax_amount) if row.tax_amount is not None else None,
-            seller_name=row.seller_name,
-            invoice_date=row.invoice_date.isoformat() if row.invoice_date is not None else None,
+            id=str(row.InvoiceLineItem.id),
+            invoice_id=str(row.InvoiceLineItem.invoice_id),
+            description=row.InvoiceLineItem.description,
+            quantity=float(row.InvoiceLineItem.quantity) if row.InvoiceLineItem.quantity is not None else None,
+            unit_price=float(row.InvoiceLineItem.unit_price) if row.InvoiceLineItem.unit_price is not None else None,
+            total=float(row.InvoiceLineItem.total),
+            tax_rate=float(row.InvoiceLineItem.tax_rate) if row.InvoiceLineItem.tax_rate is not None else None,
+            tax_amount=float(row.InvoiceLineItem.tax_amount) if row.InvoiceLineItem.tax_amount is not None else None,
+            seller_name=row.InvoiceLineItem.seller_name,
+            invoice_date=row.InvoiceLineItem.invoice_date.isoformat() if row.InvoiceLineItem.invoice_date is not None else None,
+            payment_status=row.payment_status or "unpaid",
         )
         for row in rows
     ]

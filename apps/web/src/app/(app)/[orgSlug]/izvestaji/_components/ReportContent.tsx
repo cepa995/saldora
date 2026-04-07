@@ -181,30 +181,50 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
   );
 }
 
+function PaymentBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    paid: 'bg-green-50 text-green-700',
+    partially_paid: 'bg-amber-50 text-amber-700',
+    unpaid: 'bg-gray-100 text-gray-600',
+  };
+  const labels: Record<string, string> = {
+    paid: 'Plaćeno',
+    partially_paid: 'Delimično',
+    unpaid: 'Neplaćeno',
+  };
+  return (
+    <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${colors[status] || colors.unpaid}`}>
+      {labels[status] || labels.unpaid}
+    </span>
+  );
+}
+
 function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total')]} />
+          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total'), t('paymentStatus')]} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{row.invoice_date || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-700 max-w-[150px] truncate">{row.seller_name || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-900 max-w-[200px] truncate font-medium">{row.description}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
-                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
+                <td className="px-3 py-2.5 text-center"><PaymentBadge status={row.payment_status} /></td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={7}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
+              <td />
             </tr>
           </tfoot>
         </table>
@@ -268,21 +288,26 @@ function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: Ret
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-1/3" />
+            <col className="w-1/3" />
+            <col className="w-1/3" />
+          </colgroup>
           <TableHead cols={[t('period'), t('itemCount'), t('total')]} />
           <tbody>
             {data.buckets.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium">{row.period}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.item_count}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{row.item_count}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={2}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -579,7 +604,7 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'monthlyBreakdown') {
     const d = data as MonthlyBreakdownResponse;
     rows = [
-      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'PDV %', 'PDV iznos', 'Ukupno'],
+      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'PDV %', 'PDV iznos', 'Ukupno', 'Status placanja'],
       ...d.items.map((r) => [
         r.invoice_date ?? '',
         r.seller_name ?? '',
@@ -590,6 +615,7 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
         String(r.tax_rate ?? ''),
         String(r.tax_amount ?? ''),
         String(r.total),
+        r.payment_status === 'paid' ? 'Placeno' : r.payment_status === 'partially_paid' ? 'Delimicno' : 'Neplaceno',
       ]),
       ['', '', '', '', '', '', '', '', String(d.total_amount)],
     ];
@@ -757,7 +783,7 @@ function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'r
 const SKELETON_COLS: Record<TemplateId, number> = {
   receivedGoods: 6,
   spendingBySupplier: 4,
-  monthlyBreakdown: 8,
+  monthlyBreakdown: 9,
   priceComparison: 6,
   expenseSummary: 3,
   kalkulacija: 8,

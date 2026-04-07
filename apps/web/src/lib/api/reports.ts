@@ -99,6 +99,7 @@ export interface MonthlyBreakdownItem {
   total: number;
   tax_rate: number | null;
   tax_amount: number | null;
+  payment_status: 'unpaid' | 'partially_paid' | 'paid';
 }
 
 export interface MonthlyBreakdownResponse {
