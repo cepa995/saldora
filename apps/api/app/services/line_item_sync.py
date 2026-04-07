@@ -50,6 +50,36 @@ def _calc_total(item: dict) -> float:
         return 0
 
 
+def _calc_tax_amount(item: dict, total: float) -> float | None:
+    """Return line item tax amount, falling back to total * rate / (100 + rate).
+
+    Args:
+        item: Line item dict with optional tax_amount, tax_rate.
+        total: Pre-calculated line total (inclusive of tax).
+
+    Returns:
+        Tax amount as float, or None if insufficient data.
+    """
+    tax_amount = item.get("tax_amount")
+    if tax_amount is not None:
+        try:
+            val = float(tax_amount)
+            if val != 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    # Fallback: derive from total and tax_rate
+    tax_rate = item.get("tax_rate")
+    if tax_rate is not None and total > 0:
+        try:
+            rate = float(tax_rate)
+            if rate > 0:
+                return round(total * rate / (100 + rate), 2)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
 def sync_line_items_raw_sql(
     session,
     invoice_id: str,
@@ -97,6 +127,7 @@ def sync_line_items_raw_sql(
 
         for item in line_items:
             total = _calc_total(item)
+            tax_amount = _calc_tax_amount(item, total)
             session.execute(
                 text("""
                     INSERT INTO invoice_line_items (
@@ -127,7 +158,7 @@ def sync_line_items_raw_sql(
                     "tax_base": item.get("tax_base"),
                     "total": total,
                     "tax_rate": item.get("tax_rate"),
-                    "tax_amount": item.get("tax_amount"),
+                    "tax_amount": tax_amount,
                     "seller_name": seller_name,
                     "seller_pib": seller_pib,
                     "invoice_date": invoice_date,
@@ -190,6 +221,7 @@ async def sync_line_items_orm(
         new_rows = []
         for item in line_items:
             total = _calc_total(item)
+            tax_amount = _calc_tax_amount(item, total)
             new_rows.append(
                 InvoiceLineItem(
                     invoice_id=invoice.id,
@@ -202,7 +234,7 @@ async def sync_line_items_orm(
                     tax_base=item.get("tax_base"),
                     total=total,
                     tax_rate=item.get("tax_rate"),
-                    tax_amount=item.get("tax_amount"),
+                    tax_amount=tax_amount,
                     seller_name=seller_name,
                     seller_pib=seller_pib,
                     invoice_date=invoice_date,
