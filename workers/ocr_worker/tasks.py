@@ -318,6 +318,31 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     line_items = invoice.get("line_items")
     tax_groups = invoice.get("tax_groups")
 
+    # Fill in missing total and tax_amount on line items so the UI always has values
+    if line_items:
+        for item in line_items:
+            total = item.get("total")
+            if total is None or total == 0:
+                tax_base = item.get("tax_base")
+                if tax_base and float(tax_base) != 0:
+                    item["total"] = tax_base
+                else:
+                    try:
+                        qty = float(item.get("quantity") or 0)
+                        price = float(item.get("unit_price") or 0)
+                        item["total"] = round(qty * price, 2) or None
+                    except (ValueError, TypeError):
+                        pass
+            tax_amt = item.get("tax_amount")
+            if tax_amt is None or tax_amt == 0:
+                rate = item.get("tax_rate")
+                base = item.get("total") or item.get("tax_base")
+                if rate and base:
+                    try:
+                        item["tax_amount"] = round(float(base) * float(rate) / 100, 2)
+                    except (ValueError, TypeError):
+                        pass
+
     session = get_session()
     try:
         session.execute(
