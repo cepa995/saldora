@@ -269,20 +269,19 @@ function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: Ret
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('invoiceCount'), t('supplierCount'), t('total')]} />
+          <TableHead cols={[t('period'), t('itemCount'), t('total')]} />
           <tbody>
-            {data.items.map((row, i) => (
+            {data.buckets.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium">{row.period}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.seller_count}</td>
+                <td className="px-3 py-2.5 text-center text-gray-700">{row.item_count}</td>
                 <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
-              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
+              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={2}>{t('grandTotal')}</td>
               <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
             </tr>
           </tfoot>
@@ -611,9 +610,9 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'expenseSummary') {
     const d = data as ExpenseSummaryResponse;
     rows = [
-      ['Period', 'Br. faktura', 'Br. dobavljaca', 'Ukupno'],
-      ...d.items.map((r) => [r.period, String(r.invoice_count), String(r.seller_count), String(r.total_amount)]),
-      ['', '', '', String(d.grand_total)],
+      ['Period', 'Br. stavki', 'Ukupno'],
+      ...d.buckets.map((r) => [r.period, String(r.item_count), String(r.total_amount)]),
+      ['', '', String(d.grand_total)],
     ];
   } else if (templateId === 'kalkulacija') {
     const d = data as KalkulacijaResponse;
@@ -760,7 +759,7 @@ const SKELETON_COLS: Record<TemplateId, number> = {
   spendingBySupplier: 4,
   monthlyBreakdown: 8,
   priceComparison: 6,
-  expenseSummary: 4,
+  expenseSummary: 3,
   kalkulacija: 8,
   ruc: 7,
   categorySpending: 4,
