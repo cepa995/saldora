@@ -68,7 +68,12 @@ def _build_conditions(
     Returns:
         List of SQLAlchemy column expressions suitable for .where(*conditions).
     """
-    conditions = [InvoiceLineItem.organization_id == org_id]
+    conditions = [
+        InvoiceLineItem.organization_id == org_id,
+        InvoiceLineItem.invoice_id.in_(
+            select(Invoice.id).where(Invoice.status.in_(["verified", "exported"]))
+        ),
+    ]
     if date_from:
         conditions.append(InvoiceLineItem.invoice_date >= date_from)
     if date_to:
