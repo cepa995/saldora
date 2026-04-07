@@ -24,6 +24,32 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _calc_total(item: dict) -> float:
+    """Return line item total, falling back to quantity * unit_price.
+
+    Args:
+        item: Line item dict with optional total, quantity, unit_price.
+
+    Returns:
+        Calculated total as float, or 0 if insufficient data.
+    """
+    total = item.get("total")
+    if total is not None:
+        try:
+            val = float(total)
+            if val != 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    # Fallback: quantity * unit_price
+    try:
+        qty = float(item.get("quantity") or 0)
+        price = float(item.get("unit_price") or 0)
+        return round(qty * price, 2)
+    except (ValueError, TypeError):
+        return 0
+
+
 def sync_line_items_raw_sql(
     session,
     invoice_id: str,
@@ -70,6 +96,7 @@ def sync_line_items_raw_sql(
             return
 
         for item in line_items:
+            total = _calc_total(item)
             session.execute(
                 text("""
                     INSERT INTO invoice_line_items (
@@ -98,7 +125,7 @@ def sync_line_items_raw_sql(
                     "unit_price": item.get("unit_price"),
                     "discount": item.get("discount"),
                     "tax_base": item.get("tax_base"),
-                    "total": item.get("total") or 0,
+                    "total": total,
                     "tax_rate": item.get("tax_rate"),
                     "tax_amount": item.get("tax_amount"),
                     "seller_name": seller_name,
@@ -162,6 +189,7 @@ async def sync_line_items_orm(
 
         new_rows = []
         for item in line_items:
+            total = _calc_total(item)
             new_rows.append(
                 InvoiceLineItem(
                     invoice_id=invoice.id,
@@ -172,7 +200,7 @@ async def sync_line_items_orm(
                     unit_price=item.get("unit_price"),
                     discount=item.get("discount"),
                     tax_base=item.get("tax_base"),
-                    total=item.get("total") or 0,
+                    total=total,
                     tax_rate=item.get("tax_rate"),
                     tax_amount=item.get("tax_amount"),
                     seller_name=seller_name,
