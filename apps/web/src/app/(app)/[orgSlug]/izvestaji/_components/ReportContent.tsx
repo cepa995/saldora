@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useClient } from '@/contexts/ClientContext';
 import {
@@ -798,11 +798,13 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
   const [error, setError] = useState('');
   const [data, setData] = useState<ReportData>(null);
 
-  // Clear results when switching tabs
-  useEffect(() => {
-    setData(null);
-    setError('');
-  }, [templateId]);
+  // Clear results when switching tabs (sync via ref to avoid stale renders)
+  const prevTemplateRef = useRef(templateId);
+  if (prevTemplateRef.current !== templateId) {
+    prevTemplateRef.current = templateId;
+    if (data !== null) setData(null);
+    if (error) setError('');
+  }
 
   const handleGenerate = useCallback(async () => {
     setLoading(true);
