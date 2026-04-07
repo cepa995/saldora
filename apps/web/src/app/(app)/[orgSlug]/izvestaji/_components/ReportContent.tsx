@@ -213,7 +213,7 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total'), t('paymentStatus')]} align={['left', 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'center']} />
+          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total')]} align={['left', 'left', 'left', 'right', 'right', 'right', 'right', 'right']} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -225,7 +225,6 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
                 <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
                 <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
                 <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
-                <td className="px-3 py-2.5 text-center"><PaymentBadge status={row.payment_status} /></td>
               </tr>
             ))}
           </tbody>
@@ -233,7 +232,6 @@ function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t:
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={7}>{t('grandTotal')}</td>
               <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
-              <td className="px-3 py-2" />
             </tr>
           </tfoot>
         </table>
@@ -295,7 +293,7 @@ function PriceComparisonTable({ data, t }: { data: PriceComparisonResponse; t: R
 
 function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden max-w-xl mx-auto">
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -618,7 +616,7 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'monthlyBreakdown') {
     const d = data as MonthlyBreakdownResponse;
     rows = [
-      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'PDV %', 'PDV iznos', 'Ukupno', 'Status placanja'],
+      ['Datum', 'Dobavljac', 'PIB', 'Opis', 'Kolicina', 'Jed. cena', 'PDV %', 'PDV iznos', 'Ukupno'],
       ...d.items.map((r) => [
         r.invoice_date ?? '',
         r.seller_name ?? '',
@@ -629,7 +627,6 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
         String(r.tax_rate ?? ''),
         String(r.tax_amount ?? ''),
         String(r.total),
-        r.payment_status === 'paid' ? 'Placeno' : r.payment_status === 'partially_paid' ? 'Delimicno' : 'Neplaceno',
       ]),
       ['', '', '', '', '', '', '', '', String(d.total_amount)],
     ];
@@ -797,7 +794,7 @@ function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'r
 const SKELETON_COLS: Record<TemplateId, number> = {
   receivedGoods: 6,
   spendingBySupplier: 5,
-  monthlyBreakdown: 9,
+  monthlyBreakdown: 8,
   priceComparison: 6,
   expenseSummary: 3,
   kalkulacija: 8,
