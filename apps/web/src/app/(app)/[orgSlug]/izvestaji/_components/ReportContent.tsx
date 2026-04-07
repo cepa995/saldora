@@ -841,7 +841,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
   function hasItems(): boolean {
     if (!data) return false;
     if ('items' in data) return (data as { items: unknown[] }).items.length > 0;
-    if ('buckets' in data) return (data as { buckets: unknown[] }).buckets.some((b: unknown) => (b as { count: number }).count > 0);
+    if ('buckets' in data) return (data as { buckets: unknown[] }).buckets.length > 0;
     return false;
   }
 
