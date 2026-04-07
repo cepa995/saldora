@@ -281,6 +281,7 @@
     "recordPayment": "Evidentiraj uplatu",
     "paymentNotes": "Napomena (referenca, izvod...)",
     "paymentRecorded": "Uplata uspešno evidentirana",
+    "overpaymentError": "Iznos ne može biti veći od preostalog duga",
     "amount": "Iznos",
     "invoiceNumber": "Broj fakture",
     "invoiceDate": "Datum fakture",

@@ -275,6 +275,7 @@
     "recordPayment": "Евидентирај уплату",
     "paymentNotes": "Напомена (референца, извод...)",
     "paymentRecorded": "Уплата успешно евидентирана",
+    "overpaymentError": "Износ не може бити већи од преосталог дуга",
     "amount": "Износ",
     "rawLlm": "LLM излаз (debug)",
     "invoiceNumber": "Број фактуре",

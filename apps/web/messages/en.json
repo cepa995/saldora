@@ -275,6 +275,7 @@
     "recordPayment": "Record Payment",
     "paymentNotes": "Notes (reference, statement...)",
     "paymentRecorded": "Payment recorded successfully",
+    "overpaymentError": "Amount cannot exceed the remaining balance",
     "amount": "Amount",
     "rawLlm": "LLM output (debug)",
     "invoiceNumber": "Invoice number",

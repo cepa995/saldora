@@ -1571,16 +1571,21 @@ function PaymentForm({
   const [error, setError] = useState('');
 
   const remaining = totalAmount
-    ? parseFloat(totalAmount) - parseFloat(paidAmount || '0')
+    ? Math.round((parseFloat(totalAmount) - parseFloat(paidAmount || '0')) * 100) / 100
     : 0;
 
   useEffect(() => {
-    setAmount(remaining > 0 ? String(remaining) : '');
+    setAmount(remaining > 0 ? remaining.toFixed(2) : '');
   }, [remaining]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) return;
+    const parsed = parseFloat(amount);
+    if (!amount || parsed <= 0) return;
+    if (parsed > remaining) {
+      setError(t('overpaymentError'));
+      return;
+    }
 
     setSubmitting(true);
     setError('');
