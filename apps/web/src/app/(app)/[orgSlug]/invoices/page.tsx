@@ -270,7 +270,7 @@ export default function InvoicesPage() {
                 paid: t('paid'),
               };
               const colors: Record<string, string> = {
-                unpaid: 'bg-gray-100 text-gray-600',
+                unpaid: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
                 partially_paid: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
                 paid: 'bg-green-50 text-green-700 ring-1 ring-green-600/20',
               };
