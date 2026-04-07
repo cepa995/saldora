@@ -194,29 +194,31 @@ async def get_spending_by_supplier(
     # Subquery: remaining amount per invoice (total - paid)
     remaining_expr = Invoice.total_amount - func.coalesce(Invoice.paid_amount, 0)
 
+    gross = InvoiceLineItem.total + func.coalesce(InvoiceLineItem.tax_amount, 0)
+
     # Per line item, its share of the invoice remaining amount:
-    # line_remaining = line_total / invoice_total * invoice_remaining
+    # line_remaining = line_gross / invoice_total * invoice_remaining
     # This correctly handles partial payments proportionally.
     line_remaining = case(
         (
             Invoice.total_amount > 0,
-            InvoiceLineItem.total / Invoice.total_amount * remaining_expr,
+            gross / Invoice.total_amount * remaining_expr,
         ),
-        else_=InvoiceLineItem.total,
+        else_=gross,
     )
 
     query = (
         select(
             InvoiceLineItem.seller_pib,
             InvoiceLineItem.seller_name,
-            func.sum(InvoiceLineItem.total).label("total_amount"),
+            func.sum(gross).label("total_amount"),
             func.count(func.distinct(InvoiceLineItem.invoice_id)).label("invoice_count"),
             func.coalesce(func.sum(line_remaining), 0).label("unpaid_amount"),
         )
         .join(Invoice, InvoiceLineItem.invoice_id == Invoice.id)
         .where(*conditions)
         .group_by(InvoiceLineItem.seller_pib, InvoiceLineItem.seller_name)
-        .order_by(func.sum(InvoiceLineItem.total).desc())
+        .order_by(func.sum(gross).desc())
     )
 
     result = await db.execute(query)
