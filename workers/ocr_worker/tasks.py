@@ -318,30 +318,51 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     line_items = invoice.get("line_items")
     tax_groups = invoice.get("tax_groups")
 
-    # Fill in missing total and tax_amount on line items so the UI always has values
+    # Normalize line item totals: total = net amount (bez PDV), tax_amount = PDV
+    # The LLM sometimes returns total as gross (sa PDV) or leaves it null.
+    # We normalize so total always means net = tax_base = qty * price (- discount).
     if line_items:
         for item in line_items:
-            total = item.get("total")
-            if total is None or total == 0:
-                tax_base = item.get("tax_base")
-                if tax_base and float(tax_base) != 0:
-                    item["total"] = tax_base
+            try:
+                tax_base = float(item.get("tax_base") or 0)
+                total = float(item.get("total") or 0)
+                rate = float(item.get("tax_rate") or 0)
+                qty = float(item.get("quantity") or 0)
+                price = float(item.get("unit_price") or 0)
+                discount = float(item.get("discount") or 0)
+
+                # Calculate expected net from qty * price * (1 - discount/100)
+                expected_net = qty * price
+                if discount > 0:
+                    expected_net = expected_net * (1 - discount / 100)
+                expected_net = round(expected_net, 2)
+
+                # Determine the correct net amount
+                if tax_base > 0:
+                    net = tax_base
+                elif total > 0 and rate > 0:
+                    # Check if total looks like gross (close to net * (1 + rate/100))
+                    expected_gross = round(expected_net * (1 + rate / 100), 2)
+                    if abs(total - expected_gross) < 1:
+                        net = expected_net  # total was gross, use calculated net
+                    else:
+                        net = total  # total is already net
+                elif total > 0:
+                    net = total
+                elif expected_net > 0:
+                    net = expected_net
                 else:
-                    try:
-                        qty = float(item.get("quantity") or 0)
-                        price = float(item.get("unit_price") or 0)
-                        item["total"] = round(qty * price, 2) or None
-                    except (ValueError, TypeError):
-                        pass
-            tax_amt = item.get("tax_amount")
-            if tax_amt is None or tax_amt == 0:
-                rate = item.get("tax_rate")
-                base = item.get("total") or item.get("tax_base")
-                if rate and base:
-                    try:
-                        item["tax_amount"] = round(float(base) * float(rate) / 100, 2)
-                    except (ValueError, TypeError):
-                        pass
+                    net = 0
+
+                item["total"] = round(net, 2) if net else None
+                item["tax_base"] = round(net, 2) if net else item.get("tax_base")
+
+                # Calculate tax_amount from net
+                tax_amt = float(item.get("tax_amount") or 0)
+                if tax_amt == 0 and rate > 0 and net > 0:
+                    item["tax_amount"] = round(net * rate / 100, 2)
+            except (ValueError, TypeError):
+                pass
 
     session = get_session()
     try:
