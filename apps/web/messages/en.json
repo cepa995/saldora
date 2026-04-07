@@ -1006,6 +1006,7 @@
     "sellerName": "Supplier",
     "sellerPib": "PIB",
     "invoiceCount": "Invoices",
+    "unpaidAmount": "Unpaid",
     "period": "Period",
     "itemCount": "Items",
     "grandTotal": "Grand total",

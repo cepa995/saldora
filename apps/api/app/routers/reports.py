@@ -186,13 +186,25 @@ async def get_spending_by_supplier(
         user.organization_id, date_from, date_to, seller_pib, search, client_id
     )
 
+    from sqlalchemy import case, literal
+
     query = (
         select(
             InvoiceLineItem.seller_pib,
             InvoiceLineItem.seller_name,
             func.sum(InvoiceLineItem.total).label("total_amount"),
             func.count(func.distinct(InvoiceLineItem.invoice_id)).label("invoice_count"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Invoice.payment_status != literal("paid"), InvoiceLineItem.total),
+                        else_=literal(0),
+                    )
+                ),
+                literal(0),
+            ).label("unpaid_amount"),
         )
+        .join(Invoice, InvoiceLineItem.invoice_id == Invoice.id)
         .where(*conditions)
         .group_by(InvoiceLineItem.seller_pib, InvoiceLineItem.seller_name)
         .order_by(func.sum(InvoiceLineItem.total).desc())
@@ -207,6 +219,7 @@ async def get_spending_by_supplier(
             seller_pib=row.seller_pib,
             total_amount=float(row.total_amount),
             invoice_count=row.invoice_count,
+            unpaid_amount=float(row.unpaid_amount),
         )
         for row in rows
     ]

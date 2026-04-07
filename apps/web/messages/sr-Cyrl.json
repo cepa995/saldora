@@ -1006,6 +1006,7 @@
     "sellerName": "Добављач",
     "sellerPib": "ПИБ",
     "invoiceCount": "Бр. фактура",
+    "unpaidAmount": "Неплаћено",
     "period": "Период",
     "itemCount": "Бр. ставки",
     "grandTotal": "Укупан износ",

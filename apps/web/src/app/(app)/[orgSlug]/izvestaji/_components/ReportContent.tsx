@@ -158,21 +158,27 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total')]} />
+          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total'), t('unpaidAmount')]} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium">{row.seller_name || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{row.seller_pib || '—'}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{row.invoice_count}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className={`px-3 py-2.5 text-right font-semibold tabular-nums ${row.unpaid_amount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {fmtAmount(row.unpaid_amount)}
+                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-red-600 tabular-nums">
+                {fmtAmount(data.items.reduce((s, r) => s + r.unpaid_amount, 0))}
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -288,13 +294,14 @@ function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: Ret
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm table-fixed">
-          <colgroup>
-            <col className="w-1/3" />
-            <col className="w-1/3" />
-            <col className="w-1/3" />
-          </colgroup>
-          <TableHead cols={[t('period'), t('itemCount'), t('total')]} />
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50/60">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('period')}</th>
+              <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('itemCount')}</th>
+              <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('total')}</th>
+            </tr>
+          </thead>
           <tbody>
             {data.buckets.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -597,9 +604,9 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'spendingBySupplier') {
     const d = data as SpendingBySupplierResponse;
     rows = [
-      ['Dobavljac', 'PIB', 'Br. faktura', 'Ukupno'],
-      ...d.items.map((r) => [r.seller_name ?? '', r.seller_pib ?? '', String(r.invoice_count), String(r.total_amount)]),
-      ['', '', '', String(d.grand_total)],
+      ['Dobavljac', 'PIB', 'Br. faktura', 'Ukupno', 'Neplaceno'],
+      ...d.items.map((r) => [r.seller_name ?? '', r.seller_pib ?? '', String(r.invoice_count), String(r.total_amount), String(r.unpaid_amount)]),
+      ['', '', '', String(d.grand_total), String(d.items.reduce((s, r) => s + r.unpaid_amount, 0))],
     ];
   } else if (templateId === 'monthlyBreakdown') {
     const d = data as MonthlyBreakdownResponse;
@@ -782,7 +789,7 @@ function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'r
 
 const SKELETON_COLS: Record<TemplateId, number> = {
   receivedGoods: 6,
-  spendingBySupplier: 4,
+  spendingBySupplier: 5,
   monthlyBreakdown: 9,
   priceComparison: 6,
   expenseSummary: 3,

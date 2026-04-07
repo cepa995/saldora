@@ -79,6 +79,7 @@ class SpendingBySupplierItem(BaseModel):
     seller_pib: str | None
     total_amount: float
     invoice_count: int
+    unpaid_amount: float = 0
 
 
 class SpendingBySupplierResponse(BaseModel):

@@ -65,6 +65,7 @@ export interface SpendingBySupplierItem {
   seller_pib: string | null;
   total_amount: number;
   invoice_count: number;
+  unpaid_amount: number;
 }
 
 export interface SpendingBySupplierResponse {
