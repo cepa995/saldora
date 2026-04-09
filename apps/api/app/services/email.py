@@ -9,7 +9,7 @@ settings = get_settings()
 
 # ── Shared email template ─────────────────────────────────────────────
 
-_LOGO_URL = "https://saldora.rs/logo.png"
+_LOGO_URL = ""  # Set to hosted URL when available
 
 
 def _build_email_html(title: str, content_html: str, footer_html: str = "") -> str:
@@ -35,11 +35,10 @@ def _build_email_html(title: str, content_html: str, footer_html: str = "") -> s
       <td align="center" style="padding: 40px 20px;">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%;">
 
-          <!-- Header with logo -->
+          <!-- Header -->
           <tr>
             <td align="center" style="padding-bottom: 24px;">
-              <img src="{_LOGO_URL}" alt="Saldora" width="160" height="auto"
-                   style="display: block; max-width: 160px; height: auto;" />
+              {'<img src="' + _LOGO_URL + '" alt="Saldora" width="160" height="auto" style="display: block; max-width: 160px; height: auto;" />' if _LOGO_URL else '<h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #7c3aed;">saldora</h1>'}
             </td>
           </tr>
 
