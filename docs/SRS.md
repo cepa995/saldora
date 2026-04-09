@@ -1,8 +1,8 @@
 # Software Requirements Specification (SRS)
 # Saldora - AI-Powered Invoice Processing Platform
 
-**Version:** 3.0
-**Date:** March 2026
+**Version:** 3.2
+**Date:** April 2026
 **Status:** Draft
 
 ---
@@ -42,11 +42,11 @@
 
 ### 1.1 Purpose
 
-This Software Requirements Specification (SRS) document provides a comprehensive description of the Saldora platform (formerly FakturaAI) - an AI-powered invoice processing system designed specifically for the Serbian market. The document outlines functional and non-functional requirements, system architecture, and technical specifications.
+This Software Requirements Specification (SRS) document provides a comprehensive description of the Saldora platform (formerly Saldora) - an AI-powered invoice processing system designed specifically for the Serbian market. The document outlines functional and non-functional requirements, system architecture, and technical specifications.
 
 ### 1.2 Scope
 
-FakturaAI is a SaaS platform that enables accountants, accounting agencies, and businesses in Serbia to:
+Saldora is a SaaS platform that enables accountants, accounting agencies, and businesses in Serbia to:
 
 - Automatically extract data from invoices using AI-powered OCR
 - Process both Cyrillic and Latin script documents
@@ -95,11 +95,11 @@ FakturaAI is a SaaS platform that enables accountants, accounting agencies, and 
 
 ### 2.1 Product Perspective
 
-FakturaAI operates as a standalone web application with the following integration points:
+Saldora operates as a standalone web application with the following integration points:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FakturaAI Platform                        │
+│                        Saldora Platform                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │   Web App   │  │  REST API   │  │    AI Processing Engine │  │
@@ -131,7 +131,7 @@ FakturaAI operates as a standalone web application with the following integratio
 | Dashboard & Analytics | Usage statistics and processing history | P1 |
 | Client Management | Manage clients and scope invoices per client (Agency plan) | P1 |
 | API Access | RESTful API for third-party integrations | P2 |
-| Custom Integrations | Webhooks and custom export templates | P2 |
+| Custom Integrations | Custom export templates | P2 |
 
 ### 2.3 User Classes and Characteristics
 
@@ -275,9 +275,9 @@ FakturaAI operates as a standalone web application with the following integratio
 │                                                                      │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
 │  │ Billing Service │    │  Queue Service  │    │ Webhook Service │  │
-│  │  - Paddle int.  │    │ - Celery tasks  │    │  - Notifications│  │
-│  │  - Usage track  │    │ - Job status    │    │  - Callbacks    │  │
-│  │  - Invoicing    │    │ - Retry logic   │    │  - Events       │  │
+│  │  - Paddle int.  │    │ - Celery tasks  │    │ (DEPRIORITIZED) │  │
+│  │  - Usage track  │    │ - Job status    │    │  - Notifications│  │
+│  │  - Invoicing    │    │ - Retry logic   │    │  - Callbacks    │  │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -600,28 +600,9 @@ DUPLICATE_CHECK(invoice, organization_id):
 | **Search** | By date, invoice number, seller/buyer, amount |
 | **Retention** | Minimum 10 years (per Serbian Accounting Law) |
 
-#### FR-4.7.4 Payment Tracking (Otvorene Stavke)
-| ID | FR-4.7.4 |
-|----|----------|
-| **Description** | System MUST track payment status of invoices independently of processing status |
-| **Statuses** | `unpaid` (default), `partially_paid`, `paid` |
-| **Fields** | `payment_status`, `paid_amount`, `paid_date`, `payment_notes` |
-| **Single Payment** | `PATCH /invoices/{id}/payment` — adds amount to existing paid_amount, auto-sets status |
-| **Batch Payment** | `POST /invoices/batch-payment` — marks multiple invoices as fully paid |
-| **Validation** | Payment only allowed on `verified` or `exported` invoices; paid_amount cannot exceed total_amount |
-| **Reports** | Open items report (unpaid invoices with days overdue), Aging analysis (buckets: 0-30, 31-60, 61-90, 90+ days) |
-| **Filter** | Invoice list supports `?payment_status=` filter |
+#### FR-4.7.4 — REMOVED
 
-**Database additions:**
-
-```sql
-ALTER TABLE invoices ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid';
-ALTER TABLE invoices ADD COLUMN paid_amount NUMERIC(15, 2);
-ALTER TABLE invoices ADD COLUMN paid_date DATE;
-ALTER TABLE invoices ADD COLUMN payment_notes TEXT;
-CREATE INDEX ix_invoices_payment_status ON invoices(payment_status);
-CREATE INDEX ix_invoices_due_date ON invoices(due_date);
-```
+Payment tracking is not part of Saldora. Saldora is an intelligence-only platform. Payment operations are handled by downstream accounting software (MiniMax, etc.).
 
 #### FR-4.7.5 Automated Archive Export (Arhiviranje)
 | ID | FR-4.7.5 |
@@ -642,12 +623,9 @@ CREATE INDEX ix_invoices_due_date ON invoices(due_date);
 | **Authentication** | API key or OAuth 2.0 |
 | **Rate Limiting** | Based on subscription tier |
 
-#### FR-4.8.2 Webhook Notifications
-| ID | FR-4.8.2 |
-|----|----------|
-| **Description** | System SHOULD support webhook callbacks |
-| **Events** | Processing complete, error occurred, export ready |
-| **Retry** | 3 retries with exponential backoff |
+#### FR-4.8.2 — DEPRIORITIZED
+
+Webhook notifications are not being implemented at this time. Webhooks become useful only after the full workflow (verify → export) is API-driven.
 
 ### 4.9 Business Logic & Validation Rules
 
@@ -875,7 +853,7 @@ VERIFY_CALCULATIONS(invoice):
 
 ### 4.10 Accounting Intent Layer
 
-This section defines the **AccountingIntent** - a critical domain model that sits between raw invoice extraction and accounting system export. This transforms FakturaAI from an "OCR tool" into an "accounting intelligence platform".
+This section defines the **AccountingIntent** - a critical domain model that sits between raw invoice extraction and accounting system export. This transforms Saldora from an "OCR tool" into an "accounting intelligence platform".
 
 #### 4.10.1 Overview
 
@@ -3851,7 +3829,7 @@ Kontakt za dodatna pitanja:
 privacy@fakturaai.rs
 
 S poštovanjem,
-FakturaAI Tim
+Saldora Tim
 ```
 
 ### 10.7 Audit & Logging
@@ -4058,9 +4036,9 @@ jobs:
 
 ### 12.2 Payment Integration (Paddle)
 
-**Why Paddle:** Paddle operates as a Merchant of Record (MoR), meaning Paddle manages all payment transactions, VAT obligations, and tax compliance globally on behalf of FakturaAI. This is critical for the Serbian market because:
+**Why Paddle:** Paddle operates as a Merchant of Record (MoR), meaning Paddle manages all payment transactions, VAT obligations, and tax compliance globally on behalf of Saldora. This is critical for the Serbian market because:
 - Paddle assumes responsibility for calculating and collecting VAT in all jurisdictions
-- No need for FakturaAI to register for VAT in individual countries
+- No need for Saldora to register for VAT in individual countries
 - Simplified financial reporting - one payout from Paddle instead of thousands of individual transactions
 
 **Features Used:**
@@ -4104,7 +4082,7 @@ organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
 
 ### 12.5 MiniMax Integration
 
-MiniMax (minimax.rs) is the most widely used cloud accounting software in Serbia. FakturaAI integrates with MiniMax via both XML file export and direct REST API push.
+MiniMax (minimax.rs) is the most widely used cloud accounting software in Serbia. Saldora integrates with MiniMax via both XML file export and direct REST API push.
 
 #### 12.5.1 MiniMax XML Export
 
@@ -4175,7 +4153,9 @@ Field names and IDs validated against the MiniMax RS Swagger API spec:
 
 ### 12.6 SEF Integration (eFaktura)
 
-The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory for B2G and B2B transactions in Serbia. FakturaAI MUST integrate with SEF as a **first-class input source**, not just an export format.
+> **NOTE: SEF integration is DEPRIORITIZED and will not be implemented for launch. This section is retained for future reference only.**
+
+The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory for B2G and B2B transactions in Serbia. Saldora MUST integrate with SEF as a **first-class input source**, not just an export format.
 
 #### 12.7.1 Overview
 
@@ -4185,7 +4165,7 @@ The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory fo
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐   │
-│  │    SEF      │◀───────▶│  FakturaAI  │◀───────▶│  User       │   │
+│  │    SEF      │◀───────▶│  Saldora  │◀───────▶│  User       │   │
 │  │   Portal    │   API   │   Backend   │   Web   │  Interface  │   │
 │  │  (eFaktura) │         │             │         │             │   │
 │  └─────────────┘         └──────┬──────┘         └─────────────┘   │
@@ -4260,9 +4240,9 @@ CREATE TABLE sef_connections (
 );
 ```
 
-#### 12.6.3 Inbound Invoice Sync (SEF → FakturaAI)
+#### 12.6.3 Inbound Invoice Sync (SEF → Saldora)
 
-The system MUST pull invoices from SEF and process them through the FakturaAI pipeline.
+The system MUST pull invoices from SEF and process them through the Saldora pipeline.
 
 **Sync Flow:**
 
@@ -4298,7 +4278,7 @@ The system MUST pull invoices from SEF and process them through the FakturaAI pi
 
 **SEF Invoice Statuses:**
 
-| SEF Status | Serbian | FakturaAI Action |
+| SEF Status | Serbian | Saldora Action |
 |------------|---------|------------------|
 | `SENT` | Poslata | N/A (outbound only) |
 | `DELIVERED` | Isporučena | Import & process |
@@ -4388,7 +4368,7 @@ The system MUST pull invoices from SEF and process them through the FakturaAI pi
 CREATE TABLE sef_invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id),
-    invoice_id UUID REFERENCES invoices(id),  -- FakturaAI invoice
+    invoice_id UUID REFERENCES invoices(id),  -- Saldora invoice
 
     -- SEF identifiers
     sef_id VARCHAR(100) NOT NULL,
@@ -4437,7 +4417,7 @@ CREATE INDEX idx_sef_invoices_invoice ON sef_invoices(invoice_id);
 CREATE INDEX idx_sef_invoices_synced ON sef_invoices(synced_at);
 ```
 
-#### 12.6.4 Outbound Invoice Push (FakturaAI → SEF)
+#### 12.6.4 Outbound Invoice Push (Saldora → SEF)
 
 The system SHOULD support sending invoices to SEF (for organizations that issue invoices).
 
@@ -4448,7 +4428,7 @@ The system SHOULD support sending invoices to SEF (for organizations that issue 
 │                    Outbound Invoice Push Flow                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  1. User creates/uploads outbound invoice in FakturaAI              │
+│  1. User creates/uploads outbound invoice in Saldora              │
 │     │                                                                │
 │     ▼                                                                │
 │  2. System validates:                                               │
@@ -4646,7 +4626,7 @@ The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFakt
 
 | Action | Description | Result |
 |--------|-------------|--------|
-| Obradi | Process through FakturaAI pipeline | Creates invoice + accounting intent |
+| Obradi | Process through Saldora pipeline | Creates invoice + accounting intent |
 | Prihvati na SEF | Send acceptance to SEF | Updates SEF status to APPROVED |
 | Odbij | Reject invoice | Sends rejection to SEF with reason |
 | Arhiviraj | Archive without processing | Stores but doesn't create invoice |
@@ -5039,23 +5019,24 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | January 2025 | FakturaAI Team | Initial release |
-| 1.1 | January 2025 | FakturaAI Team | Added: Business Logic & Validation Rules (4.9), Human-in-the-Loop & Feedback System (9.9), Legal & Compliance Flows (10.6) |
-| 1.2 | January 2025 | FakturaAI Team | Added: Accounting Intent Layer (4.10), Automation Rules Engine (4.11), SEF Integration (12.5), Expanded Feedback Loop Implementation (9.9.7) |
-| 1.3 | January 2025 | FakturaAI Team | Updated OCR stack: dots.ocr (VLM) as primary engine with unified layout+OCR, EasyOCR as fallback, removed separate LayoutParser (Tesseract removed) |
-| 2.0 | February 2026 | FakturaAI Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
-| 2.1 | February 2026 | FakturaAI Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
-| 2.2 | February 2026 | FakturaAI Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
-| 2.3 | March 2026 | FakturaAI Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
-| 2.4 | March 2026 | FakturaAI Team | Added Invoice Template Learning & LLM Cost Optimization spec (9.9): layout fingerprinting, template storage model, template-based field extraction with three-tier fallback chain, automatic template learning from LLM extractions, cost tracking metrics. |
-| 2.5 | March 2026 | FakturaAI Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
+| 1.0 | January 2025 | Saldora Team | Initial release |
+| 1.1 | January 2025 | Saldora Team | Added: Business Logic & Validation Rules (4.9), Human-in-the-Loop & Feedback System (9.9), Legal & Compliance Flows (10.6) |
+| 1.2 | January 2025 | Saldora Team | Added: Accounting Intent Layer (4.10), Automation Rules Engine (4.11), SEF Integration (12.5), Expanded Feedback Loop Implementation (9.9.7) |
+| 1.3 | January 2025 | Saldora Team | Updated OCR stack: dots.ocr (VLM) as primary engine with unified layout+OCR, EasyOCR as fallback, removed separate LayoutParser (Tesseract removed) |
+| 2.0 | February 2026 | Saldora Team | Serbian market alignment: removed model training/retraining (pre-trained models only), ZZPL as primary data protection law (GDPR as reference), Paddle instead of Stripe, KPR/KIR terminology, SEF polling instead of webhooks, NBS exchange rate integration, Cyrillic/Latin script support, PIB constraint for foreign entities, 10-year document retention |
+| 2.1 | February 2026 | Saldora Team | dots.ocr architecture: vLLM HTTP server sidecar (GPU) + lightweight OCR worker (CPU, OpenAI client), removed EasyOCR fallback (manual review instead), skip preprocessing for VLM |
+| 2.2 | February 2026 | Saldora Team | LLM-based field extraction (Anthropic Claude) as primary method with regex fallback. Added `tax_groups` for multi-rate PDV breakdowns (per-section, not merged). Updated data model: inline JSON columns for seller/buyer/line_items/tax_groups (removed companies/documents FK tables). Added `raw_llm_output` for debugging. Per-field confidence scoring with `needs_review` flag. Enhanced math validation: tax groups consistency check, tax amount not recomputed from rate. Updated invoice detail UI: EditableField with confidence badges, line items editing, tax groups editing, field-level validation warnings, Toast feedback. |
+| 2.3 | March 2026 | Saldora Team | Added fiscal receipt PIB extraction rules (4.9.2a): buyer ID type-code prefix handling, store/branch number disambiguation, post-extraction sanitization. Added multi-country tax ID validation spec (4.9.2b): OIB (Croatia), JIB (BiH), Montenegro PIB, EDB (North Macedonia), Slovenian Davčna, EU VAT IDs. Updated glossary with OIB and JIB terms. |
+| 2.4 | March 2026 | Saldora Team | Added Invoice Template Learning & LLM Cost Optimization spec (9.9): layout fingerprinting, template storage model, template-based field extraction with three-tier fallback chain, automatic template learning from LLM extractions, cost tracking metrics. |
+| 2.5 | March 2026 | Saldora Team | Added Client Management for Agency plan (4.12): client CRUD with soft-delete, auto-assignment of invoices to clients via PIB matching after OCR, invoice scoping by client_id, sidebar client selector. Added clients table (7.2.4), client_id FK on invoices. Feature gated via CLIENT_MANAGEMENT flag. |
 | 2.6 | March 2026 | Saldora Team | Replaced PDV book generation (KPR/KIR, M13) with Invoice Reports feature (4.13): denormalized invoice_line_items table populated at OCR completion and on edits; five pre-built report templates (received goods, spending by supplier, monthly breakdown, price comparison, expense summary) at /api/v1/reports/; zero LLM cost; CSV export; frontend page at /{orgSlug}/izvestaji; PRO plan feature gate. |
-| 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded FakturaAI → Saldora. |
+| 2.7 | March 2026 | Saldora Team | Added line item discount/tax_base fields. Added invoice_line_items to DB schema (7.2.5). Updated duplicate detection to hard block (4.4.3). Added Email Ingestion Pipeline spec (4.14): dedicated inbound address per org, attachment extraction, auto-processing, Postmark webhook, security controls, confirmation emails. Rebranded Saldora → Saldora. |
 | 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
 | 2.9 | March 2026 | Saldora Team | Added In-App Support System spec (4.16). Updated MiniMax API field reference (12.5.4). Updated security hardening details (10.1, 10.3). Added serverless GPU deployment options (9.7). Updated confidence display from percentages to text labels (4.3.3). |
 | 3.0 | March 2026 | Saldora Team | Client management: replaced soft-delete with hard DELETE (unlinks invoices); added toggle-active endpoint (4.12.1); added retroactive PIB assignment on client creation (4.12.2). Reports: added client_id filter to all report endpoints and query parameter table (4.13.2); added client_id FK to invoice_line_items schema (4.13.1, 7.2.5, migration 0008). Billing: documented write-only usage_records counter for plan limit checks; deleting invoices no longer resets monthly usage (4.7.2). Duplicate detection: clarified 409 response, verified/exported-only scope, and ?force=true admin override (4.4.3). |
 
 | 3.1 | April 2026 | Saldora Team | Added payment tracking (FR-4.7.4): payment_status, paid_amount, paid_date fields on invoices; single and batch payment endpoints; payment_status filter on invoice list; open items and aging reports under /reports/. Added automated archive export spec (FR-4.7.5): monthly ZIP delivery via email with data retention responsibility shifted to end user. |
+| 3.2 | April 2026 | Saldora Team | Removed payment tracking (FR-4.7.4) — Saldora is intelligence-only. Deprioritized webhooks (FR-4.8.2) and SEF integration (12.6). Replaced PDV books (KPR/KIR) with intelligence reports (FR-4.13). Consolidated archive export tables (audit_exports → scheduled_export_logs). Rebrand: Saldora → Saldora. |
 
 ---
 
