@@ -9,6 +9,7 @@ Provides endpoints for:
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,12 +18,7 @@ from app.database import get_db
 from app.dependencies import require_role
 from app.models.organization import Organization
 from app.models.user import User
-from app.services.export.scheduled import (
-    deliver_archive_via_email,
-    generate_monthly_archive,
-    get_export_history,
-    log_export_delivery,
-)
+from app.services.export.scheduled import get_export_history
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,11 +49,12 @@ async def trigger_archive_export(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ) -> dict:
-    """Generate and deliver an archive export on demand.
+    """Trigger archive export via Celery — same path as monthly automation.
 
-    Creates a ZIP with all invoices, PDFs, audit trail, and VAT
-    summary for the specified period. Delivers via email to the
-    organization's billing email.
+    Dispatches the generate_org_archive Celery task which generates
+    a ZIP, uploads to S3, and emails the download link. This is the
+    exact same code path that runs automatically on the 1st of each
+    month, allowing admins to test the full flow on demand.
 
     Args:
         period: Period string like "2026-03".
@@ -65,11 +62,10 @@ async def trigger_archive_export(
         user: Authenticated admin user.
 
     Returns:
-        Export result with download URL and delivery status.
+        Queued status with delivery email.
     """
     from sqlalchemy import select
 
-    # Get organization
     result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
     org = result.scalar_one_or_none()
     if not org:
@@ -83,52 +79,28 @@ async def trigger_archive_export(
             "Podesite billing email u Podešavanja → Organizacija.",
         )
 
-    try:
-        # Generate archive (always includes PDFs)
-        archive_result = await generate_monthly_archive(
-            db, user.organization_id, period, include_pdfs=True
-        )
+    # Dispatch via Celery — exact same task as monthly automation
+    import celery as celery_lib
 
-        # Deliver via email
-        await deliver_archive_via_email(org, archive_result, period)
-
-        # Log success
-        await log_export_delivery(
-            db=db,
-            organization_id=user.organization_id,
-            period=period,
-            delivered_to=email_to,
-            file_size=archive_result.get("file_size"),
-            invoice_count=archive_result.get("invoice_count"),
-            status="delivered",
-        )
-
-        return {
-            "status": "delivered",
+    broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
+    celery_app = celery_lib.Celery(broker=broker_url)
+    celery_app.send_task(
+        "ocr_worker.tasks.generate_org_archive",
+        kwargs={
+            "org_id": str(user.organization_id),
             "period": period,
-            "delivered_to": email_to,
-            "invoice_count": archive_result.get("invoice_count", 0),
-            "file_size": archive_result.get("file_size", 0),
-            "download_url": archive_result.get("download_url"),
-        }
+            "billing_email": email_to,
+            "org_name": org.name or "",
+        },
+        queue="default",
+    )
 
-    except Exception as exc:
-        # Log failure
-        await log_export_delivery(
-            db=db,
-            organization_id=user.organization_id,
-            period=period,
-            delivered_to=email_to or "unknown",
-            file_size=None,
-            invoice_count=None,
-            status="failed",
-            error_message=str(exc),
-        )
-        logger.exception("Archive export failed for org %s period %s", user.organization_id, period)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Greška pri generisanju arhive: {exc}",
-        )
+    return {
+        "status": "queued",
+        "period": period,
+        "delivered_to": email_to,
+        "message": "Arhiva se generiše u pozadini. Proverite istoriju za status.",
+    }
 
 
 @router.get("/settings")
