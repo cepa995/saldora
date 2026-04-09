@@ -7,44 +7,69 @@ from app.schemas.compliance import (
     BreachNotificationTemplate,
 )
 
-PRIVACY_POLICY_VERSION = "1.0"
-PRIVACY_POLICY_EFFECTIVE_DATE = date(2026, 3, 1)
+PRIVACY_POLICY_VERSION = "2.0"
+PRIVACY_POLICY_EFFECTIVE_DATE = date(2026, 4, 1)
 PRIVACY_POLICY_CONTENT = """
 Politika privatnosti — Saldora
 
+Poslednje ažuriranje: 01.04.2026.
+
 1. Rukovalac podataka
    Lab42 DOO, Beograd, Republika Srbija.
+   Kontakt: privacy@saldora.rs
 
-2. Svrha obrade
-   Obrada faktura, OCR ekstrakcija podataka, računovodstvena analitika.
+2. O usluzi
+   Saldora je platforma za inteligentnu obradu i analizu faktura. Saldora vrši OCR ekstrakciju podataka, računovodstvenu analitiku, izveštavanje i izvoz podataka u računovodstvene sisteme.
+   Saldora NIJE servis za trajno čuvanje dokumenata.
 
-3. Pravni osnov
-   Zakon o zaštiti podataka o ličnosti (ZZPL), Zakon o računovodstvu.
+3. Pravni osnov obrade
+   - Zakon o zaštiti podataka o ličnosti (ZZPL, Sl. glasnik RS, br. 87/2018)
+   - Zakon o računovodstvu (Sl. glasnik RS, br. 73/2019)
+   - Saglasnost korisnika za analitičke i marketinške svrhe
 
-4. Kategorije podataka
-   - Kontakt podaci (ime, email, telefon)
-   - Poslovni podaci (PIB, matični broj, adresa)
-   - Podaci sa faktura (iznosi, datumi, stavke)
+4. Kategorije podataka koje obrađujemo
+   - Kontakt podaci (ime, prezime, email adresa)
+   - Poslovni podaci (PIB, matični broj, naziv firme, adresa)
+   - Podaci sa faktura (iznosi, datumi, stavke, dobavljači)
+   - Tehnički podaci (IP adresa, tip pretraživača, vreme pristupa)
 
 5. Čuvanje podataka
-   - Računi i fakture: 10 godina (Zakon o računovodstvu)
+   Saldora čuva podatke tokom trajanja pretplate korisnika.
+   - Fakture i dokumenta: tokom trajanja pretplate + 90 dana nakon isteka
    - Korisnički profili: do brisanja naloga
-   - Evidencija revizije: 7 godina
-   - Analitički podaci: do opoziva saglasnosti
+   - Evidencija revizije: tokom trajanja pretplate
+   - Nakon isteka pretplate i roka od 90 dana, svi podaci se trajno brišu
 
-6. Prava lica
-   - Pravo na pristup (Član 26 ZZPL)
-   - Pravo na ispravku (Član 29 ZZPL)
-   - Pravo na brisanje (Član 30 ZZPL)
+   VAŽNO: Korisnik je odgovoran za čuvanje poslovne dokumentacije u skladu sa Zakonom o računovodstvu (10 godina). Saldora pruža automatski mesečni arhivski izvoz kao mehanizam za preuzimanje podataka. Korisnik se obavezuje da redovno preuzima i čuva arhive.
+
+6. Automatski arhivski izvoz
+   Saldora automatski generiše mesečni arhivski izvoz koji uključuje registar faktura, PDV pregled, revizorski trag i originalna dokumenta. Izvoz se šalje na email adresu organizacije prvog u mesecu. Korisnik je odgovoran za preuzimanje i sigurno čuvanje arhive.
+
+7. Prava lica u skladu sa ZZPL
+   - Pravo na pristup ličnim podacima (Član 26 ZZPL)
+   - Pravo na ispravku netačnih podataka (Član 29 ZZPL)
+   - Pravo na brisanje podataka (Član 30 ZZPL)
    - Pravo na ograničenje obrade (Član 31 ZZPL)
    - Pravo na prenosivost podataka (Član 36 ZZPL)
+   - Pravo na prigovor (Član 37 ZZPL)
 
-7. Kontakt za zaštitu podataka
-   Zahteve možete uputiti na: privacy@saldora.rs
+   Za ostvarivanje prava obratite se na: privacy@saldora.rs
 
-8. Poverenik za informacije od javnog značaja i zaštitu podataka o ličnosti
-   Bulevar kralja Aleksandra 15, 11000 Beograd
-   https://www.poverenik.rs
+8. Deljenje podataka
+   Saldora ne prodaje niti deli lične podatke sa trećim stranama, osim:
+   - Sa pružaocima usluga neophodnih za rad platforme (hosting, email)
+   - Kada je to zakonom propisano (sudski nalog, inspekcijski organi)
+
+9. Bezbednost podataka
+   Primenjujemo tehničke i organizacione mere zaštite podataka uključujući enkripciju podataka u prenosu i mirovanju, kontrolu pristupa i redovne sigurnosne provere.
+
+10. Poverenik za informacije od javnog značaja i zaštitu podataka o ličnosti
+    Ukoliko smatrate da su vam prava povređena, možete se obratiti Povereniku:
+    Bulevar kralja Aleksandra 15, 11000 Beograd
+    https://www.poverenik.rs
+
+11. Izmene politike
+    Zadržavamo pravo da izmenimo ovu politiku privatnosti. O izmenama ćemo korisnika obavestiti putem email-a najmanje 30 dana pre stupanja na snagu.
 """.strip()
 
 TOS_VERSION = "1.0"
