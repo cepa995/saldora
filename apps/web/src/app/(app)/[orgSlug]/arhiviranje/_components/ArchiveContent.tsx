@@ -38,8 +38,8 @@ function normalizeExportLog(item: ExportLog): HistoryItem {
     file_size: item.file_size_bytes,
     status: item.status,
     delivered_to: item.delivered_to || null,
-    download_url: null,
-    reason: null,
+    download_url: item.download_url ?? null,
+    reason: item.reason ?? null,
   };
 }
 

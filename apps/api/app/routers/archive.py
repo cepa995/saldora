@@ -141,6 +141,8 @@ async def _run_archive_export(
             if org:
                 await deliver_archive_via_email(org, archive_result, period)
 
+            from datetime import UTC, datetime, timedelta
+
             await log_export_delivery(
                 db=db,
                 organization_id=organization_id,
@@ -149,6 +151,9 @@ async def _run_archive_export(
                 file_size=archive_result.get("file_size"),
                 invoice_count=archive_result.get("invoice_count"),
                 status="delivered",
+                file_path=archive_result.get("s3_key"),
+                download_url=archive_result.get("download_url"),
+                expires_at=datetime.now(UTC) + timedelta(days=30),
             )
 
             await db.commit()
@@ -221,6 +226,8 @@ async def internal_generate_archive(
 
         await deliver_archive_via_email(org, archive_result, period)
 
+        from datetime import UTC, datetime, timedelta
+
         await log_export_delivery(
             db=db,
             organization_id=org_id,
@@ -229,6 +236,9 @@ async def internal_generate_archive(
             file_size=archive_result.get("file_size"),
             invoice_count=archive_result.get("invoice_count"),
             status="delivered",
+            file_path=archive_result.get("s3_key"),
+            download_url=archive_result.get("download_url"),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
         )
 
         return {

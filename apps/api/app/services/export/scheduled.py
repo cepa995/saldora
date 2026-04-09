@@ -7,7 +7,7 @@ via email. Reuses the audit export service for ZIP generation.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -119,6 +119,14 @@ async def log_export_delivery(
     invoice_count: int | None,
     status: str,
     error_message: str | None = None,
+    file_path: str | None = None,
+    download_url: str | None = None,
+    expires_at: datetime | None = None,
+    export_type: str = "scheduled",
+    requested_by: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    reason: str | None = None,
 ) -> None:
     """Log an archive export delivery attempt.
 
@@ -131,6 +139,14 @@ async def log_export_delivery(
         invoice_count: Number of invoices in the archive.
         status: 'delivered', 'failed', or 'skipped'.
         error_message: Error details if failed.
+        file_path: S3 key to the generated archive ZIP.
+        download_url: Presigned download URL.
+        expires_at: When the download link expires.
+        export_type: 'scheduled' or 'manual'.
+        requested_by: User UUID who requested a manual export.
+        date_from: Start date for manual exports.
+        date_to: End date for manual exports.
+        reason: Reason for manual export.
     """
     log = ScheduledExportLog(
         organization_id=organization_id,
@@ -141,6 +157,14 @@ async def log_export_delivery(
         invoice_count=invoice_count,
         status=status,
         error_message=error_message,
+        export_type=export_type,
+        file_path=file_path,
+        download_url=download_url,
+        expires_at=expires_at,
+        requested_by=requested_by,
+        date_from=date_from,
+        date_to=date_to,
+        reason=reason,
     )
     db.add(log)
     await db.commit()
@@ -179,6 +203,13 @@ async def get_export_history(
             "status": log.status,
             "error_message": log.error_message,
             "delivered_at": log.delivered_at.isoformat() if log.delivered_at else None,
+            "download_url": log.download_url,
+            "file_path": log.file_path,
+            "export_type": log.export_type,
+            "date_from": log.date_from.isoformat() if log.date_from else None,
+            "date_to": log.date_to.isoformat() if log.date_to else None,
+            "reason": log.reason,
+            "expires_at": log.expires_at.isoformat() if log.expires_at else None,
         }
         for log in logs
     ]

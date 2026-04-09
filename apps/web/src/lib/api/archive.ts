@@ -10,6 +10,13 @@ export interface ExportLog {
   status: string;
   error_message: string | null;
   delivered_at: string;
+  download_url: string | null;
+  file_path: string | null;
+  export_type: string;
+  date_from: string | null;
+  date_to: string | null;
+  reason: string | null;
+  expires_at: string | null;
 }
 
 export interface ArchiveSettings {

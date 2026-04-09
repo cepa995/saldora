@@ -15,10 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_feature, require_role
-from app.models.audit_export import AuditExport
 from app.models.export_template import ExportTemplate
 from app.models.invoice import Invoice
 from app.models.minimax_config import MiniMaxConfig
+from app.models.scheduled_export_log import ScheduledExportLog
 from app.plans import Feature
 from app.schemas.export import (
     AuditExportRequest,
@@ -641,7 +641,7 @@ async def create_audit_export(
 
     Uploads ZIP to S3 and returns presigned URL. Files are retained for 30 days;
     presigned URLs are regenerated on-demand via the history endpoint.
-    Records the export in the audit_exports table for tracking.
+    Records the export in the scheduled_export_logs table for tracking.
     """
 
     try:
@@ -660,8 +660,11 @@ async def create_audit_export(
         )
 
     # Create tracking record
-    audit_export = AuditExport(
+    audit_export = ScheduledExportLog(
         organization_id=current_user.organization_id,
+        export_type="manual",
+        delivery_method="manual",
+        delivered_to="",
         requested_by=current_user.id,
         date_from=date_from,
         date_to=date_to,
@@ -693,6 +696,7 @@ async def create_audit_export(
     audit_export.invoice_count = result["invoice_count"]
     audit_export.download_url = result["download_url"]
     audit_export.expires_at = datetime.now(UTC) + timedelta(days=30)
+    audit_export.delivered_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(audit_export)
 
@@ -771,9 +775,12 @@ async def list_audit_exports(
     """
 
     result = await db.execute(
-        select(AuditExport)
-        .where(AuditExport.organization_id == current_user.organization_id)
-        .order_by(AuditExport.created_at.desc())
+        select(ScheduledExportLog)
+        .where(
+            ScheduledExportLog.organization_id == current_user.organization_id,
+            ScheduledExportLog.export_type == "manual",
+        )
+        .order_by(ScheduledExportLog.delivered_at.desc())
     )
     exports = result.scalars().all()
 
@@ -804,7 +811,7 @@ async def list_audit_exports(
                 status=export_status,
                 reason=e.reason,
                 expires_at=e.expires_at,
-                created_at=e.created_at,
+                created_at=e.delivered_at,
             )
         )
 
