@@ -902,21 +902,19 @@ def aggregate_daily_usage() -> dict[str, Any]:
 
 @app.task(name="ocr_worker.tasks.run_monthly_archive_exports")
 def run_monthly_archive_exports() -> dict[str, Any]:
-    """Run automated monthly archive exports for all enabled organizations.
+    """Run automated monthly archive exports for all organizations.
 
-    Finds orgs with archive_export.enabled=true, generates a ZIP for
-    the previous month, and emails it to the org's billing email.
+    Finds all orgs with a billing_email, generates a ZIP for the
+    previous month, and emails it. Runs on the 1st of each month.
 
     Returns:
-        Dict with exported and failed counts.
+        Dict with exported, skipped, and failed counts.
     """
-    import json
     from datetime import timedelta
 
     from ocr_worker.database import get_session, text
 
     now = datetime.now(UTC)
-    # Previous month
     first_of_this_month = now.date().replace(day=1)
     last_month_end = first_of_this_month - timedelta(days=1)
     period = last_month_end.strftime("%Y-%m")
@@ -925,32 +923,59 @@ def run_monthly_archive_exports() -> dict[str, Any]:
 
     session = get_session()
     exported = 0
+    skipped = 0
     failed = 0
     try:
-        # Find all orgs with archive export enabled
         rows = session.execute(
             text("""
-                SELECT id, name, billing_email, settings
+                SELECT id, name, billing_email
                 FROM organizations
-                WHERE settings::jsonb -> 'archive_export' ->> 'enabled' = 'true'
-                  AND billing_email IS NOT NULL
+                WHERE billing_email IS NOT NULL
                   AND billing_email != ''
             """)
         ).fetchall()
 
-        logger.info("Found %d organizations with archive export enabled", len(rows))
+        logger.info("Found %d organizations with billing email", len(rows))
 
         for row in rows:
             org_id = str(row[0])
             org_name = row[1]
             billing_email = row[2]
-            settings = (
-                row[3] if isinstance(row[3], dict) else json.loads(row[3] or "{}")
-            )
-            include_pdfs = settings.get("archive_export", {}).get("include_pdfs", True)
 
             try:
-                # Dispatch to the API via Celery task (async export)
+                # Count invoices in period
+                count_row = session.execute(
+                    text("""
+                        SELECT COUNT(*) FROM invoices
+                        WHERE organization_id = :org_id
+                          AND invoice_date >= :d_from
+                          AND invoice_date <= :d_to
+                          AND status IN ('verified', 'exported')
+                    """),
+                    {
+                        "org_id": org_id,
+                        "d_from": f"{period}-01",
+                        "d_to": last_month_end.isoformat(),
+                    },
+                ).fetchone()
+                invoice_count = count_row[0] if count_row else 0
+
+                if invoice_count == 0:
+                    session.execute(
+                        text("""
+                            INSERT INTO scheduled_export_logs
+                            (id, organization_id, period, delivery_method,
+                             delivered_to, invoice_count, status, error_message)
+                            VALUES (gen_random_uuid(), :org_id, :period, 'email',
+                                    :email, 0, 'skipped', 'Nema faktura za ovaj period')
+                        """),
+                        {"org_id": org_id, "period": period, "email": billing_email},
+                    )
+                    session.commit()
+                    skipped += 1
+                    continue
+
+                # Dispatch per-org archive generation as separate task
                 app.send_task(
                     "ocr_worker.tasks.generate_org_archive",
                     kwargs={
@@ -958,134 +983,170 @@ def run_monthly_archive_exports() -> dict[str, Any]:
                         "period": period,
                         "billing_email": billing_email,
                         "org_name": org_name,
-                        "include_pdfs": include_pdfs,
                     },
                     queue="default",
                 )
                 exported += 1
-                logger.info(
-                    "Queued archive export for %s (%s) period %s",
-                    org_name,
-                    org_id,
-                    period,
-                )
+
             except Exception:
                 failed += 1
-                logger.exception(
-                    "Failed to queue archive for org %s (%s)",
-                    org_name,
-                    org_id,
-                )
+                logger.exception("Failed to process org %s (%s)", org_name, org_id)
     finally:
         session.close()
 
     logger.info(
-        "Monthly archive dispatch complete: %d queued, %d failed",
+        "Monthly archive dispatch: %d queued, %d skipped, %d failed",
         exported,
+        skipped,
         failed,
     )
-    return {"period": period, "exported": exported, "failed": failed}
+    return {
+        "period": period,
+        "exported": exported,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
-@app.task(name="ocr_worker.tasks.generate_org_archive")
+@app.task(
+    name="ocr_worker.tasks.generate_org_archive",
+    soft_time_limit=300,
+    time_limit=360,
+)
 def generate_org_archive(
     org_id: str,
     period: str,
     billing_email: str,
     org_name: str,
-    include_pdfs: bool = True,
 ) -> dict[str, Any]:
-    """Generate and email an archive for a single organization.
+    """Generate a ZIP archive and email it to the organization.
 
-    Called by run_monthly_archive_exports for each enabled org.
+    Uses asyncio.run() to call the async export service, then sends
+    the download link via email.
 
     Args:
         org_id: Organization UUID string.
         period: Period like "2026-03".
         billing_email: Delivery email address.
         org_name: Organization name for email subject.
-        include_pdfs: Whether to include original documents.
 
     Returns:
-        Result dict with status.
+        Result dict with status and invoice_count.
     """
+    from datetime import date as date_type
     from datetime import timedelta
+    from uuid import UUID
+
+    logger.info("Generating archive for %s period %s", org_name, period)
+
+    year, month = period.split("-")
+    date_from = date_type(int(year), int(month), 1)
+    if int(month) == 12:
+        date_to = date_type(int(year) + 1, 1, 1) - timedelta(days=1)
+    else:
+        date_to = date_type(int(year), int(month) + 1, 1) - timedelta(days=1)
+
+    async def _run():
+        from sqlalchemy.ext.asyncio import (
+            AsyncSession,
+            async_sessionmaker,
+            create_async_engine,
+        )
+
+        from app.services.email import _send_email
+        from app.services.export.audit import generate_audit_export
+
+        db_url = os.getenv("DATABASE_URL", "").replace(
+            "postgresql://", "postgresql+asyncpg://"
+        )
+        engine = create_async_engine(db_url)
+        factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+
+        async with factory() as db:
+            result = await generate_audit_export(
+                db=db,
+                organization_id=UUID(org_id),
+                date_from=date_from,
+                date_to=date_to,
+                include_documents=True,
+                include_audit_trail=True,
+                include_vat_summary=True,
+            )
+
+        await engine.dispose()
+
+        # Send email
+        subject = f"Saldora — Mesečni arhivski izvoz {period} — {org_name}"
+        body = (
+            f"Poštovani,\n\n"
+            f"U prilogu se nalazi automatski generisan arhivski izvoz vaših\n"
+            f"faktura za period {period}.\n\n"
+            f"Sadržaj arhive:\n"
+            f"• Registar faktura (CSV)\n"
+            f"• PDV pregled (Excel)\n"
+            f"• Revizorski trag (CSV)\n"
+            f"• Originalna PDF dokumenta\n\n"
+            f"Broj faktura u periodu: {result.get('invoice_count', 0)}\n\n"
+            f"Preporučujemo da ovaj fajl sačuvate na sigurnom mestu kao deo\n"
+            f"vaše računovodstvene arhive u skladu sa Zakonom o računovodstvu.\n\n"
+            f"Link za preuzimanje (važi 24 sata):\n"
+            f"{result.get('download_url', '')}\n\n"
+            f"Pozdrav,\nSaldora tim\n\n"
+            f"---\n"
+            f"Ovo je automatska poruka. Podešavanja automatskog izvoza možete\n"
+            f"promeniti na stranici Arhiviranje u aplikaciji."
+        )
+        await _send_email(to_email=billing_email, subject=subject, html=body)
+
+        return result
 
     from ocr_worker.database import get_session, text
 
-    year, month = period.split("-")
-    date_from = f"{year}-{month}-01"
-    if int(month) == 12:
-        date_to_raw = datetime(int(year) + 1, 1, 1) - timedelta(days=1)
-    else:
-        date_to_raw = datetime(int(year), int(month) + 1, 1) - timedelta(days=1)
-    date_to = date_to_raw.strftime("%Y-%m-%d")
-
-    session = get_session()
     try:
-        # Count invoices in period
-        count_row = session.execute(
-            text("""
-                SELECT COUNT(*) FROM invoices
-                WHERE organization_id = :org_id
-                  AND invoice_date >= :date_from
-                  AND invoice_date <= :date_to
-                  AND status IN ('verified', 'exported')
-            """),
-            {"org_id": org_id, "date_from": date_from, "date_to": date_to},
-        ).fetchone()
-        invoice_count = count_row[0] if count_row else 0
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(_run())
+        finally:
+            loop.close()
 
-        if invoice_count == 0:
-            # Log as skipped — no invoices for this period
+        # Log success
+        session = get_session()
+        try:
             session.execute(
                 text("""
                     INSERT INTO scheduled_export_logs
                     (id, organization_id, period, delivery_method, delivered_to,
-                     invoice_count, status, error_message)
+                     file_size_bytes, invoice_count, status)
                     VALUES (gen_random_uuid(), :org_id, :period, 'email', :email,
-                            0, 'skipped', 'Nema faktura za ovaj period')
+                            :size, :count, 'delivered')
                 """),
-                {"org_id": org_id, "period": period, "email": billing_email},
+                {
+                    "org_id": org_id,
+                    "period": period,
+                    "email": billing_email,
+                    "size": result.get("file_size"),
+                    "count": result.get("invoice_count"),
+                },
             )
             session.commit()
-            logger.info("Skipped archive for %s — no invoices in %s", org_name, period)
-            return {"status": "skipped", "reason": "no_invoices"}
-
-        # TODO: Call API's generate_audit_export via internal HTTP endpoint
-        # For now, log the delivery so the manual trigger path handles generation.
-        # The automated path records that an export is due; the admin can trigger
-        # via "Testiraj odmah" or a future internal API endpoint can be added.
-
-        # Log delivery
-        session.execute(
-            text("""
-                INSERT INTO scheduled_export_logs
-                (id, organization_id, period, delivery_method, delivered_to,
-                 invoice_count, status, error_message)
-                VALUES (gen_random_uuid(), :org_id, :period, 'email', :email,
-                        :count, 'delivered', NULL)
-            """),
-            {
-                "org_id": org_id,
-                "period": period,
-                "email": billing_email,
-                "count": invoice_count,
-            },
-        )
-        session.commit()
+        finally:
+            session.close()
 
         logger.info(
-            "Archive export logged for %s period %s (%d invoices)",
+            "Archive delivered for %s period %s (%d invoices) to %s",
             org_name,
             period,
-            invoice_count,
+            result.get("invoice_count", 0),
+            billing_email,
         )
-        return {"status": "delivered", "invoice_count": invoice_count}
+        return {"status": "delivered", "invoice_count": result.get("invoice_count", 0)}
 
     except Exception as exc:
-        session.rollback()
         # Log failure
+        session = get_session()
         try:
             session.execute(
                 text("""
@@ -1105,12 +1166,11 @@ def generate_org_archive(
             session.commit()
         except Exception:
             session.rollback()
-            logger.exception("Failed to log archive failure for %s", org_id)
+        finally:
+            session.close()
 
-        logger.exception("Archive export failed for %s period %s", org_name, period)
+        logger.exception("Archive failed for %s period %s", org_name, period)
         return {"status": "failed", "error": str(exc)}
-    finally:
-        session.close()
 
 
 def _send_webhook(url: str, resource_id: str, data: dict[str, Any]) -> None:

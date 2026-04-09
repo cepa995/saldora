@@ -84,13 +84,9 @@ async def trigger_archive_export(
         )
 
     try:
-        # Read org settings for include_pdfs
-        org_settings = (org.settings or {}).get("archive_export", {})
-        include_pdfs = org_settings.get("include_pdfs", True)
-
-        # Generate archive
+        # Generate archive (always includes PDFs)
         archive_result = await generate_monthly_archive(
-            db, user.organization_id, period, include_pdfs=include_pdfs
+            db, user.organization_id, period, include_pdfs=True
         )
 
         # Deliver via email
