@@ -3,7 +3,6 @@ Database models package.
 """
 
 from app.models.accounting_intent import AccountingIntent
-from app.models.audit_export import AuditExport
 from app.models.audit_log import AuditLog
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.base import Base
@@ -26,7 +25,6 @@ from app.models.user import User
 
 __all__ = [
     "AccountingIntent",
-    "AuditExport",
     "AuditLog",
     "AutomationRule",
     "Base",
