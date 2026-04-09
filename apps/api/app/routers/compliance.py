@@ -31,6 +31,9 @@ from app.services.compliance import (
     PRIVACY_POLICY_CONTENT,
     PRIVACY_POLICY_EFFECTIVE_DATE,
     PRIVACY_POLICY_VERSION,
+    TOS_CONTENT,
+    TOS_EFFECTIVE_DATE,
+    TOS_VERSION,
     anonymize_user_data,
     get_deletion_retained_categories,
     render_breach_notification,
@@ -592,4 +595,18 @@ async def get_privacy_policy() -> PrivacyPolicyResponse:
         version=PRIVACY_POLICY_VERSION,
         effective_date=PRIVACY_POLICY_EFFECTIVE_DATE,
         content=PRIVACY_POLICY_CONTENT,
+    )
+
+
+@router.get("/terms-of-service", response_model=PrivacyPolicyResponse)
+async def get_terms_of_service() -> PrivacyPolicyResponse:
+    """Get the current terms of service (public endpoint, no auth required).
+
+    Returns:
+        Terms of service content in Serbian with version info.
+    """
+    return PrivacyPolicyResponse(
+        version=TOS_VERSION,
+        effective_date=TOS_EFFECTIVE_DATE,
+        content=TOS_CONTENT,
     )

@@ -2008,10 +2008,10 @@ function Footer() {
               </div>
             </div>
             <div className="flex items-center gap-6">
-              <a href="#" className="text-gray-500 hover:text-white text-sm transition-colors flex items-center gap-1.5">
+              <Link href="/uslovi-koriscenja" className="text-gray-500 hover:text-white text-sm transition-colors flex items-center gap-1.5">
                 <ShieldCheckIcon className="w-4 h-4" />
                 Uslovi korišćenja
-              </a>
+              </Link>
               <Link href="/politika-privatnosti" className="text-gray-500 hover:text-white text-sm transition-colors flex items-center gap-1.5">
                 <ShieldCheckIcon className="w-4 h-4" />
                 Privatnost
