@@ -255,6 +255,7 @@ export default function InvoicesPage() {
             >
               KIR
             </button>
+
           </div>
 
           {/* Date range */}

@@ -168,7 +168,7 @@ async def create_organization(
 
     # Create organization
     org_slug = await _generate_unique_slug(db, body.name)
-    org = Organization(name=body.name, slug=org_slug, pib=body.pib)
+    org = Organization(name=body.name, slug=org_slug, pib=body.pib, billing_email=user.email)
     db.add(org)
     await db.flush()
 

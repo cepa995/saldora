@@ -318,6 +318,52 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
     line_items = invoice.get("line_items")
     tax_groups = invoice.get("tax_groups")
 
+    # Normalize line item totals: total = net amount (bez PDV), tax_amount = PDV
+    # The LLM sometimes returns total as gross (sa PDV) or leaves it null.
+    # We normalize so total always means net = tax_base = qty * price (- discount).
+    if line_items:
+        for item in line_items:
+            try:
+                tax_base = float(item.get("tax_base") or 0)
+                total = float(item.get("total") or 0)
+                rate = float(item.get("tax_rate") or 0)
+                qty = float(item.get("quantity") or 0)
+                price = float(item.get("unit_price") or 0)
+                discount = float(item.get("discount") or 0)
+
+                # Calculate expected net from qty * price * (1 - discount/100)
+                expected_net = qty * price
+                if discount > 0:
+                    expected_net = expected_net * (1 - discount / 100)
+                expected_net = round(expected_net, 2)
+
+                # Determine the correct net amount
+                if tax_base > 0:
+                    net = tax_base
+                elif total > 0 and rate > 0:
+                    # Check if total looks like gross (close to net * (1 + rate/100))
+                    expected_gross = round(expected_net * (1 + rate / 100), 2)
+                    if abs(total - expected_gross) < 1:
+                        net = expected_net  # total was gross, use calculated net
+                    else:
+                        net = total  # total is already net
+                elif total > 0:
+                    net = total
+                elif expected_net > 0:
+                    net = expected_net
+                else:
+                    net = 0
+
+                item["total"] = round(net, 2) if net else None
+                item["tax_base"] = round(net, 2) if net else item.get("tax_base")
+
+                # Calculate tax_amount from net
+                tax_amt = float(item.get("tax_amount") or 0)
+                if tax_amt == 0 and rate > 0 and net > 0:
+                    item["tax_amount"] = round(net * rate / 100, 2)
+            except (ValueError, TypeError):
+                pass
+
     session = get_session()
     try:
         session.execute(
@@ -387,22 +433,7 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
         )
         # Sync denormalized line items for reporting (non-blocking)
         try:
-            from app.services.line_item_sync import sync_line_items_raw_sql
-
-            org_row = session.execute(
-                text("SELECT organization_id FROM invoices WHERE id = :inv_id"),
-                {"inv_id": invoice_id},
-            ).fetchone()
-            if org_row:
-                sync_line_items_raw_sql(
-                    session=session,
-                    invoice_id=invoice_id,
-                    organization_id=str(org_row[0]),
-                    line_items=line_items or [],
-                    seller=seller,
-                    invoice_date=invoice.get("invoice_date"),
-                    currency=invoice.get("currency", "RSD"),
-                )
+            _sync_line_items(session, invoice_id, line_items or [], seller, invoice)
         except Exception as exc:
             logger.warning(f"Line item sync failed for {invoice_id}: {exc}")
 
@@ -493,6 +524,135 @@ def _auto_assign_client(invoice_id: str, result: dict[str, Any]) -> None:
         logger.exception("Failed to auto-assign client for invoice %s", invoice_id)
     finally:
         session.close()
+
+
+def _calc_line_total(item: dict) -> float:
+    """Calculate line item total from total, tax_base, or quantity * unit_price."""
+    for key in ("total", "tax_base"):
+        val = item.get(key)
+        if val is not None:
+            try:
+                f = float(val)
+                if f != 0:
+                    return f
+            except (ValueError, TypeError):
+                pass
+    try:
+        return round(
+            float(item.get("quantity") or 0) * float(item.get("unit_price") or 0), 2
+        )
+    except (ValueError, TypeError):
+        return 0
+
+
+def _calc_line_tax(item: dict, total: float) -> float | None:
+    """Calculate line item tax from tax_amount, or tax_base * rate / 100."""
+    val = item.get("tax_amount")
+    if val is not None:
+        try:
+            f = float(val)
+            if f != 0:
+                return f
+        except (ValueError, TypeError):
+            pass
+    try:
+        rate = float(item.get("tax_rate") or 0)
+        if rate <= 0:
+            return None
+    except (ValueError, TypeError):
+        return None
+    base = item.get("tax_base")
+    if base is not None:
+        try:
+            b = float(base)
+            if b > 0:
+                return round(b * rate / 100, 2)
+        except (ValueError, TypeError):
+            pass
+    if total > 0:
+        return round(total * rate / 100, 2)
+    return None
+
+
+def _sync_line_items(
+    session,
+    invoice_id: str,
+    line_items: list[dict],
+    seller: dict | None,
+    invoice_data: dict,
+) -> None:
+    """Sync denormalized line items table from extraction result.
+
+    Args:
+        session: Active SQLAlchemy sync session.
+        invoice_id: Invoice UUID string.
+        line_items: Extracted line items list.
+        seller: Seller dict with name/pib.
+        invoice_data: Full invoice extraction dict.
+    """
+    import uuid
+
+    from ocr_worker.database import text
+
+    org_row = session.execute(
+        text("SELECT organization_id, client_id FROM invoices WHERE id = :inv_id"),
+        {"inv_id": invoice_id},
+    ).fetchone()
+    if not org_row:
+        return
+
+    org_id = str(org_row[0])
+    client_id = str(org_row[1]) if org_row[1] else None
+    seller_name = seller.get("name") if seller else None
+    seller_pib = seller.get("pib") if seller else None
+    inv_date = invoice_data.get("invoice_date")
+    currency = invoice_data.get("currency", "RSD")
+
+    session.execute(
+        text("DELETE FROM invoice_line_items WHERE invoice_id = :inv_id"),
+        {"inv_id": invoice_id},
+    )
+
+    for item in line_items:
+        total = _calc_line_total(item)
+        tax_amount = _calc_line_tax(item, total)
+        session.execute(
+            text("""
+                INSERT INTO invoice_line_items (
+                    id, invoice_id, organization_id, client_id,
+                    description, quantity, unit_price,
+                    discount, tax_base, total,
+                    tax_rate, tax_amount,
+                    seller_name, seller_pib,
+                    invoice_date, currency
+                ) VALUES (
+                    :id, :inv_id, :org_id, :client_id,
+                    :desc, :qty, :price,
+                    :discount, :tax_base, :total,
+                    :tax_rate, :tax_amount,
+                    :seller_name, :seller_pib,
+                    :inv_date, :currency
+                )
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "inv_id": invoice_id,
+                "org_id": org_id,
+                "client_id": client_id,
+                "desc": item.get("description") or "",
+                "qty": item.get("quantity"),
+                "price": item.get("unit_price"),
+                "discount": item.get("discount"),
+                "tax_base": item.get("tax_base"),
+                "total": total,
+                "tax_rate": item.get("tax_rate"),
+                "tax_amount": tax_amount,
+                "seller_name": seller_name,
+                "seller_pib": seller_pib,
+                "inv_date": inv_date,
+                "currency": currency or "RSD",
+            },
+        )
 
 
 def _update_invoice_status(

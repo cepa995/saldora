@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.invoice import Invoice
 from app.models.line_item import InvoiceLineItem
 from app.models.product_catalog import ProductCatalog
 from app.models.user import User
@@ -63,7 +64,12 @@ def _build_conditions(
     Returns:
         List of SQLAlchemy column expressions suitable for .where(*conditions).
     """
-    conditions = [InvoiceLineItem.organization_id == org_id]
+    conditions = [
+        InvoiceLineItem.organization_id == org_id,
+        InvoiceLineItem.invoice_id.in_(
+            select(Invoice.id).where(Invoice.status.in_(["verified", "exported"]))
+        ),
+    ]
     if date_from:
         conditions.append(InvoiceLineItem.invoice_date >= date_from)
     if date_to:
@@ -181,16 +187,18 @@ async def get_spending_by_supplier(
         user.organization_id, date_from, date_to, seller_pib, search, client_id
     )
 
+    gross = InvoiceLineItem.total + func.coalesce(InvoiceLineItem.tax_amount, 0)
+
     query = (
         select(
             InvoiceLineItem.seller_pib,
             InvoiceLineItem.seller_name,
-            func.sum(InvoiceLineItem.total).label("total_amount"),
+            func.sum(gross).label("total_amount"),
             func.count(func.distinct(InvoiceLineItem.invoice_id)).label("invoice_count"),
         )
         .where(*conditions)
         .group_by(InvoiceLineItem.seller_pib, InvoiceLineItem.seller_name)
-        .order_by(func.sum(InvoiceLineItem.total).desc())
+        .order_by(func.sum(gross).desc())
     )
 
     result = await db.execute(query)
@@ -285,7 +293,7 @@ async def get_monthly_breakdown(
             tax_rate=float(row.tax_rate) if row.tax_rate is not None else None,
             tax_amount=float(row.tax_amount) if row.tax_amount is not None else None,
             seller_name=row.seller_name,
-            invoice_date=row.invoice_date.isoformat() if row.invoice_date is not None else None,
+            invoice_date=row.invoice_date.isoformat() if row.invoice_date else None,
         )
         for row in rows
     ]

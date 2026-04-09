@@ -74,27 +74,22 @@ async def _send_email(to_email: str, subject: str, html: str) -> bool:
         True if email was sent successfully, False otherwise.
     """
     if not settings.resend_api_key:
-        logger.warning("RESEND_API_KEY not set, skipping email to %s", to_email)
-        return False
+        raise RuntimeError(f"RESEND_API_KEY not set, cannot send email to {to_email}")
 
     import resend
 
     resend.api_key = settings.resend_api_key
 
-    try:
-        resend.Emails.send(
-            {
-                "from": settings.resend_from_email,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            }
-        )
-        logger.info("Email sent to %s: %s", to_email, subject)
-        return True
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to_email, subject)
-        return False
+    resend.Emails.send(
+        {
+            "from": settings.resend_from_email,
+            "to": [to_email],
+            "subject": subject,
+            "html": html,
+        }
+    )
+    logger.info("Email sent to %s: %s", to_email, subject)
+    return True
 
 
 # ── Public email functions ─────────────────────────────────────────────

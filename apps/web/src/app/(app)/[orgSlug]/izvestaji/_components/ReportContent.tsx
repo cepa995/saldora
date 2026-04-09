@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useClient } from '@/contexts/ClientContext';
 import {
@@ -83,18 +83,21 @@ function TableSkeleton({ cols }: { cols: number }) {
 
 // ── Table head helper ────────────────────────────────────────────────
 
-function TableHead({ cols }: { cols: string[] }) {
+function TableHead({ cols, align }: { cols: string[]; align?: ('left' | 'right' | 'center')[] }) {
   return (
     <thead>
       <tr className="border-b border-gray-200 bg-gray-50/60">
-        {cols.map((c) => (
-          <th
-            key={c}
-            className="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap"
-          >
-            {c}
-          </th>
-        ))}
+        {cols.map((c, i) => {
+          const a = align?.[i] ?? 'left';
+          return (
+            <th
+              key={`${c}-${i}`}
+              className={`px-3 py-2 text-${a} text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap`}
+            >
+              {c}
+            </th>
+          );
+        })}
       </tr>
     </thead>
   );
@@ -116,14 +119,15 @@ function ReceivedGoodsTable({ data, t }: { data: ReceivedGoodsResponse; t: Retur
               t('supplierCount'),
               t('suppliers'),
             ]}
+            align={['left', 'right', 'right', 'right', 'center', 'left']}
           />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate">{row.description}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.total_quantity)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.avg_unit_price)}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.total_quantity)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.avg_unit_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
                 <td className="px-3 py-2.5 text-center text-gray-700">{row.supplier_count}</td>
                 <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[200px] truncate" title={row.suppliers.join(', ')}>
                   {row.suppliers.join(', ') || '—'}
@@ -133,9 +137,8 @@ function ReceivedGoodsTable({ data, t }: { data: ReceivedGoodsResponse; t: Retur
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
-              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase">{t('grandTotal')}</td>
-              <td colSpan={2} />
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
               <td colSpan={2} />
             </tr>
           </tfoot>
@@ -150,21 +153,21 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total')]} />
+          <TableHead cols={[t('sellerName'), t('sellerPib'), t('invoiceCount'), t('total')]} align={['left', 'left', 'right', 'right']} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium">{row.seller_name || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{row.seller_pib || '—'}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{row.invoice_count}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -173,30 +176,31 @@ function SpendingBySupplierTable({ data, t }: { data: SpendingBySupplierResponse
   );
 }
 
+
 function MonthlyBreakdownTable({ data, t }: { data: MonthlyBreakdownResponse; t: ReturnType<typeof useTranslations<'reports'>> }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total')]} />
+          <TableHead cols={[t('period'), t('sellerName'), t('description'), t('quantity'), t('unitPrice'), 'PDV %', 'PDV iznos', t('total')]} align={['left', 'left', 'left', 'right', 'right', 'right', 'right', 'right']} />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{row.invoice_date || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-700 max-w-[150px] truncate">{row.seller_name || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-900 max-w-[200px] truncate font-medium">{row.description}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
-                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.unit_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_rate != null ? `${row.tax_rate}%` : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums">{row.tax_amount != null ? fmtAmount(row.tax_amount) : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={7}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_amount)}</td>
             </tr>
           </tfoot>
         </table>
@@ -234,15 +238,15 @@ function PriceComparisonTable({ data, t }: { data: PriceComparisonResponse; t: R
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <TableHead cols={[t('sellerName'), t('sellerPib'), 'Min', 'Avg', 'Max', t('invoiceCount')]} />
+                <TableHead cols={[t('sellerName'), t('sellerPib'), 'Min', 'Avg', 'Max', t('invoiceCount')]} align={['left', 'left', 'right', 'right', 'right', 'center']} />
                 <tbody>
                   {rows.map((row, j) => (
                     <tr key={j} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                       <td className="px-3 py-2.5 text-gray-900 font-medium">{row.seller_name || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-500 font-mono text-xs">{row.seller_pib || '—'}</td>
-                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.min_unit_price)}</td>
-                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.avg_unit_price)}</td>
-                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.max_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.min_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.avg_unit_price)}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.max_unit_price)}</td>
                       <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
                     </tr>
                   ))}
@@ -261,21 +265,26 @@ function ExpenseSummaryTable({ data, t }: { data: ExpenseSummaryResponse; t: Ret
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <TableHead cols={[t('period'), t('invoiceCount'), t('supplierCount'), t('total')]} />
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50/60">
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('period')}</th>
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('itemCount')}</th>
+              <th className="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('total')}</th>
+            </tr>
+          </thead>
           <tbody>
-            {data.items.map((row, i) => (
+            {data.buckets.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                <td className="px-3 py-2.5 text-gray-900 font-medium">{row.period}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.seller_count}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-4 py-2.5 text-center text-gray-900 font-medium">{row.period}</td>
+                <td className="px-4 py-2.5 text-center text-gray-700 tabular-nums">{row.item_count}</td>
+                <td className="px-4 py-2.5 text-center text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
-              <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={3}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase" colSpan={2}>{t('grandTotal')}</td>
+              <td className="px-4 py-2 text-center text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
             </tr>
           </tfoot>
         </table>
@@ -300,28 +309,29 @@ function KalkulacijaTable({ data, t }: { data: KalkulacijaResponse; t: ReturnTyp
               t('sellingPrice'),
               t('sellingValue'),
             ]}
+            align={['left', 'center', 'right', 'right', 'right', 'right', 'right', 'right']}
           />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate">{row.description}</td>
-                <td className="px-3 py-2.5 text-gray-500 text-xs">{row.unit_of_measure || '—'}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.purchase_price)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{row.purchase_value !== null ? fmtAmount(row.purchase_value) : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{row.margin_pct !== null ? `${fmtNum(row.margin_pct)}%` : '—'}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{row.selling_value !== null ? fmtAmount(row.selling_value) : '—'}</td>
+                <td className="px-3 py-2.5 text-center text-gray-500 text-xs">{row.unit_of_measure || '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.quantity)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.purchase_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{row.purchase_value !== null ? fmtAmount(row.purchase_value) : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{row.margin_pct !== null ? `${fmtNum(row.margin_pct)}%` : '—'}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{row.selling_value !== null ? fmtAmount(row.selling_value) : '—'}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase" colSpan={4}>{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_purchase_value)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_purchase_value)}</td>
               <td />
               <td />
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_selling_value)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.total_selling_value)}</td>
             </tr>
           </tfoot>
         </table>
@@ -353,19 +363,20 @@ function RucTable({ data, t }: { data: RucResponse; t: ReturnType<typeof useTran
               t('totalPurchased'),
               t('suppliers'),
             ]}
+            align={['left', 'left', 'right', 'right', 'right', 'right', 'right', 'left']}
           />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium max-w-[220px] truncate">{row.description}</td>
                 <td className="px-3 py-2.5 text-gray-500 text-xs">{row.category || '—'}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.avg_purchase_price)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.ruc_amount)}</td>
-                <td className={`px-3 py-2.5 tabular-nums ${rucBadgeClass(row.ruc_pct)}`}>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.avg_purchase_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.selling_price)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.ruc_amount)}</td>
+                <td className={`px-3 py-2.5 text-right tabular-nums ${rucBadgeClass(row.ruc_pct)}`}>
                   {row.ruc_pct !== null ? `${fmtNum(row.ruc_pct)}%` : '—'}
                 </td>
-                <td className="px-3 py-2.5 text-gray-700 tabular-nums">{fmtNum(row.total_purchased_qty)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">{fmtNum(row.total_purchased_qty)}</td>
                 <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[200px] truncate" title={row.suppliers.join(', ')}>
                   {row.suppliers.join(', ') || '—'}
                 </td>
@@ -390,21 +401,22 @@ function CategorySpendingTable({ data, t }: { data: CategorySpendingResponse; t:
               t('itemCount'),
               t('invoiceCount'),
             ]}
+            align={['left', 'right', 'right', 'right']}
           />
           <tbody>
             {data.items.map((row, i) => (
               <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
                 <td className="px-3 py-2.5 text-gray-900 font-medium">{row.category}</td>
-                <td className="px-3 py-2.5 text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.item_count}</td>
-                <td className="px-3 py-2.5 text-center text-gray-700">{row.invoice_count}</td>
+                <td className="px-3 py-2.5 text-right text-gray-900 font-semibold tabular-nums">{fmtAmount(row.total_amount)}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{row.item_count}</td>
+                <td className="px-3 py-2.5 text-right text-gray-700">{row.invoice_count}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-gray-200 bg-gray-50/80">
               <td className="px-3 py-2 text-xs font-semibold text-gray-700 uppercase">{t('grandTotal')}</td>
-              <td className="px-3 py-2 text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
+              <td className="px-3 py-2 text-right text-sm font-bold text-violet-700 tabular-nums">{fmtAmount(data.grand_total)}</td>
               <td colSpan={2} />
             </tr>
           </tfoot>
@@ -476,9 +488,9 @@ function exportToCsv(templateId: TemplateId, data: ReportData) {
   } else if (templateId === 'expenseSummary') {
     const d = data as ExpenseSummaryResponse;
     rows = [
-      ['Period', 'Br. faktura', 'Br. dobavljaca', 'Ukupno'],
-      ...d.items.map((r) => [r.period, String(r.invoice_count), String(r.seller_count), String(r.total_amount)]),
-      ['', '', '', String(d.grand_total)],
+      ['Period', 'Br. stavki', 'Ukupno'],
+      ...d.buckets.map((r) => [r.period, String(r.item_count), String(r.total_amount)]),
+      ['', '', String(d.grand_total)],
     ];
   } else if (templateId === 'kalkulacija') {
     const d = data as KalkulacijaResponse;
@@ -591,10 +603,10 @@ function EmptyState({ t, templateId }: { t: ReturnType<typeof useTranslations<'r
 
 const SKELETON_COLS: Record<TemplateId, number> = {
   receivedGoods: 6,
-  spendingBySupplier: 4,
+  spendingBySupplier: 5,
   monthlyBreakdown: 8,
   priceComparison: 6,
-  expenseSummary: 4,
+  expenseSummary: 3,
   kalkulacija: 8,
   ruc: 7,
   categorySpending: 4,
@@ -631,11 +643,13 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
   const [error, setError] = useState('');
   const [data, setData] = useState<ReportData>(null);
 
-  // Clear results when switching tabs
-  useEffect(() => {
-    setData(null);
-    setError('');
-  }, [templateId]);
+  // Clear results when switching tabs (sync via ref to avoid stale renders)
+  const prevTemplateRef = useRef(templateId);
+  if (prevTemplateRef.current !== templateId) {
+    prevTemplateRef.current = templateId;
+    if (data !== null) setData(null);
+    if (error) setError('');
+  }
 
   const handleGenerate = useCallback(async () => {
     setLoading(true);
@@ -671,6 +685,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
   function hasItems(): boolean {
     if (!data) return false;
     if ('items' in data) return (data as { items: unknown[] }).items.length > 0;
+    if ('buckets' in data) return (data as { buckets: unknown[] }).buckets.length > 0;
     return false;
   }
 

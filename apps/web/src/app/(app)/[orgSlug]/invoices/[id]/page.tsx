@@ -74,6 +74,13 @@ export default function InvoiceDetailPage({
     }
   }, [id, invoice?.status]);
 
+  // Show hook errors as toast
+  useEffect(() => {
+    if (error) {
+      setToast({ message: error, type: 'error' });
+    }
+  }, [error]);
+
   // Close more menu on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -150,10 +157,8 @@ export default function InvoiceDetailPage({
     if (ok) {
       setToast({ message: t('verifySuccess'), type: 'success' });
       fetchAccountingIntent(id).then(setAccountingIntent);
-    } else if (error) {
-      setToast({ message: error, type: 'error' });
     }
-  }, [verify, t, id, error]);
+  }, [verify, t, id]);
 
   const handleReviewIntent = useCallback(async () => {
     setIsReviewingIntent(true);
@@ -1457,3 +1462,4 @@ function FieldGroup({
     </div>
   );
 }
+

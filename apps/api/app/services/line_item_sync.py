@@ -24,6 +24,92 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _calc_total(item: dict) -> float:
+    """Return line item total, falling back to tax_base or quantity * unit_price.
+
+    Args:
+        item: Line item dict with optional total, tax_base, quantity, unit_price.
+
+    Returns:
+        Calculated total as float, or 0 if insufficient data.
+    """
+    # 1. Explicit total
+    total = item.get("total")
+    if total is not None:
+        try:
+            val = float(total)
+            if val != 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    # 2. tax_base (net amount extracted by LLM)
+    tax_base = item.get("tax_base")
+    if tax_base is not None:
+        try:
+            val = float(tax_base)
+            if val != 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+    # 3. Fallback: quantity * unit_price
+    try:
+        qty = float(item.get("quantity") or 0)
+        price = float(item.get("unit_price") or 0)
+        return round(qty * price, 2)
+    except (ValueError, TypeError):
+        return 0
+
+
+def _calc_tax_amount(item: dict, total: float) -> float | None:
+    """Return line item tax amount, falling back to tax_base * rate / 100.
+
+    Uses tax_base (net amount) when available for accurate calculation.
+    Falls back to deriving from gross total if tax_base is missing.
+
+    Args:
+        item: Line item dict with optional tax_amount, tax_rate, tax_base.
+        total: Pre-calculated line total.
+
+    Returns:
+        Tax amount as float, or None if insufficient data.
+    """
+    # 1. Explicit tax_amount
+    tax_amount = item.get("tax_amount")
+    if tax_amount is not None:
+        try:
+            val = float(tax_amount)
+            if val != 0:
+                return val
+        except (ValueError, TypeError):
+            pass
+
+    tax_rate = item.get("tax_rate")
+    if tax_rate is None:
+        return None
+    try:
+        rate = float(tax_rate)
+        if rate <= 0:
+            return None
+    except (ValueError, TypeError):
+        return None
+
+    # 2. Calculate from tax_base (net amount) — tax = base * rate / 100
+    tax_base = item.get("tax_base")
+    if tax_base is not None:
+        try:
+            base = float(tax_base)
+            if base > 0:
+                return round(base * rate / 100, 2)
+        except (ValueError, TypeError):
+            pass
+
+    # 3. Assume total is net (no tax included) — tax = total * rate / 100
+    if total > 0:
+        return round(total * rate / 100, 2)
+
+    return None
+
+
 def sync_line_items_raw_sql(
     session,
     invoice_id: str,
@@ -70,6 +156,8 @@ def sync_line_items_raw_sql(
             return
 
         for item in line_items:
+            total = _calc_total(item)
+            tax_amount = _calc_tax_amount(item, total)
             session.execute(
                 text("""
                     INSERT INTO invoice_line_items (
@@ -98,9 +186,9 @@ def sync_line_items_raw_sql(
                     "unit_price": item.get("unit_price"),
                     "discount": item.get("discount"),
                     "tax_base": item.get("tax_base"),
-                    "total": item.get("total") or 0,
+                    "total": total,
                     "tax_rate": item.get("tax_rate"),
-                    "tax_amount": item.get("tax_amount"),
+                    "tax_amount": tax_amount,
                     "seller_name": seller_name,
                     "seller_pib": seller_pib,
                     "invoice_date": invoice_date,
@@ -162,6 +250,8 @@ async def sync_line_items_orm(
 
         new_rows = []
         for item in line_items:
+            total = _calc_total(item)
+            tax_amount = _calc_tax_amount(item, total)
             new_rows.append(
                 InvoiceLineItem(
                     invoice_id=invoice.id,
@@ -172,9 +262,9 @@ async def sync_line_items_orm(
                     unit_price=item.get("unit_price"),
                     discount=item.get("discount"),
                     tax_base=item.get("tax_base"),
-                    total=item.get("total") or 0,
+                    total=total,
                     tax_rate=item.get("tax_rate"),
-                    tax_amount=item.get("tax_amount"),
+                    tax_amount=tax_amount,
                     seller_name=seller_name,
                     seller_pib=seller_pib,
                     invoice_date=invoice_date,

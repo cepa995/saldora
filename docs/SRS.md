@@ -600,6 +600,39 @@ DUPLICATE_CHECK(invoice, organization_id):
 | **Search** | By date, invoice number, seller/buyer, amount |
 | **Retention** | Minimum 10 years (per Serbian Accounting Law) |
 
+#### FR-4.7.4 Payment Tracking (Otvorene Stavke)
+| ID | FR-4.7.4 |
+|----|----------|
+| **Description** | System MUST track payment status of invoices independently of processing status |
+| **Statuses** | `unpaid` (default), `partially_paid`, `paid` |
+| **Fields** | `payment_status`, `paid_amount`, `paid_date`, `payment_notes` |
+| **Single Payment** | `PATCH /invoices/{id}/payment` — adds amount to existing paid_amount, auto-sets status |
+| **Batch Payment** | `POST /invoices/batch-payment` — marks multiple invoices as fully paid |
+| **Validation** | Payment only allowed on `verified` or `exported` invoices; paid_amount cannot exceed total_amount |
+| **Reports** | Open items report (unpaid invoices with days overdue), Aging analysis (buckets: 0-30, 31-60, 61-90, 90+ days) |
+| **Filter** | Invoice list supports `?payment_status=` filter |
+
+**Database additions:**
+
+```sql
+ALTER TABLE invoices ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid';
+ALTER TABLE invoices ADD COLUMN paid_amount NUMERIC(15, 2);
+ALTER TABLE invoices ADD COLUMN paid_date DATE;
+ALTER TABLE invoices ADD COLUMN payment_notes TEXT;
+CREATE INDEX ix_invoices_payment_status ON invoices(payment_status);
+CREATE INDEX ix_invoices_due_date ON invoices(due_date);
+```
+
+#### FR-4.7.5 Automated Archive Export (Arhiviranje)
+| ID | FR-4.7.5 |
+|----|----------|
+| **Description** | System MUST provide automated monthly archive exports delivered via email |
+| **Content** | ZIP containing invoice register (CSV), PDV summary (Excel), audit trail (CSV), and original PDF documents |
+| **Delivery** | Email with download link (valid 24 hours) to organization's billing email |
+| **Schedule** | Monthly, configurable; can also be triggered manually via "Testiraj odmah" |
+| **Data Retention** | The system generates and delivers archives but does NOT guarantee long-term storage. Data retention responsibility is shifted to the end user — they must save the received ZIP archive as part of their accounting records per Zakon o računovodstvu (10-year retention). The platform retains invoice data for the subscription period only. |
+| **Frontend** | `/arhiviranje` page with settings, manual trigger, and delivery history |
+
 ### 4.8 API Access
 
 #### FR-4.8.1 REST API
@@ -5021,6 +5054,8 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 | 2.8 | March 2026 | Saldora Team | Added Product Catalog spec (4.15): canonical product names, aliases (JSONB), categories, selling prices, margins, pg_trgm fuzzy matching, product_id FK on invoice_line_items, CRUD + merge API at /api/v1/products/. Added four procurement intelligence report endpoints (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Updated /izvestaji frontend to unified page with three group pills (Opšti, Nabavka i prodaja, Upravljanje); removed separate /katalog and /dpu routes. Added product_catalog to DB schema (7.2.6). Renamed "Šank lista" → "Dnevna evidencija robe"; renamed "Ugostiteljstvo" → "Nabavka i prodaja". Bug fixes: line items now sync on invoice verification; batch delete cascades to correction_logs and line_items; monthly breakdown shows PDV % and PDV iznos columns; verification error messages translated to Serbian. |
 | 2.9 | March 2026 | Saldora Team | Added In-App Support System spec (4.16). Updated MiniMax API field reference (12.5.4). Updated security hardening details (10.1, 10.3). Added serverless GPU deployment options (9.7). Updated confidence display from percentages to text labels (4.3.3). |
 | 3.0 | March 2026 | Saldora Team | Client management: replaced soft-delete with hard DELETE (unlinks invoices); added toggle-active endpoint (4.12.1); added retroactive PIB assignment on client creation (4.12.2). Reports: added client_id filter to all report endpoints and query parameter table (4.13.2); added client_id FK to invoice_line_items schema (4.13.1, 7.2.5, migration 0008). Billing: documented write-only usage_records counter for plan limit checks; deleting invoices no longer resets monthly usage (4.7.2). Duplicate detection: clarified 409 response, verified/exported-only scope, and ?force=true admin override (4.4.3). |
+
+| 3.1 | April 2026 | Saldora Team | Added payment tracking (FR-4.7.4): payment_status, paid_amount, paid_date fields on invoices; single and batch payment endpoints; payment_status filter on invoice list; open items and aging reports under /reports/. Added automated archive export spec (FR-4.7.5): monthly ZIP delivery via email with data retention responsibility shifted to end user. |
 
 ---
 

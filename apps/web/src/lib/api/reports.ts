@@ -154,15 +154,14 @@ export async function fetchPriceComparison(
 
 // ── 5. Expense summary ───────────────────────────────────────────────
 
-export interface ExpenseSummaryItem {
+export interface ExpenseSummaryBucket {
   period: string;
-  invoice_count: number;
   total_amount: number;
-  seller_count: number;
+  item_count: number;
 }
 
 export interface ExpenseSummaryResponse {
-  items: ExpenseSummaryItem[];
+  buckets: ExpenseSummaryBucket[];
   grand_total: number;
 }
 
@@ -312,3 +311,4 @@ export async function fetchCategorySpending(
     `/api/v1/reports/spending-by-category${buildQuery(params)}`,
   );
 }
+
