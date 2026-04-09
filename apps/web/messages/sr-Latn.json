@@ -1126,6 +1126,7 @@
     "changeEmail": "Promenite u Podešavanja → Organizacija",
     "testNow": "Testiraj sada",
     "generating": "Generisanje...",
+    "exportQueued": "Arhiva se generiše u pozadini...",
     "exportSuccess": "Arhiva uspešno generisana i poslata",
     "exportFailed": "Greška pri generisanju arhive",
     "deliveryHistory": "Istorija dostave",

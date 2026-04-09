@@ -178,9 +178,10 @@ export default function MonthlyExportContent() {
     try {
       await triggerArchiveExport(period);
       setShowPeriodPicker(false);
-      setArchiveToast({ message: tArchive('exportSuccess'), ok: true });
-      setTimeout(() => setArchiveToast(null), 4000);
-      await loadArchiveData();
+      setArchiveToast({ message: tArchive('exportQueued'), ok: true });
+      setTimeout(() => setArchiveToast(null), 5000);
+      // Refresh history after a delay to allow background task to complete
+      setTimeout(() => loadArchiveData(), 10000);
     } catch {
       setArchiveToast({ message: tArchive('exportFailed'), ok: false });
       setTimeout(() => setArchiveToast(null), 4000);

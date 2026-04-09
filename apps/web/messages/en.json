@@ -1106,6 +1106,7 @@
     "changeEmail": "Change in Settings → Organization",
     "testNow": "Test now",
     "generating": "Generating...",
+    "exportQueued": "Archive is being generated...",
     "exportSuccess": "Archive successfully generated and sent",
     "exportFailed": "Error generating archive",
     "deliveryHistory": "Delivery history",
