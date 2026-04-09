@@ -104,3 +104,11 @@ export async function fetchPrivacyPolicy(): Promise<PrivacyPolicy> {
     true,
   );
 }
+
+export async function fetchTermsOfService(): Promise<PrivacyPolicy> {
+  return apiClient<PrivacyPolicy>(
+    '/api/v1/compliance/terms-of-service',
+    {},
+    true,
+  );
+}

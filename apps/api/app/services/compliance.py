@@ -39,12 +39,93 @@ Politika privatnosti — Saldora
    - Pravo na ograničenje obrade (Član 31 ZZPL)
    - Pravo na prenosivost podataka (Član 36 ZZPL)
 
-7. Poverenik
-   Zahteve možete uputiti na: privacy@saldora.ai
+7. Kontakt za zaštitu podataka
+   Zahteve možete uputiti na: privacy@saldora.rs
 
 8. Poverenik za informacije od javnog značaja i zaštitu podataka o ličnosti
    Bulevar kralja Aleksandra 15, 11000 Beograd
    https://www.poverenik.rs
+""".strip()
+
+TOS_VERSION = "1.0"
+TOS_EFFECTIVE_DATE = date(2026, 4, 1)
+TOS_CONTENT = """
+Uslovi korišćenja — Saldora
+
+Poslednje ažuriranje: 01.04.2026.
+
+1. O usluzi
+
+Saldora je platforma za obradu i analizu faktura. Saldora pruža uslugu inteligentne obrade dokumenata — OCR ekstrakciju podataka, računovodstvenu analitiku, izveštavanje i izvoz podataka u računovodstvene sisteme (npr. MiniMax).
+
+Saldora NIJE servis za trajno čuvanje dokumenata niti zamena za računovodstveni softver.
+
+2. Odgovornost za čuvanje podataka
+
+Korisnik je u potpunosti odgovoran za čuvanje svojih poslovnih dokumenata u skladu sa Zakonom o računovodstvu (Sl. glasnik RS, br. 73/2019), koji propisuje obavezu čuvanja računovodstvenih isprava u roku od 10 godina.
+
+Saldora pruža alate za automatski mesečni izvoz arhive (registar faktura, PDV pregled, revizorski trag i originalna dokumenta) koji se šalje na email adresu organizacije. Korisnik se obavezuje da redovno preuzima i čuva ove arhive na sigurnom mestu.
+
+3. Čuvanje podataka na platformi
+
+Saldora čuva korisničke podatke tokom trajanja pretplate. Nakon isteka ili otkazivanja pretplate:
+- Podaci se čuvaju još 90 dana radi omogućavanja izvoza
+- Nakon 90 dana, svi podaci se trajno brišu
+- Korisnik je dužan da izvrši izvoz svih podataka pre isteka ovog roka
+
+Saldora zadržava pravo da obriše podatke nakon isteka roka čuvanja bez posebnog obaveštenja.
+
+4. Automatski arhivski izvoz
+
+Saldora automatski generiše mesečni arhivski izvoz koji uključuje:
+- Registar faktura (CSV format)
+- PDV pregled po stopama (Excel format)
+- Revizorski trag (CSV format)
+- Originalna PDF dokumenta
+
+Arhivski izvoz se šalje na email adresu organizacije prvog u mesecu. Link za preuzimanje važi 24 sata. Korisnik je odgovoran za preuzimanje i sigurno čuvanje arhive.
+
+5. Obaveze korisnika
+
+Korisnik se obavezuje da:
+- Koristi platformu u skladu sa važećim propisima Republike Srbije
+- Obezbedi tačnost podataka koje unosi u sistem
+- Redovno preuzima arhivske izvozne i čuva ih u skladu sa Zakonom o računovodstvu
+- Čuva pristupne podatke u tajnosti i ne deli ih sa neovlašćenim licima
+- Ne koristi platformu za obradu podataka koji krše prava trećih lica
+
+6. Ograničenje odgovornosti
+
+Saldora se trudi da obezbedi tačnost OCR ekstrakcije, ali ne garantuje 100% tačnost automatski ekstrahovanih podataka. Korisnik je odgovoran za verifikaciju podataka pre izvoza u računovodstveni sistem.
+
+Saldora nije odgovorna za:
+- Gubitak podataka usled propusta korisnika da izvrši izvoz
+- Netačnosti u automatski ekstrahovanih podacima koje korisnik nije verifikovao
+- Prekide u radu usled tehničkih problema ili održavanja sistema
+- Štetu nastalu usled neovlašćenog pristupa nalogu korisnika
+
+7. Intelektualna svojina
+
+Saldora platforma, uključujući softver, dizajn, algoritme i dokumentaciju, je vlasništvo Lab42 DOO. Korisnik dobija neekskluzivno pravo korišćenja platforme tokom trajanja pretplate.
+
+8. Raskid
+
+Korisnik može da otkaže pretplatu u bilo kom trenutku. Lab42 DOO zadržava pravo da suspenduje ili ukine nalog korisnika u slučaju kršenja ovih uslova.
+
+9. Primena prava
+
+Na ove uslove korišćenja primenjuje se pravo Republike Srbije. Za sve sporove nadležan je sud u Beogradu.
+
+10. Izmene uslova
+
+Lab42 DOO zadržava pravo da izmeni ove uslove korišćenja. O izmenama ćemo korisnika obavestiti putem email-a najmanje 30 dana pre stupanja na snagu.
+
+11. Kontakt
+
+Lab42 DOO
+Beograd, Republika Srbija
+Email: info@saldora.rs
+Web: https://saldora.rs
 """.strip()
 
 # Categories retained during deletion (with legal basis)
