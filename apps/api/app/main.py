@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.routers import (
     analytics,
+    archive,
     audit_logs,
     auth,
     billing,
@@ -143,6 +144,7 @@ app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["
 app.include_router(exchange_rates.router, prefix="/api/v1/exchange-rates", tags=["Exchange Rates"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["ZZPL Compliance"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(archive.router, prefix="/api/v1/archive", tags=["Archive"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Product Catalog"])
 
 

@@ -52,6 +52,12 @@ app.conf.update(
             "task": "ocr_worker.tasks.aggregate_daily_usage",
             "schedule": crontab(hour=2, minute=0),  # Daily at 02:00
         },
+        "monthly-archive-exports": {
+            "task": "ocr_worker.tasks.run_monthly_archive_exports",
+            "schedule": crontab(
+                hour=6, minute=0, day_of_month=1
+            ),  # 1st of every month at 06:00
+        },
     },
 )
 

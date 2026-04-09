@@ -12,7 +12,7 @@ const APP_PAGES = new Set([
   "billing",
   "rules",
   "templates",
-  "revizija",
+  "arhiviranje",
 ]);
 
 const AUTH_ROUTES = ["/login", "/register", "/password-reset", "/invite"];

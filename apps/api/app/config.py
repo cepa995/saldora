@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     resend_api_key: str = ""
-    resend_from_email: str = "noreply@saldora.ai"
+    resend_from_email: str = "noreply@saldora.rs"
     frontend_url: str = "http://localhost:3000"
 
     # NBS (National Bank of Serbia) Exchange Rates

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 from celery import Task
@@ -897,6 +898,194 @@ def aggregate_daily_usage() -> dict[str, Any]:
         session.close()
 
     return {"organizations_updated": updated}
+
+
+@app.task(name="ocr_worker.tasks.run_monthly_archive_exports")
+def run_monthly_archive_exports() -> dict[str, Any]:
+    """Run automated monthly archive exports for all organizations.
+
+    Finds all orgs with a billing_email, generates a ZIP for the
+    previous month, and emails it. Runs on the 1st of each month.
+
+    Returns:
+        Dict with exported, skipped, and failed counts.
+    """
+    from datetime import timedelta
+
+    from ocr_worker.database import get_session, text
+
+    now = datetime.now(UTC)
+    first_of_this_month = now.date().replace(day=1)
+    last_month_end = first_of_this_month - timedelta(days=1)
+    period = last_month_end.strftime("%Y-%m")
+
+    logger.info("Starting monthly archive exports for period %s", period)
+
+    session = get_session()
+    exported = 0
+    skipped = 0
+    failed = 0
+    try:
+        rows = session.execute(
+            text("""
+                SELECT id, name, billing_email
+                FROM organizations
+                WHERE billing_email IS NOT NULL
+                  AND billing_email != ''
+            """)
+        ).fetchall()
+
+        logger.info("Found %d organizations with billing email", len(rows))
+
+        for row in rows:
+            org_id = str(row[0])
+            org_name = row[1]
+            billing_email = row[2]
+
+            try:
+                # Count invoices in period
+                count_row = session.execute(
+                    text("""
+                        SELECT COUNT(*) FROM invoices
+                        WHERE organization_id = :org_id
+                          AND invoice_date >= :d_from
+                          AND invoice_date <= :d_to
+                          AND status IN ('verified', 'exported')
+                    """),
+                    {
+                        "org_id": org_id,
+                        "d_from": f"{period}-01",
+                        "d_to": last_month_end.isoformat(),
+                    },
+                ).fetchone()
+                invoice_count = count_row[0] if count_row else 0
+
+                if invoice_count == 0:
+                    session.execute(
+                        text("""
+                            INSERT INTO scheduled_export_logs
+                            (id, organization_id, period, delivery_method,
+                             delivered_to, invoice_count, status, error_message)
+                            VALUES (gen_random_uuid(), :org_id, :period, 'email',
+                                    :email, 0, 'skipped', 'Nema faktura za ovaj period')
+                        """),
+                        {"org_id": org_id, "period": period, "email": billing_email},
+                    )
+                    session.commit()
+                    skipped += 1
+                    continue
+
+                # Dispatch per-org archive generation as separate task
+                app.send_task(
+                    "ocr_worker.tasks.generate_org_archive",
+                    kwargs={
+                        "org_id": org_id,
+                        "period": period,
+                        "billing_email": billing_email,
+                        "org_name": org_name,
+                    },
+                    queue="ocr",
+                )
+                exported += 1
+
+            except Exception:
+                failed += 1
+                logger.exception("Failed to process org %s (%s)", org_name, org_id)
+    finally:
+        session.close()
+
+    logger.info(
+        "Monthly archive dispatch: %d queued, %d skipped, %d failed",
+        exported,
+        skipped,
+        failed,
+    )
+    return {
+        "period": period,
+        "exported": exported,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
+@app.task(
+    name="ocr_worker.tasks.generate_org_archive",
+    soft_time_limit=300,
+    time_limit=360,
+)
+def generate_org_archive(
+    org_id: str,
+    period: str,
+    billing_email: str,
+    org_name: str,
+) -> dict[str, Any]:
+    """Trigger archive generation via the API's internal endpoint.
+
+    Calls the API service which has the full async context needed
+    for ZIP generation, S3 upload, and email delivery.
+
+    Args:
+        org_id: Organization UUID string.
+        period: Period like "2026-03".
+        billing_email: Delivery email address.
+        org_name: Organization name.
+
+    Returns:
+        Result dict with status.
+    """
+    import httpx
+
+    api_url = os.getenv("API_INTERNAL_URL", "http://api:8000")
+    logger.info("Triggering archive for %s period %s via API", org_name, period)
+
+    try:
+        with httpx.Client(timeout=300) as client:
+            resp = client.post(
+                f"{api_url}/api/v1/archive/internal-generate",
+                json={
+                    "org_id": org_id,
+                    "period": period,
+                    "billing_email": billing_email,
+                    "org_name": org_name,
+                },
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+        logger.info(
+            "Archive for %s period %s: %s", org_name, period, result.get("status")
+        )
+        return result
+
+    except Exception as exc:
+        # Log failure to DB
+        from ocr_worker.database import get_session, text
+
+        session = get_session()
+        try:
+            session.execute(
+                text("""
+                    INSERT INTO scheduled_export_logs
+                    (id, organization_id, period, delivery_method, delivered_to,
+                     status, error_message)
+                    VALUES (gen_random_uuid(), :org_id, :period, 'email', :email,
+                            'failed', :error)
+                """),
+                {
+                    "org_id": org_id,
+                    "period": period,
+                    "email": billing_email,
+                    "error": str(exc)[:500],
+                },
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+        finally:
+            session.close()
+
+        logger.exception("Archive failed for %s period %s", org_name, period)
+        return {"status": "failed", "error": str(exc)}
 
 
 def _send_webhook(url: str, resource_id: str, data: dict[str, Any]) -> None:
