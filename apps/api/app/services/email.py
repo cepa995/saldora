@@ -38,7 +38,7 @@ def _build_email_html(title: str, content_html: str, footer_html: str = "") -> s
           <!-- Header -->
           <tr>
             <td align="center" style="padding-bottom: 24px;">
-              {'<img src="' + _LOGO_URL + '" alt="Saldora" width="160" height="auto" style="display: block; max-width: 160px; height: auto;" />' if _LOGO_URL else '<h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #7c3aed;">saldora</h1>'}
+              {'<img src="' + _LOGO_URL + '" alt="Saldora" width="160" height="auto" style="display: block; max-width: 160px; height: auto;" />' if _LOGO_URL else '<h1 style="margin: 0; font-size: 28px; font-weight: 700;"><span style="color: #111827;">saldora</span><span style="color: #7c3aed;">.ai</span></h1>'}
             </td>
           </tr>
 

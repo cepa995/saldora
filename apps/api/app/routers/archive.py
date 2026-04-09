@@ -9,6 +9,7 @@ Provides endpoints for:
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,6 +151,36 @@ async def _run_archive_export(
                 invoice_count=archive_result.get("invoice_count"),
                 status="delivered",
             )
+
+            # Also create audit_export record for download history
+            from datetime import date as date_type
+            from datetime import timedelta
+
+            from app.models.audit_export import AuditExport
+
+            year, month = period.split("-")
+            date_from_parsed = date_type(int(year), int(month), 1)
+            if int(month) == 12:
+                date_to_parsed = date_type(int(year) + 1, 1, 1) - timedelta(days=1)
+            else:
+                date_to_parsed = date_type(int(year), int(month) + 1, 1) - timedelta(days=1)
+
+            audit_record = AuditExport(
+                organization_id=organization_id,
+                date_from=date_from_parsed,
+                date_to=date_to_parsed,
+                status="ready",
+                file_path=archive_result.get("s3_key"),
+                file_size_bytes=archive_result.get("file_size"),
+                invoice_count=archive_result.get("invoice_count"),
+                download_url=archive_result.get("download_url"),
+                expires_at=datetime.now(UTC) + timedelta(days=30),
+                include_documents=True,
+                include_audit_trail=True,
+                include_vat_summary=True,
+            )
+            db.add(audit_record)
+            await db.commit()
 
         logger.info(
             "Archive delivered for %s period %s (%d invoices) to %s",
