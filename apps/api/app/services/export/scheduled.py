@@ -24,6 +24,7 @@ async def generate_monthly_archive(
     db: AsyncSession,
     organization_id: UUID,
     period: str,
+    include_pdfs: bool = True,
 ) -> dict:
     """Generate a monthly archive export for one organization.
 
@@ -34,6 +35,7 @@ async def generate_monthly_archive(
         db: Database session.
         organization_id: Organization UUID.
         period: Period string like "2026-03".
+        include_pdfs: Whether to include original PDF documents.
 
     Returns:
         Dict with download_url, file_size, invoice_count, s3_key.
@@ -55,7 +57,7 @@ async def generate_monthly_archive(
         organization_id=organization_id,
         date_from=date_from,
         date_to=date_to,
-        include_documents=True,
+        include_documents=include_pdfs,
         include_audit_trail=True,
         include_vat_summary=True,
     )
