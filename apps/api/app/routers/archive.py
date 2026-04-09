@@ -92,7 +92,7 @@ async def trigger_archive_export(
             "billing_email": email_to,
             "org_name": org.name or "",
         },
-        queue="default",
+        queue="ocr",
     )
 
     return {

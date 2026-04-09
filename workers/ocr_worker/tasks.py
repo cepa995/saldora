@@ -984,7 +984,7 @@ def run_monthly_archive_exports() -> dict[str, Any]:
                         "billing_email": billing_email,
                         "org_name": org_name,
                     },
-                    queue="default",
+                    queue="ocr",
                 )
                 exported += 1
 
