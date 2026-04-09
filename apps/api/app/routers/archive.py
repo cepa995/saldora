@@ -9,9 +9,8 @@ Provides endpoints for:
 from __future__ import annotations
 
 import logging
-import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -46,18 +45,20 @@ async def list_export_history(
 @router.post("/generate")
 async def trigger_archive_export(
     period: str = Query(..., pattern=r"^\d{4}-\d{2}$", description="Period YYYY-MM"),
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("admin")),
 ) -> dict:
-    """Trigger archive export via Celery — same path as monthly automation.
+    """Generate and deliver an archive export.
 
-    Dispatches the generate_org_archive Celery task which generates
-    a ZIP, uploads to S3, and emails the download link. This is the
-    exact same code path that runs automatically on the 1st of each
-    month, allowing admins to test the full flow on demand.
+    Runs the full archive pipeline in a background task: generates
+    a ZIP (invoice CSV, VAT XLSX, audit CSV, PDFs), uploads to S3,
+    and emails the download link. This is the same logic that runs
+    automatically on the 1st of each month.
 
     Args:
         period: Period string like "2026-03".
+        background_tasks: FastAPI background tasks.
         db: Database session.
         user: Authenticated admin user.
 
@@ -79,28 +80,173 @@ async def trigger_archive_export(
             "Podesite billing email u Podešavanja → Organizacija.",
         )
 
-    # Dispatch via Celery — exact same task as monthly automation
-    import celery as celery_lib
-
-    broker_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
-    celery_app = celery_lib.Celery(broker=broker_url)
-    celery_app.send_task(
-        "ocr_worker.tasks.generate_org_archive",
-        kwargs={
-            "org_id": str(user.organization_id),
-            "period": period,
-            "billing_email": email_to,
-            "org_name": org.name or "",
-        },
-        queue="ocr",
+    background_tasks.add_task(
+        _run_archive_export,
+        organization_id=user.organization_id,
+        org_name=org.name or "",
+        billing_email=email_to,
+        period=period,
     )
 
     return {
         "status": "queued",
         "period": period,
         "delivered_to": email_to,
-        "message": "Arhiva se generiše u pozadini. Proverite istoriju za status.",
     }
+
+
+async def _run_archive_export(
+    organization_id,
+    org_name: str,
+    billing_email: str,
+    period: str,
+) -> None:
+    """Background task: generate archive ZIP and email it.
+
+    Creates its own DB session since the request session is closed
+    by the time this runs.
+
+    Args:
+        organization_id: Org UUID.
+        org_name: Organization name for email subject.
+        billing_email: Delivery email.
+        period: Period string like "2026-03".
+    """
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.config import get_settings
+    from app.services.export.scheduled import (
+        deliver_archive_via_email,
+        generate_monthly_archive,
+        log_export_delivery,
+    )
+
+    s = get_settings()
+    engine = create_async_engine(s.database_url)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with factory() as db:
+            archive_result = await generate_monthly_archive(
+                db, organization_id, period, include_pdfs=True
+            )
+
+            # Get org for email delivery
+            result = await db.execute(
+                select(Organization).where(Organization.id == organization_id)
+            )
+            org = result.scalar_one_or_none()
+
+            if org:
+                await deliver_archive_via_email(org, archive_result, period)
+
+            await log_export_delivery(
+                db=db,
+                organization_id=organization_id,
+                period=period,
+                delivered_to=billing_email,
+                file_size=archive_result.get("file_size"),
+                invoice_count=archive_result.get("invoice_count"),
+                status="delivered",
+            )
+
+        logger.info(
+            "Archive delivered for %s period %s (%d invoices) to %s",
+            org_name,
+            period,
+            archive_result.get("invoice_count", 0),
+            billing_email,
+        )
+    except Exception as exc:
+        logger.exception("Archive export failed for %s period %s", org_name, period)
+        try:
+            async with factory() as db:
+                await log_export_delivery(
+                    db=db,
+                    organization_id=organization_id,
+                    period=period,
+                    delivered_to=billing_email,
+                    file_size=None,
+                    invoice_count=None,
+                    status="failed",
+                    error_message=str(exc)[:500],
+                )
+        except Exception:
+            logger.exception("Failed to log archive failure")
+    finally:
+        await engine.dispose()
+
+
+@router.post("/internal-generate")
+async def internal_generate_archive(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Internal endpoint called by Celery worker for automated monthly archives.
+
+    No auth required — only accessible from internal network (worker → API).
+
+    Args:
+        body: Dict with org_id, period, billing_email, org_name.
+        db: Database session.
+
+    Returns:
+        Result with status.
+    """
+    from uuid import UUID
+
+    from app.services.export.scheduled import (
+        deliver_archive_via_email,
+        generate_monthly_archive,
+        log_export_delivery,
+    )
+
+    org_id = UUID(body["org_id"])
+    period = body["period"]
+    billing_email = body["billing_email"]
+    org_name = body.get("org_name", "")
+
+    from sqlalchemy import select
+
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if not org:
+        return {"status": "failed", "error": "Organization not found"}
+
+    try:
+        archive_result = await generate_monthly_archive(db, org_id, period, include_pdfs=True)
+
+        await deliver_archive_via_email(org, archive_result, period)
+
+        await log_export_delivery(
+            db=db,
+            organization_id=org_id,
+            period=period,
+            delivered_to=billing_email,
+            file_size=archive_result.get("file_size"),
+            invoice_count=archive_result.get("invoice_count"),
+            status="delivered",
+        )
+
+        return {
+            "status": "delivered",
+            "invoice_count": archive_result.get("invoice_count", 0),
+        }
+
+    except Exception as exc:
+        await log_export_delivery(
+            db=db,
+            organization_id=org_id,
+            period=period,
+            delivered_to=billing_email,
+            file_size=None,
+            invoice_count=None,
+            status="failed",
+            error_message=str(exc)[:500],
+        )
+        logger.exception("Internal archive failed for %s period %s", org_name, period)
+        return {"status": "failed", "error": str(exc)[:200]}
 
 
 @router.get("/settings")

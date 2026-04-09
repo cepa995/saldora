@@ -1019,133 +1019,48 @@ def generate_org_archive(
     billing_email: str,
     org_name: str,
 ) -> dict[str, Any]:
-    """Generate a ZIP archive and email it to the organization.
+    """Trigger archive generation via the API's internal endpoint.
 
-    Uses asyncio.run() to call the async export service, then sends
-    the download link via email.
+    Calls the API service which has the full async context needed
+    for ZIP generation, S3 upload, and email delivery.
 
     Args:
         org_id: Organization UUID string.
         period: Period like "2026-03".
         billing_email: Delivery email address.
-        org_name: Organization name for email subject.
+        org_name: Organization name.
 
     Returns:
-        Result dict with status and invoice_count.
+        Result dict with status.
     """
-    from datetime import date as date_type
-    from datetime import timedelta
-    from uuid import UUID
+    import httpx
 
-    logger.info("Generating archive for %s period %s", org_name, period)
-
-    year, month = period.split("-")
-    date_from = date_type(int(year), int(month), 1)
-    if int(month) == 12:
-        date_to = date_type(int(year) + 1, 1, 1) - timedelta(days=1)
-    else:
-        date_to = date_type(int(year), int(month) + 1, 1) - timedelta(days=1)
-
-    async def _run():
-        from sqlalchemy.ext.asyncio import (
-            AsyncSession,
-            async_sessionmaker,
-            create_async_engine,
-        )
-
-        from app.services.email import _send_email
-        from app.services.export.audit import generate_audit_export
-
-        db_url = os.getenv("DATABASE_URL", "").replace(
-            "postgresql://", "postgresql+asyncpg://"
-        )
-        engine = create_async_engine(db_url)
-        factory = async_sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
-
-        async with factory() as db:
-            result = await generate_audit_export(
-                db=db,
-                organization_id=UUID(org_id),
-                date_from=date_from,
-                date_to=date_to,
-                include_documents=True,
-                include_audit_trail=True,
-                include_vat_summary=True,
-            )
-
-        await engine.dispose()
-
-        # Send email
-        subject = f"Saldora — Mesečni arhivski izvoz {period} — {org_name}"
-        body = (
-            f"Poštovani,\n\n"
-            f"U prilogu se nalazi automatski generisan arhivski izvoz vaših\n"
-            f"faktura za period {period}.\n\n"
-            f"Sadržaj arhive:\n"
-            f"• Registar faktura (CSV)\n"
-            f"• PDV pregled (Excel)\n"
-            f"• Revizorski trag (CSV)\n"
-            f"• Originalna PDF dokumenta\n\n"
-            f"Broj faktura u periodu: {result.get('invoice_count', 0)}\n\n"
-            f"Preporučujemo da ovaj fajl sačuvate na sigurnom mestu kao deo\n"
-            f"vaše računovodstvene arhive u skladu sa Zakonom o računovodstvu.\n\n"
-            f"Link za preuzimanje (važi 24 sata):\n"
-            f"{result.get('download_url', '')}\n\n"
-            f"Pozdrav,\nSaldora tim\n\n"
-            f"---\n"
-            f"Ovo je automatska poruka. Podešavanja automatskog izvoza možete\n"
-            f"promeniti na stranici Arhiviranje u aplikaciji."
-        )
-        await _send_email(to_email=billing_email, subject=subject, html=body)
-
-        return result
-
-    from ocr_worker.database import get_session, text
+    api_url = os.getenv("API_INTERNAL_URL", "http://api:8000")
+    logger.info("Triggering archive for %s period %s via API", org_name, period)
 
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(_run())
-        finally:
-            loop.close()
-
-        # Log success
-        session = get_session()
-        try:
-            session.execute(
-                text("""
-                    INSERT INTO scheduled_export_logs
-                    (id, organization_id, period, delivery_method, delivered_to,
-                     file_size_bytes, invoice_count, status)
-                    VALUES (gen_random_uuid(), :org_id, :period, 'email', :email,
-                            :size, :count, 'delivered')
-                """),
-                {
+        with httpx.Client(timeout=300) as client:
+            resp = client.post(
+                f"{api_url}/api/v1/archive/internal-generate",
+                json={
                     "org_id": org_id,
                     "period": period,
-                    "email": billing_email,
-                    "size": result.get("file_size"),
-                    "count": result.get("invoice_count"),
+                    "billing_email": billing_email,
+                    "org_name": org_name,
                 },
             )
-            session.commit()
-        finally:
-            session.close()
+            resp.raise_for_status()
+            result = resp.json()
 
         logger.info(
-            "Archive delivered for %s period %s (%d invoices) to %s",
-            org_name,
-            period,
-            result.get("invoice_count", 0),
-            billing_email,
+            "Archive for %s period %s: %s", org_name, period, result.get("status")
         )
-        return {"status": "delivered", "invoice_count": result.get("invoice_count", 0)}
+        return result
 
     except Exception as exc:
-        # Log failure
+        # Log failure to DB
+        from ocr_worker.database import get_session, text
+
         session = get_session()
         try:
             session.execute(
