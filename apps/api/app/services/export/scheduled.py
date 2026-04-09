@@ -85,38 +85,16 @@ async def deliver_archive_via_email(
         )
         return
 
-    subject = f"Saldora — Mesečni arhivski izvoz {period} — {organization.name}"
-    body = f"""Poštovani,
-
-U prilogu se nalazi automatski generisan arhivski izvoz vaših
-faktura za period {period}.
-
-Sadržaj arhive:
-• Registar faktura (CSV)
-• PDV pregled (Excel)
-• Revizorski trag (CSV)
-• Originalna PDF dokumenta
-
-Broj faktura u periodu: {archive_result.get("invoice_count", 0)}
-
-Preporučujemo da ovaj fajl sačuvate na sigurnom mestu kao deo
-vaše računovodstvene arhive u skladu sa Zakonom o računovodstvu.
-
-Link za preuzimanje (važi 24 sata):
-{archive_result.get("download_url", "")}
-
-Pozdrav,
-Saldora tim
-
----
-Ovo je automatska poruka. Podešavanja automatskog izvoza možete
-promeniti na stranici Arhiviranje u aplikaciji.
-"""
-
     try:
-        from app.services.email import _send_email
+        from app.services.email import send_archive_email
 
-        await _send_email(to_email=email_to, subject=subject, html=body)
+        await send_archive_email(
+            to_email=email_to,
+            org_name=organization.name or "",
+            period=period,
+            invoice_count=archive_result.get("invoice_count", 0),
+            download_url=archive_result.get("download_url", ""),
+        )
         logger.info(
             "Archive for %s delivered to %s (%d invoices)",
             period,

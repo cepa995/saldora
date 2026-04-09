@@ -1104,7 +1104,7 @@
     "contentPdfs": "Original PDF documents",
     "deliveryEmail": "Delivery email",
     "changeEmail": "Change in Settings → Organization",
-    "testNow": "Test now",
+    "testNow": "Export now",
     "generating": "Generating...",
     "exportQueued": "Archive is being generated...",
     "exportSuccess": "Archive successfully generated and sent",
