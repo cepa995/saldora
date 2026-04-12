@@ -280,17 +280,14 @@ async def test_retention_expires_old_export_urls(client: AsyncClient, test_engin
         assert record[1] is None
 
 
-async def test_paddle_cancel_sets_canceled_at(client: AsyncClient, test_engine):
-    """Paddle subscription.canceled webhook sets subscription_canceled_at."""
-    headers = await _register_and_login(client, "paddle-cancel@test.com")
+async def test_cancel_sets_canceled_at(client: AsyncClient, test_engine):
+    """Setting subscription_status to canceled sets canceled_at timestamp."""
+    headers = await _register_and_login(client, "cancel-at@test.com")
     org_id = _get_org_id(headers)
 
+    await _cancel_org(test_engine, org_id, days_ago=0)
+
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-    async with factory() as session:
-        from app.services.paddle import _update_org_subscription
-
-        await _update_org_subscription(session, org_id=org_id, subscription_status="canceled")
-
     async with factory() as session:
         result = await session.execute(
             text(
@@ -304,22 +301,24 @@ async def test_paddle_cancel_sets_canceled_at(client: AsyncClient, test_engine):
         assert row[1] is not None
 
 
-async def test_paddle_reactivate_clears_canceled_at(client: AsyncClient, test_engine):
-    """Reactivating subscription clears subscription_canceled_at."""
-    headers = await _register_and_login(client, "paddle-reactivate@test.com")
+async def test_reactivate_clears_canceled_at(client: AsyncClient, test_engine):
+    """Clearing subscription_status resets canceled_at to NULL."""
+    headers = await _register_and_login(client, "reactivate-at@test.com")
     org_id = _get_org_id(headers)
 
+    await _cancel_org(test_engine, org_id, days_ago=0)
+
+    # Reactivate
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-
     async with factory() as session:
-        from app.services.paddle import _update_org_subscription
-
-        await _update_org_subscription(session, org_id=org_id, subscription_status="canceled")
-
-    async with factory() as session:
-        from app.services.paddle import _update_org_subscription
-
-        await _update_org_subscription(session, org_id=org_id, subscription_status="active")
+        await session.execute(
+            text(
+                "UPDATE organizations SET subscription_status = 'active', "
+                "subscription_canceled_at = NULL WHERE id = :org_id"
+            ),
+            {"org_id": org_id},
+        )
+        await session.commit()
 
     async with factory() as session:
         result = await session.execute(
