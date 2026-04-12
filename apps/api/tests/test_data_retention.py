@@ -220,7 +220,7 @@ async def test_retention_keeps_active_org(client: AsyncClient, test_engine):
 
     await _insert_invoice(test_engine, org_id)
 
-    result = await _run_retention(test_engine)
+    await _run_retention(test_engine)
 
     assert await _org_exists(test_engine, org_id)
     assert await _count_invoices(test_engine, org_id) == 1
@@ -234,7 +234,7 @@ async def test_retention_keeps_recently_canceled_org(client: AsyncClient, test_e
     await _insert_invoice(test_engine, org_id)
     await _cancel_org(test_engine, org_id, days_ago=30)
 
-    result = await _run_retention(test_engine)
+    await _run_retention(test_engine)
 
     assert await _org_exists(test_engine, org_id)
     assert await _count_invoices(test_engine, org_id) == 1
