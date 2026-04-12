@@ -665,6 +665,7 @@ async def create_audit_export(
         export_type="manual",
         delivery_method="manual",
         delivered_to="",
+        period=date_from.strftime("%Y-%m"),
         requested_by=current_user.id,
         date_from=date_from,
         date_to=date_to,

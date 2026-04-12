@@ -900,6 +900,138 @@ def aggregate_daily_usage() -> dict[str, Any]:
     return {"organizations_updated": updated}
 
 
+@app.task(name="ocr_worker.tasks.enforce_data_retention")
+def enforce_data_retention() -> dict[str, Any]:
+    """Delete data for organizations whose subscription expired 90+ days ago.
+
+    Enforces the retention policy from ToS: data is kept for 90 days
+    after subscription cancellation, then permanently deleted.
+
+    Also cleans up:
+    - Expired export files (scheduled_export_logs older than 30 days)
+    - Expired sessions and temporary data
+
+    Returns:
+        Dict with counts of cleaned organizations and records.
+    """
+    from datetime import timedelta
+
+    from ocr_worker.database import get_session, text
+
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=90)
+
+    logger.info("Starting data retention enforcement (cutoff: %s)", cutoff.isoformat())
+
+    session = get_session()
+    orgs_deleted = 0
+    exports_cleaned = 0
+    try:
+        # Find orgs canceled 90+ days ago
+        rows = session.execute(
+            text("""
+                SELECT id, name, subscription_canceled_at
+                FROM organizations
+                WHERE subscription_status = 'canceled'
+                  AND subscription_canceled_at IS NOT NULL
+                  AND subscription_canceled_at < :cutoff
+            """),
+            {"cutoff": cutoff},
+        ).fetchall()
+
+        for row in rows:
+            org_id = str(row[0])
+            org_name = row[1]
+            canceled_at = row[2]
+
+            logger.warning(
+                "Deleting data for org %s (%s) — canceled %s (90+ days ago)",
+                org_name,
+                org_id,
+                canceled_at,
+            )
+
+            # Delete in order respecting foreign keys
+            for table in [
+                "invoice_line_items",
+                "correction_logs",
+                "accounting_intents",
+                "scheduled_export_logs",
+                "automation_rules",
+                "consent_records",
+                "deletion_requests",
+                "data_processing_agreements",
+                "export_templates",
+                "minimax_configs",
+                "clients",
+                "audit_logs",
+                "invoices",
+                "usage_records",
+                "invitations",
+                "join_requests",
+            ]:
+                session.execute(
+                    text(f"DELETE FROM {table} WHERE organization_id = :org_id"),
+                    {"org_id": org_id},
+                )
+
+            # Delete audit logs referencing users in this org
+            session.execute(
+                text(
+                    "DELETE FROM audit_logs WHERE user_id IN "
+                    "(SELECT id FROM users WHERE organization_id = :org_id)"
+                ),
+                {"org_id": org_id},
+            )
+
+            # Delete users belonging to this org
+            session.execute(
+                text("DELETE FROM users WHERE organization_id = :org_id"),
+                {"org_id": org_id},
+            )
+
+            # Delete the organization itself
+            session.execute(
+                text("DELETE FROM organizations WHERE id = :org_id"),
+                {"org_id": org_id},
+            )
+
+            session.commit()
+            orgs_deleted += 1
+            logger.info("Deleted all data for org %s (%s)", org_name, org_id)
+
+        # Clean up expired export files (older than 30 days)
+        result = session.execute(
+            text("""
+                UPDATE scheduled_export_logs
+                SET status = 'expired', download_url = NULL
+                WHERE status = 'ready'
+                  AND expires_at IS NOT NULL
+                  AND expires_at < :now
+            """),
+            {"now": now},
+        )
+        exports_cleaned = result.rowcount or 0
+        session.commit()
+
+    except Exception:
+        session.rollback()
+        logger.exception("Data retention enforcement failed")
+        raise
+    finally:
+        session.close()
+
+    logger.info(
+        "Data retention complete: %d orgs deleted, %d exports expired",
+        orgs_deleted,
+        exports_cleaned,
+    )
+    return {
+        "organizations_deleted": orgs_deleted,
+        "exports_expired": exports_cleaned,
+    }
+
+
 @app.task(name="ocr_worker.tasks.run_monthly_archive_exports")
 def run_monthly_archive_exports() -> dict[str, Any]:
     """Run automated monthly archive exports for all organizations.

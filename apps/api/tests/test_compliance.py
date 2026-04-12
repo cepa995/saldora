@@ -424,7 +424,7 @@ async def test_privacy_policy_public(client: AsyncClient):
     resp = await client.get("/api/v1/compliance/privacy-policy")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["version"] == "1.0"
+    assert data["version"] == "2.0"
     assert "ZZPL" in data["content"]
     assert "Poverenik" in data["content"]
 
@@ -434,7 +434,8 @@ async def test_privacy_policy_contains_required_sections(client: AsyncClient):
     resp = await client.get("/api/v1/compliance/privacy-policy")
     content = resp.json()["content"]
     assert "Rukovalac podataka" in content
-    assert "Svrha obrade" in content
+    assert "O usluzi" in content
     assert "Pravni osnov" in content
     assert "Prava lica" in content
     assert "Član 30 ZZPL" in content
+    assert "NIJE servis za trajno" in content
