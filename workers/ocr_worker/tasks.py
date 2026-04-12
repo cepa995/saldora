@@ -958,7 +958,6 @@ def enforce_data_retention() -> dict[str, Any]:
                 "accounting_intents",
                 "scheduled_export_logs",
                 "automation_rules",
-                "rule_executions",
                 "consent_records",
                 "deletion_requests",
                 "data_processing_agreements",
@@ -975,6 +974,15 @@ def enforce_data_retention() -> dict[str, Any]:
                     text(f"DELETE FROM {table} WHERE organization_id = :org_id"),
                     {"org_id": org_id},
                 )
+
+            # Delete audit logs referencing users in this org
+            session.execute(
+                text(
+                    "DELETE FROM audit_logs WHERE user_id IN "
+                    "(SELECT id FROM users WHERE organization_id = :org_id)"
+                ),
+                {"org_id": org_id},
+            )
 
             # Delete users belonging to this org
             session.execute(
