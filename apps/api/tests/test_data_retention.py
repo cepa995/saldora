@@ -289,9 +289,7 @@ async def test_paddle_cancel_sets_canceled_at(client: AsyncClient, test_engine):
     async with factory() as session:
         from app.services.paddle import _update_org_subscription
 
-        await _update_org_subscription(
-            session, org_id=org_id, subscription_status="canceled"
-        )
+        await _update_org_subscription(session, org_id=org_id, subscription_status="canceled")
 
     async with factory() as session:
         result = await session.execute(
