@@ -42,7 +42,7 @@ class ScheduledExportLog(Base, UUIDMixin):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
     )
-    period: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    period: Mapped[str] = mapped_column(String(7), nullable=False, server_default="")
     delivery_method: Mapped[str] = mapped_column(String(20), nullable=False, server_default="email")
     delivered_to: Mapped[str] = mapped_column(String(255), nullable=False, server_default="")
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
