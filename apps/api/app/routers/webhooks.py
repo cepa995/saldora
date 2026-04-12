@@ -1,75 +1,11 @@
-"""Webhook router — Paddle Billing and other integrations."""
+"""Webhook router — external integration endpoints."""
 
-import json
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.config import get_settings
-from app.database import get_db
-from app.services.paddle import WEBHOOK_HANDLERS, verify_paddle_signature
+from fastapi import APIRouter, Request
 
 router = APIRouter()
-settings = get_settings()
 logger = logging.getLogger(__name__)
-
-
-@router.post("/paddle")
-async def paddle_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    paddle_signature: str = Header(alias="Paddle-Signature"),
-) -> dict[str, str]:
-    """Handle Paddle Billing webhook events.
-
-    Verifies the webhook signature, then dispatches to the appropriate
-    handler based on event type.
-
-    Processes subscription lifecycle events:
-    - subscription.created / subscription.activated
-    - subscription.updated
-    - subscription.canceled
-    - transaction.completed
-    - transaction.payment_failed
-
-    Args:
-        request: Raw HTTP request (need body bytes for signature verification).
-        paddle_signature: Paddle-Signature header value.
-
-    Returns:
-        Acknowledgement dict.
-    """
-    raw_body = await request.body()
-
-    # Verify webhook signature (required — reject if secret not configured)
-    if not settings.paddle_webhook_secret:
-        logger.error("Paddle webhook received but PADDLE_WEBHOOK_SECRET is not configured")
-        raise HTTPException(status_code=500, detail="Webhook signature verification not configured")
-    if not verify_paddle_signature(raw_body, paddle_signature, settings.paddle_webhook_secret):
-        logger.warning("Paddle webhook signature verification failed")
-        raise HTTPException(status_code=400, detail="Invalid signature")
-
-    # Parse event
-    try:
-        payload = json.loads(raw_body)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    event_type = payload.get("event_type", "")
-    data = payload.get("data", {})
-
-    handler = WEBHOOK_HANDLERS.get(event_type)
-    if handler:
-        try:
-            await handler(db, data)
-        except Exception:
-            logger.exception("Error handling Paddle event: %s", event_type)
-            raise HTTPException(status_code=500, detail="Webhook processing error")
-    else:
-        logger.debug("Unhandled Paddle event type: %s", event_type)
-
-    return {"status": "received"}
 
 
 @router.post("/apr")

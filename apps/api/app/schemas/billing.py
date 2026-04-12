@@ -32,11 +32,7 @@ class SubscriptionResponse(BaseModel):
     )
     subscription_status: str | None = Field(
         default=None,
-        description="Paddle subscription status: active, paused, past_due, canceled",
-    )
-    paddle_customer_id: str | None = Field(
-        default=None,
-        description="Paddle customer ID for returning customers",
+        description="Subscription status: active, paused, past_due, canceled",
     )
 
 
@@ -54,29 +50,3 @@ class UsageResponse(BaseModel):
     api_calls: int = Field(description="API calls this period")
     storage_bytes: int = Field(description="Storage used this period in bytes")
     organization_name: str = Field(description="Organization name")
-
-
-class BillingConfigResponse(BaseModel):
-    """Public Paddle configuration for frontend initialization."""
-
-    paddle_environment: str = Field(description="sandbox or production")
-    paddle_client_token: str = Field(description="Paddle client-side token for Paddle.js")
-    prices: dict[str, str | None] = Field(
-        description="Mapping of plan_interval keys to Paddle price IDs"
-    )
-
-
-class CheckoutRequest(BaseModel):
-    """Request to generate Paddle checkout settings."""
-
-    tier: str = Field(description="Target plan: starter, pro, agency")
-    interval: str = Field(description="Billing interval: monthly or annual")
-
-
-class CheckoutResponse(BaseModel):
-    """Checkout settings for Paddle.js overlay."""
-
-    price_id: str = Field(description="Paddle price identifier")
-    customer_email: str | None = Field(default=None, description="Pre-fill customer email")
-    customer_id: str | None = Field(default=None, description="Existing Paddle customer ID")
-    custom_data: dict = Field(description="Custom data including organization_id")

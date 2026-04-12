@@ -39,7 +39,6 @@ RUN pip install \
     "email-validator>=2.0.0" \
     "openpyxl>=3.1.0" \
     "resend>=2.0.0" \
-    "paddle-python-sdk>=1.0.0" \
     "slowapi>=0.1.9"
 
 # Copy application code

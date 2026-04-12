@@ -1478,7 +1478,7 @@ function PricingSection() {
         "NBS kursna lista",
       ],
       overage: "Prekoračenje: €0,10 po fakturi",
-      cta: "Započni besplatno",
+      cta: "Kontaktirajte nas",
       popular: false,
       icon: "🚀",
       color: "violet",
@@ -1499,7 +1499,7 @@ function PricingSection() {
         "NBS kursna lista",
       ],
       overage: "Prekoračenje: €0,07 po fakturi",
-      cta: "Započni besplatno",
+      cta: "Kontaktirajte nas",
       popular: true,
       icon: "⭐",
       color: "indigo",
@@ -1519,7 +1519,7 @@ function PricingSection() {
         "Prioritetna podrška",
       ],
       overage: "Prekoračenje: €0,05 po fakturi",
-      cta: "Započni besplatno",
+      cta: "Kontaktirajte nas",
       popular: false,
       icon: "🏢",
       color: "gray",
@@ -1633,7 +1633,7 @@ function PricingSection() {
 
                 {/* CTA Button */}
                 <a
-                  href="#kontakt"
+                  href="mailto:info@saldora.rs"
                   className={`relative flex items-center justify-center gap-2 w-full py-4 text-center font-medium rounded-full transition-all duration-300 overflow-hidden ${
                     plan.popular
                       ? "bg-white text-gray-900 hover:bg-gray-100 hover:shadow-lg"
@@ -1644,9 +1644,9 @@ function PricingSection() {
                   <ArrowRightIcon className="w-4 h-4" />
                 </a>
 
-                {/* Trial note */}
+                {/* Billing note */}
                 <p className={`text-center text-xs mt-4 ${plan.popular ? "text-gray-500" : "text-gray-400"}`}>
-                  30 dana besplatno • Bez kartice
+                  Profaktura za B2B klijente
                 </p>
               </div>
             </div>
