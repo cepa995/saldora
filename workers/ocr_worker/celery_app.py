@@ -58,6 +58,10 @@ app.conf.update(
                 hour=6, minute=0, day_of_month=1
             ),  # 1st of every month at 06:00
         },
+        "enforce-data-retention": {
+            "task": "ocr_worker.tasks.enforce_data_retention",
+            "schedule": crontab(hour=3, minute=0),  # Daily at 03:00
+        },
     },
 )
 

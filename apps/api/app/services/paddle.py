@@ -363,5 +363,12 @@ async def _update_org_subscription(
         org.plan = plan
     if subscription_status is not None:
         org.subscription_status = subscription_status
+        # Track when subscription was canceled for retention policy
+        if subscription_status == "canceled":
+            from datetime import UTC, datetime
+
+            org.subscription_canceled_at = datetime.now(UTC)
+        elif subscription_status == "active":
+            org.subscription_canceled_at = None
 
     await db.commit()

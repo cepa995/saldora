@@ -4,9 +4,10 @@ Organization model.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Index, String
+from sqlalchemy import DateTime, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +38,9 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     payment_provider_subscription_id: Mapped[str | None] = mapped_column(String(255))
     plan: Mapped[str] = mapped_column(String(50), default="free")
     subscription_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    subscription_canceled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     settings: Mapped[dict] = mapped_column(JSONB, server_default="{}", default=dict)
     logo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
