@@ -718,7 +718,7 @@ async def create_audit_export(
         status=audit_export.status,
         reason=audit_export.reason,
         expires_at=audit_export.expires_at,
-        created_at=audit_export.created_at,
+        created_at=audit_export.delivered_at,
     )
 
 

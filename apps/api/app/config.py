@@ -65,20 +65,6 @@ class Settings(BaseSettings):
     apr_api_timeout: int = 10
     apr_cache_ttl: int = 86400  # 24 hours
 
-    # Paddle Billing
-    paddle_api_key: str = ""
-    paddle_webhook_secret: str = ""
-    paddle_environment: Literal["sandbox", "production"] = "sandbox"
-    paddle_client_side_token: str = ""
-
-    # Paddle Price IDs (per plan + interval)
-    paddle_price_id_starter_monthly: str = ""
-    paddle_price_id_starter_annual: str = ""
-    paddle_price_id_pro_monthly: str = ""
-    paddle_price_id_pro_annual: str = ""
-    paddle_price_id_agency_monthly: str = ""
-    paddle_price_id_agency_annual: str = ""
-
     # Sentry
     sentry_dsn: str | None = None
 

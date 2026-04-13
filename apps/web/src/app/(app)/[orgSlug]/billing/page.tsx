@@ -1,13 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { AccessDenied } from '@/components';
-import { Toast } from '@/components/Toast';
 import { useBilling } from '@/hooks/useBilling';
-import { createCheckout, fetchBillingConfig } from '@/lib/api/billing';
-import { initPaddle, getPaddle, openCheckout } from '@/lib/paddle';
 
 /* -- Plan tier data ------------------------------------------------------ */
 
@@ -18,8 +15,8 @@ const PLANS = [
     annualPrice: 24,
     invoiceLimit: 100,
     userLimit: 2,
-    overage: '€0,10',
-    icon: '🚀',
+    overage: '\u20AC0,10',
+    icon: '\uD83D\uDE80',
     descKey: 'planDescStarter',
     features: [
       'pricingFeatureOcr',
@@ -35,8 +32,8 @@ const PLANS = [
     annualPrice: 66,
     invoiceLimit: 400,
     userLimit: 5,
-    overage: '€0,07',
-    icon: '⭐',
+    overage: '\u20AC0,07',
+    icon: '\u2B50',
     descKey: 'planDescPro',
     features: [
       'pricingFeatureOcr',
@@ -55,8 +52,8 @@ const PLANS = [
     annualPrice: 165,
     invoiceLimit: 1500,
     userLimit: 15,
-    overage: '€0,05',
-    icon: '🏢',
+    overage: '\u20AC0,05',
+    icon: '\uD83C\uDFE2',
     descKey: 'planDescAgency',
     features: [
       'pricingFeatureAllPro',
@@ -152,53 +149,13 @@ export default function BillingPage() {
   const t = useTranslations('billing');
   const tLanding = useTranslations('landing');
   const tCommon = useTranslations('common');
-  const [toast, setToast] = useState<{ message: string; type: 'info' | 'error' } | null>(null);
   const [annual, setAnnual] = useState(true);
-  const [upgrading, setUpgrading] = useState(false);
 
   const isAdmin = user?.role === 'admin';
-
-  // Initialize Paddle SDK on mount
-  useEffect(() => {
-    if (getPaddle()) return;
-
-    fetchBillingConfig()
-      .then((config) => {
-        if (!config.paddle_client_token) return;
-        return initPaddle(config.paddle_client_token, config.paddle_environment);
-      })
-      .catch(() => {
-        // Paddle not configured — upgrade buttons will show fallback toast
-      });
-  }, []);
 
   // Non-admin guard
   if (!isAdmin) {
     return <AccessDenied />;
-  }
-
-  async function handleUpgradeClick(planKey: string) {
-    if (upgrading) return;
-    setUpgrading(true);
-    try {
-      const interval = annual ? 'annual' : 'monthly';
-      const checkout = await createCheckout(planKey, interval);
-      openCheckout({
-        priceId: checkout.price_id,
-        customerEmail: checkout.customer_email ?? undefined,
-        customerId: checkout.customer_id ?? undefined,
-        customData: checkout.custom_data,
-        successUrl: `${window.location.origin}${window.location.pathname}?success=true`,
-      });
-    } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'message' in err
-          ? String((err as { message: string }).message)
-          : t('comingSoonDesc');
-      setToast({ message, type: 'error' });
-    } finally {
-      setUpgrading(false);
-    }
   }
 
   const usagePercent =
@@ -456,17 +413,16 @@ export default function BillingPage() {
                         {t('yourPlan')}
                       </span>
                     ) : (
-                      <button
-                        onClick={() => handleUpgradeClick(plan.key)}
-                        disabled={upgrading}
-                        className={`w-full py-4 font-medium rounded-full transition-all duration-300 disabled:opacity-50 ${
+                      <a
+                        href="mailto:info@saldora.rs"
+                        className={`flex items-center justify-center w-full py-4 font-medium rounded-full transition-all duration-300 ${
                           plan.popular
                             ? 'bg-white text-gray-900 hover:bg-gray-100 hover:shadow-lg'
                             : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-xl hover:shadow-violet-500/30 hover:scale-[1.02]'
                         }`}
                       >
-                        {upgrading ? t('processing') : t('upgrade')}
-                      </button>
+                        Kontaktirajte nas
+                      </a>
                     )}
                   </div>
                 </div>
@@ -475,11 +431,6 @@ export default function BillingPage() {
           </div>
         )}
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      )}
     </div>
   );
 }

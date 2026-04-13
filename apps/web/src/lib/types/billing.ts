@@ -9,18 +9,4 @@ export interface SubscriptionInfo {
   organization_name: string;
   features: string[];
   subscription_status: string | null;
-  paddle_customer_id: string | null;
-}
-
-export interface BillingConfig {
-  paddle_environment: string;
-  paddle_client_token: string;
-  prices: Record<string, string | null>;
-}
-
-export interface CheckoutSettings {
-  price_id: string;
-  customer_email: string | null;
-  customer_id: string | null;
-  custom_data: Record<string, string>;
 }
