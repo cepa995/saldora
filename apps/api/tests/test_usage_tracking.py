@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 from httpx import AsyncClient
@@ -158,6 +159,80 @@ class TestFeatureGate:
 
         resp = await client.get("/api/v1/rules/", headers=headers)
         assert resp.status_code != 403
+
+
+class TestUsageIncrement:
+    """Test that uploading invoices increments the usage counter in real time."""
+
+    @patch("celery.Celery.send_task")
+    @patch(
+        "app.routers.invoices.upload_document",
+        return_value="organizations/org-id/invoices/inv-id/original.pdf",
+    )
+    async def test_upload_increments_usage_counter(
+        self, _mock_s3, _mock_celery, client, test_engine
+    ):
+        """Uploading an invoice immediately increments monthly_usage on billing."""
+        headers = await _register_and_login(client, email="usage-inc@example.com")
+
+        # Before upload: usage should be 0
+        resp = await client.get("/api/v1/billing/subscription", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["monthly_usage"] == 0
+
+        # Upload first invoice
+        resp = await client.post(
+            "/api/v1/invoices/upload",
+            headers=headers,
+            files={"file": ("inv1.pdf", b"%PDF-1.4 test", "application/pdf")},
+        )
+        assert resp.status_code == 202
+
+        # Usage should now be 1
+        resp = await client.get("/api/v1/billing/subscription", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["monthly_usage"] == 1
+
+        # Upload second invoice
+        resp = await client.post(
+            "/api/v1/invoices/upload",
+            headers=headers,
+            files={"file": ("inv2.pdf", b"%PDF-1.4 test2", "application/pdf")},
+        )
+        assert resp.status_code == 202
+
+        # Usage should now be 2
+        resp = await client.get("/api/v1/billing/subscription", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["monthly_usage"] == 2
+
+    @patch("celery.Celery.send_task")
+    @patch(
+        "app.routers.invoices.upload_document",
+        return_value="organizations/org-id/invoices/inv-id/original.pdf",
+    )
+    async def test_batch_upload_increments_usage_correctly(
+        self, _mock_s3, _mock_celery, client, test_engine
+    ):
+        """Batch upload increments usage by the number of successful uploads."""
+        headers = await _register_and_login(client, email="usage-batch@example.com")
+
+        # Batch upload 3 invoices
+        resp = await client.post(
+            "/api/v1/invoices/upload/batch",
+            headers=headers,
+            files=[
+                ("files", ("a.pdf", b"%PDF-1.4 a", "application/pdf")),
+                ("files", ("b.pdf", b"%PDF-1.4 b", "application/pdf")),
+                ("files", ("c.pdf", b"%PDF-1.4 c", "application/pdf")),
+            ],
+        )
+        assert resp.status_code == 202
+
+        # Usage should be 3
+        resp = await client.get("/api/v1/billing/subscription", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["monthly_usage"] == 3
 
 
 class TestInvoiceLimit:
