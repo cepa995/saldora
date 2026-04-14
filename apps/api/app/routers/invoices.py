@@ -474,7 +474,7 @@ async def upload_batch(
     await db.commit()
 
     # Increment usage record (never decremented — survives invoice deletion)
-    success_count = sum(1 for r in results if r.status == "processing")
+    success_count = sum(1 for r in results if r.status in ("queued", "uploaded"))
     if success_count > 0:
         await _increment_usage(db, user.organization_id, success_count)
 

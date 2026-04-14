@@ -78,6 +78,19 @@ export function useInvoiceList(): UseInvoiceListReturn {
     load(filters, selectedClientId);
   }, [filters, selectedClientId, load]);
 
+  // Auto-refresh every 5s when there are invoices still processing
+  useEffect(() => {
+    const hasProcessing = invoices.some(
+      (inv) => inv.status === 'processing',
+    );
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      load(filters, selectedClientId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [invoices, filters, selectedClientId, load]);
+
   const setStatus = useCallback((status: InvoiceStatus | undefined) => {
     setFilters((prev) => ({ ...prev, status, page: 1 }));
     setSelectedIds(new Set());
