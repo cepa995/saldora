@@ -39,7 +39,6 @@ const PLANS = [
       'pricingFeatureOcr',
       'pricingFeatureAllExports',
       'pricingFeatureAccounting',
-      'pricingFeatureSef',
       'pricingFeatureMinimaxPush',
       'pricingFeatureAuditExport',
       'pricingFeatureNbs',

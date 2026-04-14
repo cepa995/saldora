@@ -62,6 +62,10 @@ app.conf.update(
             "task": "ocr_worker.tasks.enforce_data_retention",
             "schedule": crontab(hour=3, minute=0),  # Daily at 03:00
         },
+        "daily-db-backup": {
+            "task": "ocr_worker.tasks.backup_database",
+            "schedule": crontab(hour=4, minute=0),  # Daily at 04:00
+        },
     },
 )
 
