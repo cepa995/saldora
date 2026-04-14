@@ -39,7 +39,7 @@ services:
   # FastAPI Backend
   api:
     build:
-      context: .
+      context: ../..
       dockerfile: apps/api/Dockerfile
     container_name: saldora-api
     restart: always
@@ -69,7 +69,7 @@ services:
   # Next.js Web App
   web:
     build:
-      context: .
+      context: ../..
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
@@ -81,7 +81,7 @@ services:
   # OCR Worker (connects to Modal via HTTPS, no local GPU)
   ocr-worker:
     build:
-      context: .
+      context: ../..
       dockerfile: workers/Dockerfile
     container_name: saldora-ocr-worker
     restart: always
@@ -109,7 +109,7 @@ services:
   # Celery Beat (scheduled tasks: backups, retention, NBS rates)
   celery-beat:
     build:
-      context: .
+      context: ../..
       dockerfile: workers/Dockerfile
     container_name: saldora-celery-beat
     restart: always
