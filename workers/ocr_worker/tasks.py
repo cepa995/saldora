@@ -1144,6 +1144,11 @@ def backup_database() -> dict[str, Any]:
     finally:
         session.close()
 
+    import hashlib
+
+    sql_sha256 = hashlib.sha256(sql_bytes).hexdigest()
+    compressed_sha256 = hashlib.sha256(compressed).hexdigest()
+
     manifest = {
         "timestamp": datetime.now(UTC).isoformat(),
         "database": parsed.path.lstrip("/") if parsed.path else "saldora",
@@ -1152,6 +1157,8 @@ def backup_database() -> dict[str, Any]:
         "schema_version": schema_version,
         "sql_dump_size_bytes": len(sql_bytes),
         "compressed_size_bytes": len(compressed),
+        "sql_sha256": sql_sha256,
+        "compressed_sha256": compressed_sha256,
     }
 
     # Create ZIP with dump + manifest
@@ -1161,6 +1168,19 @@ def backup_database() -> dict[str, Any]:
         zf.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
 
     zip_bytes = zip_buffer.getvalue()
+    zip_sha256 = hashlib.sha256(zip_bytes).hexdigest()
+
+    # Build checksum file for independent verification
+    checksum = {
+        "timestamp": manifest["timestamp"],
+        "zip_sha256": zip_sha256,
+        "zip_size_bytes": len(zip_bytes),
+        "sql_sha256": sql_sha256,
+        "compressed_sha256": compressed_sha256,
+        "total_records": total_records,
+        "tables": len(table_counts),
+        "schema_version": schema_version,
+    }
 
     # Upload to S3/R2
     s3 = boto3.client(
@@ -1171,12 +1191,19 @@ def backup_database() -> dict[str, Any]:
     )
     bucket = os.getenv("STORAGE_BUCKET", "saldora-documents")
     s3_key = f"backups/db/saldora_{today}.zip"
+    checksum_key = f"backups/db/saldora_{today}.checksum.json"
 
     s3.put_object(
         Bucket=bucket,
         Key=s3_key,
         Body=zip_bytes,
         ContentType="application/zip",
+    )
+    s3.put_object(
+        Bucket=bucket,
+        Key=checksum_key,
+        Body=json.dumps(checksum, indent=2, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
     )
 
     logger.info(

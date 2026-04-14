@@ -3,15 +3,14 @@
 Verifies that the backup task:
 - Creates a valid ZIP with SQL dump + manifest
 - Manifest record counts match actual DB state
-- Manifest contains schema version
+- Manifest contains checksums (SHA-256) for integrity verification
+- Separate checksum.json file uploaded alongside the ZIP
 - Compressed SQL dump is valid gzip
-
-Since pg_dump requires a real PostgreSQL client binary, we mock the
-subprocess call and provide a fake SQL dump. The manifest generation
-and ZIP creation are tested against the real test database.
+- Checksums in manifest match recomputed values from ZIP contents
 """
 
 import gzip
+import hashlib
 import json
 import sys
 import zipfile
@@ -54,11 +53,13 @@ async def _register_and_login(
 
 
 def _get_org_id(headers: dict) -> str:
+    """Extract organization_id from the JWT token in auth headers."""
     token = headers["Authorization"].removeprefix("Bearer ")
     return decode_token(token)["org"]
 
 
 async def _insert_invoice(test_engine, org_id: str) -> str:
+    """Insert a minimal invoice row into the test database."""
     inv_id = str(uuid4())
     factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
@@ -74,45 +75,53 @@ async def _insert_invoice(test_engine, org_id: str) -> str:
     return inv_id
 
 
-FAKE_SQL_DUMP = b"""--
--- PostgreSQL database dump
---
-CREATE TABLE organizations (id uuid PRIMARY KEY);
-CREATE TABLE invoices (id uuid PRIMARY KEY);
-INSERT INTO organizations VALUES ('test-org-id');
-"""
+def _setup_mocks(test_engine):
+    """Create mock S3, pg_dump, and sync DB session for backup tests.
 
-
-async def test_backup_creates_valid_zip_with_manifest(client: AsyncClient, test_engine):
-    """Backup produces ZIP with SQL dump and manifest matching DB state."""
-    headers = await _register_and_login(client, "backup-zip@test.com")
-    org_id = _get_org_id(headers)
-    await _insert_invoice(test_engine, org_id)
-
-    captured_zip = {}
+    Returns:
+        Tuple of (captured_uploads dict, mock_s3, mock_pg_result, sync_url).
+    """
+    captured = {}
 
     def mock_put_object(**kwargs):
-        captured_zip["body"] = kwargs["Body"]
+        captured[kwargs["Key"]] = kwargs["Body"]
 
     mock_s3 = MagicMock()
     mock_s3.put_object = mock_put_object
     mock_s3.list_objects_v2.return_value = {"Contents": []}
 
-    # Mock pg_dump to return fake SQL
     mock_result = MagicMock()
     mock_result.returncode = 0
-    mock_result.stdout = FAKE_SQL_DUMP
+    mock_result.stdout = (
+        b"--\n-- PostgreSQL database dump\n--\n"
+        b"CREATE TABLE organizations (id uuid PRIMARY KEY);\n"
+        b"CREATE TABLE invoices (id uuid PRIMARY KEY);\n"
+        b"INSERT INTO organizations VALUES ('test-org-id');\n"
+    )
 
     sync_url = test_engine.url.render_as_string(hide_password=False).replace("+asyncpg", "")
 
-    # Create a sync session factory for the test DB
+    return captured, mock_s3, mock_result, sync_url
+
+
+def _run_backup(captured, mock_s3, mock_result, sync_url):
+    """Execute the backup task with mocked externals.
+
+    Args:
+        captured: Dict that collects uploaded S3 objects by key.
+        mock_s3: Mocked boto3 S3 client.
+        mock_result: Mocked subprocess.run result for pg_dump.
+        sync_url: Synchronous database URL for the test DB.
+
+    Returns:
+        Result dict from backup_database().
+    """
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
     sync_engine = create_engine(sync_url)
     sync_factory = sessionmaker(bind=sync_engine)
 
-    # Reset the cached engine in ocr_worker.database
     import ocr_worker.database as db_mod
 
     old_engine = db_mod._engine
@@ -143,18 +152,32 @@ async def test_backup_creates_valid_zip_with_manifest(client: AsyncClient, test_
         db_mod._SessionLocal = old_factory
         sync_engine.dispose()
 
+    return result
+
+
+async def test_backup_creates_valid_zip_with_manifest(client: AsyncClient, test_engine):
+    """Backup produces ZIP with SQL dump and manifest matching DB state."""
+    headers = await _register_and_login(client, "backup-zip@test.com")
+    org_id = _get_org_id(headers)
+    await _insert_invoice(test_engine, org_id)
+
+    captured, mock_s3, mock_result, sync_url = _setup_mocks(test_engine)
+    result = _run_backup(captured, mock_s3, mock_result, sync_url)
+
     assert result["status"] == "success"
     assert result["total_records"] > 0
     assert result["tables"] > 0
 
-    # Verify ZIP structure
-    zip_bytes = captured_zip["body"]
+    # Find the ZIP in captured uploads
+    zip_key = [k for k in captured if k.endswith(".zip")][0]
+    zip_bytes = captured[zip_key]
+
     with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
         names = zf.namelist()
         assert any(n.endswith(".sql.gz") for n in names)
         assert "manifest.json" in names
 
-        # Verify manifest
+        # Verify manifest structure
         manifest = json.loads(zf.read("manifest.json"))
         assert "tables" in manifest
         assert "total_records" in manifest
@@ -178,7 +201,6 @@ async def test_backup_manifest_counts_match_db(client: AsyncClient, test_engine)
     headers = await _register_and_login(client, "backup-counts@test.com")
     org_id = _get_org_id(headers)
 
-    # Insert multiple invoices
     for _ in range(3):
         await _insert_invoice(test_engine, org_id)
 
@@ -188,63 +210,101 @@ async def test_backup_manifest_counts_match_db(client: AsyncClient, test_engine)
         org_count = (await session.execute(text("SELECT COUNT(*) FROM organizations"))).scalar()
         inv_count = (await session.execute(text("SELECT COUNT(*) FROM invoices"))).scalar()
 
-    captured_zip = {}
-
-    def mock_put_object(**kwargs):
-        captured_zip["body"] = kwargs["Body"]
-
-    mock_s3 = MagicMock()
-    mock_s3.put_object = mock_put_object
-    mock_s3.list_objects_v2.return_value = {"Contents": []}
-
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = FAKE_SQL_DUMP
-
-    sync_url = test_engine.url.render_as_string(hide_password=False).replace("+asyncpg", "")
-
-    from sqlalchemy import create_engine as create_sync_engine
-    from sqlalchemy.orm import sessionmaker as sync_sessionmaker
-
-    sync_engine = create_sync_engine(sync_url)
-    sync_factory = sync_sessionmaker(bind=sync_engine)
-
-    import ocr_worker.database as db_mod
-
-    old_engine = db_mod._engine
-    old_factory = db_mod._SessionLocal
-    db_mod._engine = sync_engine
-    db_mod._SessionLocal = sync_factory
-
-    try:
-        with (
-            patch("boto3.client", return_value=mock_s3),
-            patch("subprocess.run", return_value=mock_result),
-            patch.dict(
-                "os.environ",
-                {
-                    "DATABASE_URL": sync_url,
-                    "STORAGE_ENDPOINT": "http://localhost:9010",
-                    "STORAGE_ACCESS_KEY": "test",
-                    "STORAGE_SECRET_KEY": "test",
-                    "STORAGE_BUCKET": "test-bucket",
-                },
-            ),
-        ):
-            from ocr_worker.tasks import backup_database
-
-            result = backup_database()
-    finally:
-        db_mod._engine = old_engine
-        db_mod._SessionLocal = old_factory
-        sync_engine.dispose()
+    captured, mock_s3, mock_result, sync_url = _setup_mocks(test_engine)
+    result = _run_backup(captured, mock_s3, mock_result, sync_url)
 
     assert result["status"] == "success"
 
-    with zipfile.ZipFile(BytesIO(captured_zip["body"])) as zf:
+    zip_key = [k for k in captured if k.endswith(".zip")][0]
+    with zipfile.ZipFile(BytesIO(captured[zip_key])) as zf:
         manifest = json.loads(zf.read("manifest.json"))
         assert manifest["tables"]["organizations"] == org_count
         assert manifest["tables"]["invoices"] == inv_count
+
+
+async def test_backup_manifest_contains_checksums(client: AsyncClient, test_engine):
+    """Manifest includes SHA-256 checksums for SQL dump and compressed file."""
+    headers = await _register_and_login(client, "backup-checksum@test.com")
+    org_id = _get_org_id(headers)
+    await _insert_invoice(test_engine, org_id)
+
+    captured, mock_s3, mock_result, sync_url = _setup_mocks(test_engine)
+    result = _run_backup(captured, mock_s3, mock_result, sync_url)
+
+    assert result["status"] == "success"
+
+    zip_key = [k for k in captured if k.endswith(".zip")][0]
+    with zipfile.ZipFile(BytesIO(captured[zip_key])) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+
+        # Checksums must be present
+        assert "sql_sha256" in manifest
+        assert "compressed_sha256" in manifest
+        assert len(manifest["sql_sha256"]) == 64  # SHA-256 hex length
+        assert len(manifest["compressed_sha256"]) == 64
+
+
+async def test_backup_checksums_match_zip_contents(client: AsyncClient, test_engine):
+    """Recomputed checksums from ZIP contents match manifest values."""
+    headers = await _register_and_login(client, "backup-verify@test.com")
+    org_id = _get_org_id(headers)
+    await _insert_invoice(test_engine, org_id)
+
+    captured, mock_s3, mock_result, sync_url = _setup_mocks(test_engine)
+    result = _run_backup(captured, mock_s3, mock_result, sync_url)
+
+    assert result["status"] == "success"
+
+    zip_key = [k for k in captured if k.endswith(".zip")][0]
+    zip_bytes = captured[zip_key]
+
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+
+        # Extract the compressed SQL dump from the ZIP
+        sql_gz_name = [n for n in zf.namelist() if n.endswith(".sql.gz")][0]
+        compressed_bytes = zf.read(sql_gz_name)
+
+        # Recompute checksums
+        recomputed_compressed_sha256 = hashlib.sha256(compressed_bytes).hexdigest()
+        assert recomputed_compressed_sha256 == manifest["compressed_sha256"]
+
+        # Decompress and verify raw SQL checksum
+        raw_sql = gzip.decompress(compressed_bytes)
+        recomputed_sql_sha256 = hashlib.sha256(raw_sql).hexdigest()
+        assert recomputed_sql_sha256 == manifest["sql_sha256"]
+
+        # Verify sizes match
+        assert len(raw_sql) == manifest["sql_dump_size_bytes"]
+        assert len(compressed_bytes) == manifest["compressed_size_bytes"]
+
+
+async def test_backup_uploads_checksum_file(client: AsyncClient, test_engine):
+    """Separate checksum.json file uploaded alongside the ZIP for independent verification."""
+    headers = await _register_and_login(client, "backup-csfile@test.com")
+    org_id = _get_org_id(headers)
+    await _insert_invoice(test_engine, org_id)
+
+    captured, mock_s3, mock_result, sync_url = _setup_mocks(test_engine)
+    result = _run_backup(captured, mock_s3, mock_result, sync_url)
+
+    assert result["status"] == "success"
+
+    # A checksum.json should be uploaded alongside the ZIP
+    checksum_key = [k for k in captured if k.endswith(".checksum.json")][0]
+    checksum = json.loads(captured[checksum_key])
+
+    assert "zip_sha256" in checksum
+    assert "sql_sha256" in checksum
+    assert "compressed_sha256" in checksum
+    assert "total_records" in checksum
+    assert "schema_version" in checksum
+    assert len(checksum["zip_sha256"]) == 64
+
+    # Verify the zip_sha256 matches the actual ZIP
+    zip_key = [k for k in captured if k.endswith(".zip")][0]
+    actual_zip_sha256 = hashlib.sha256(captured[zip_key]).hexdigest()
+    assert actual_zip_sha256 == checksum["zip_sha256"]
 
 
 async def test_backup_handles_pg_dump_failure(client: AsyncClient, test_engine):
