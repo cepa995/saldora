@@ -1,26 +1,31 @@
 """FastAPI dependencies for injection."""
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import NamedTuple
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import decode_token
+from app.auth import decode_token, verify_password
 from app.database import get_db
+from app.models.api_key import APIKey
 from app.models.invitation import Invitation
 from app.models.organization import Organization
 from app.models.user import User
 from app.plans import PLANS, Feature, PlanTier, get_plan
 
+logger = logging.getLogger(__name__)
+
 # This tells FastAPI to look for a Bearer token in the Authorization header.
 # tokenUrl is for the Swagger UI login form.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+# auto_error=False so we can fall back to API key when no Bearer token is present.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 # Role hierarchy: higher number = more permissions
 ROLE_HIERARCHY: dict[str, int] = {
@@ -30,52 +35,147 @@ ROLE_HIERARCHY: dict[str, int] = {
     "viewer": 1,
 }
 
+API_KEY_PREFIX = "sk_live_"
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+
+async def _authenticate_via_api_key(
+    api_key: str,
+    db: AsyncSession,
 ) -> User:
-    """
-    Extract the current user from the JWT token.
+    """Authenticate a request using an API key.
 
-    This is the main auth dependency. Add it to any endpoint that
-    requires authentication:
+    Looks up the key by prefix, verifies the hash, checks active/expiry,
+    updates last_used_at, and returns the associated user.
 
-        @router.get("/invoices")
-        async def list_invoices(user: User = Depends(get_current_user)):
-            # user is guaranteed to be authenticated here
+    Args:
+        api_key: Full API key string (sk_live_...).
+        db: Database session.
+
+    Returns:
+        The User who created the API key.
+
+    Raises:
+        HTTPException: 401 if key is invalid, revoked, or expired.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token",
-        headers={"WWW-Authenticate": "Bearer"},
+        detail="Invalid or revoked API key",
     )
 
-    try:
-        payload = decode_token(token)
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-        if user_id is None or token_type != "access":
-            raise credentials_exception
-
-        # Check token blacklist (logout invalidation)
-        jti = payload.get("jti")
-        if jti:
-            from app.security import is_token_blacklisted
-
-            if await is_token_blacklisted(jti):
-                raise credentials_exception
-    except JWTError:
+    if not api_key.startswith(API_KEY_PREFIX):
         raise credentials_exception
 
-    # Fetch user from database
-    result = await db.execute(select(User).where(User.id == UUID(user_id)))
-    user = result.scalar_one_or_none()
+    # Extract prefix for DB lookup (first 8 chars after sk_live_)
+    key_body = api_key[len(API_KEY_PREFIX):]
+    if len(key_body) < 8:
+        raise credentials_exception
+    prefix = key_body[:8]
 
+    # Find active keys matching this prefix
+    result = await db.execute(
+        select(APIKey).where(
+            and_(APIKey.key_prefix == prefix, APIKey.is_active.is_(True))
+        )
+    )
+    candidates = list(result.scalars().all())
+
+    # Verify hash against each candidate (usually just one)
+    matched_key: APIKey | None = None
+    for candidate in candidates:
+        if verify_password(api_key, candidate.key_hash):
+            matched_key = candidate
+            break
+
+    if matched_key is None:
+        raise credentials_exception
+
+    # Check expiration
+    if matched_key.expires_at and matched_key.expires_at < datetime.now(UTC):
+        raise credentials_exception
+
+    # Update last_used_at (fire-and-forget, don't block the request)
+    await db.execute(
+        update(APIKey)
+        .where(APIKey.id == matched_key.id)
+        .values(last_used_at=datetime.now(UTC))
+    )
+    await db.commit()
+
+    # Fetch the associated user
+    user_result = await db.execute(
+        select(User).where(User.id == matched_key.user_id)
+    )
+    user = user_result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
 
     return user
+
+
+async def get_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Extract the current user from JWT token or API key.
+
+    Checks in order:
+    1. Authorization: Bearer <jwt> header (existing JWT flow)
+    2. X-API-Key: sk_live_... header (API key flow)
+    3. Neither → 401
+
+    Args:
+        request: HTTP request (for reading X-API-Key header).
+        token: JWT token from Authorization header (optional).
+        db: Database session.
+
+    Returns:
+        Authenticated User instance.
+    """
+    # Try JWT first
+    if token:
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        try:
+            payload = decode_token(token)
+            user_id = payload.get("sub")
+            token_type = payload.get("type")
+            if user_id is None or token_type != "access":
+                raise credentials_exception
+
+            # Check token blacklist (logout invalidation)
+            jti = payload.get("jti")
+            if jti:
+                from app.security import is_token_blacklisted
+
+                if await is_token_blacklisted(jti):
+                    raise credentials_exception
+        except JWTError:
+            raise credentials_exception
+
+        result = await db.execute(select(User).where(User.id == UUID(user_id)))
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            raise credentials_exception
+
+        return user
+
+    # Try API key
+    api_key = request.headers.get("X-API-Key")
+    if api_key:
+        return await _authenticate_via_api_key(api_key, db)
+
+    # Neither provided
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required. Provide a Bearer token or X-API-Key header.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def require_role(minimum_role: str) -> Callable:

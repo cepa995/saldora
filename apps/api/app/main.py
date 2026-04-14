@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 from app.routers import (
     analytics,
+    api_keys,
     archive,
     audit_logs,
     auth,
@@ -128,6 +129,7 @@ app.add_middleware(RequestContextMiddleware)
 
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(api_keys.router, prefix="/api/v1/api-keys", tags=["API Keys"])
 app.include_router(invoices.router, prefix="/api/v1/invoices", tags=["Invoices"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["Export"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
