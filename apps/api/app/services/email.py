@@ -189,6 +189,38 @@ async def send_invitation_email(
     return await _send_email(to_email, subject, html)
 
 
+async def send_verification_email(
+    to_email: str,
+    first_name: str | None,
+    verification_url: str,
+) -> bool:
+    """Send an email verification link after registration.
+
+    Args:
+        to_email: Recipient email address.
+        first_name: User's first name for personalized greeting.
+        verification_url: URL with embedded JWT token to verify email.
+
+    Returns:
+        True if email was sent successfully, False otherwise.
+    """
+    greeting = first_name or "korisniče"
+
+    content = f"""<p>Zdravo, <strong>{greeting}</strong>!</p>
+    <p style="color: #6b7280;">
+      Vaš nalog na Saldora je uspešno kreiran.
+      Kliknite na dugme ispod da potvrdite vašu email adresu.
+      Link je važeći <strong>24 sata</strong>.
+    </p>
+    {_button_html("Potvrdite email", verification_url)}
+    <p style="color: #9ca3af; font-size: 13px; margin-top: 16px;">
+      Ako niste kreirali nalog na Saldora, ignorišite ovaj email.
+    </p>"""
+
+    html = _build_email_html("Potvrdite vašu email adresu", content)
+    return await _send_email(to_email, "Potvrdite email adresu — Saldora", html)
+
+
 async def send_welcome_email(to_email: str, first_name: str | None) -> bool:
     """Send a welcome email after registration.
 

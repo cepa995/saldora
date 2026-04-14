@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
     create_access_token,
+    create_email_verification_token,
     create_password_reset_token,
     create_refresh_token,
     decode_token,
@@ -39,7 +40,11 @@ from app.security import (
     record_failed_login,
 )
 from app.services import audit
-from app.services.email import send_password_reset_email, send_welcome_email
+from app.services.email import (
+    send_password_reset_email,
+    send_verification_email,
+    send_welcome_email,
+)
 
 router = APIRouter()
 settings = get_settings()
@@ -99,8 +104,12 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # 4. Send welcome email (non-blocking)
-    background_tasks.add_task(send_welcome_email, user.email, user.first_name)
+    # 4. Send verification email (non-blocking)
+    verification_token = create_email_verification_token(str(user.id), user.email)
+    verification_url = f"{settings.frontend_url}/verify-email?token={verification_token}"
+    background_tasks.add_task(
+        send_verification_email, user.email, user.first_name, verification_url
+    )
 
     # 5. Issue tokens so user can proceed to org setup
     access_token = create_access_token(
@@ -110,6 +119,7 @@ async def register(
         first_name=user.first_name,
         last_name=user.last_name,
         role=user.role,
+        email_verified=False,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -200,6 +210,7 @@ async def create_organization(
         last_name=user.last_name,
         role="admin",
         org_slug=org_slug,
+        email_verified=user.email_verified,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -285,6 +296,7 @@ async def login(
         last_name=user.last_name,
         role=user.role,
         org_slug=org_slug,
+        email_verified=user.email_verified,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -361,6 +373,7 @@ async def refresh(
         last_name=user.last_name,
         role=user.role,
         org_slug=org_slug,
+        email_verified=user.email_verified,
     )
     new_refresh_token = create_refresh_token(str(user.id))
 
@@ -548,3 +561,100 @@ async def confirm_password_reset(
     await db.commit()
 
     return {"message": "Password has been reset successfully"}
+
+
+@router.get("/verify")
+async def verify_email(
+    token: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Verify a user's email address using the token from the verification link.
+
+    Args:
+        token: JWT verification token from the email link.
+        request: HTTP request for audit context.
+        db: Database session.
+
+    Returns:
+        Success confirmation message.
+    """
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Link za verifikaciju je nevažeći ili je istekao",
+        )
+
+    if payload.get("type") != "email_verification":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nevažeći tip tokena",
+        )
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Link za verifikaciju je nevažeći ili je istekao",
+        )
+
+    if user.email_verified:
+        return {"message": "Email je već verifikovan"}
+
+    user.email_verified = True
+
+    await audit.log(
+        db=db,
+        action="email.verified",
+        request=request,
+        organization_id=user.organization_id,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+    )
+
+    # Send welcome email now that verification is complete
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(send_welcome_email, user.email, user.first_name)
+
+    await db.commit()
+
+    return {"message": "Email uspešno verifikovan"}
+
+
+@router.post("/resend-verification")
+@limiter.limit("3/minute")
+async def resend_verification(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """Resend the email verification link.
+
+    Rate limited to 3 requests per minute.
+
+    Args:
+        request: HTTP request for rate limiting.
+        background_tasks: FastAPI background tasks.
+        db: Database session.
+        user: Authenticated user.
+
+    Returns:
+        Confirmation message.
+    """
+    if user.email_verified:
+        return {"message": "Email je već verifikovan"}
+
+    verification_token = create_email_verification_token(str(user.id), user.email)
+    verification_url = f"{settings.frontend_url}/verify-email?token={verification_token}"
+    background_tasks.add_task(
+        send_verification_email, user.email, user.first_name, verification_url
+    )
+
+    return {"message": "Verifikacioni email je ponovo poslat"}

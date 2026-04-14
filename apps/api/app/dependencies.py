@@ -172,6 +172,32 @@ async def get_current_user(
     )
 
 
+async def require_verified_email(user: User = Depends(get_current_user)) -> User:
+    """Dependency that blocks unverified users from sensitive actions.
+
+    Use on export, billing, and other endpoints where email ownership
+    must be confirmed.
+
+    Args:
+        user: Authenticated user.
+
+    Returns:
+        The user if email is verified.
+
+    Raises:
+        HTTPException: 403 if email is not verified.
+    """
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "email_not_verified",
+                "message": "Morate potvrditi email adresu pre korišćenja ove funkcije",
+            },
+        )
+    return user
+
+
 def require_role(minimum_role: str) -> Callable:
     """Create a dependency that enforces a minimum role level and org membership.
 

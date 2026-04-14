@@ -46,6 +46,7 @@ def create_access_token(
     last_name: str | None = None,
     role: str = "viewer",
     org_slug: str | None = None,
+    email_verified: bool = False,
 ) -> str:
     """Create a JWT access token.
 
@@ -57,6 +58,7 @@ def create_access_token(
         last_name: User last name.
         role: User role in organization.
         org_slug: Organization URL slug.
+        email_verified: Whether the user's email is verified.
 
     Returns:
         Encoded JWT token.
@@ -72,6 +74,7 @@ def create_access_token(
         "first_name": first_name or "",
         "last_name": last_name or "",
         "role": role,
+        "email_verified": email_verified,
         "exp": expires,  # Expiration time
         "type": "access",
     }
@@ -95,6 +98,28 @@ def create_refresh_token(user_id: str) -> str:
         "sub": user_id,  # who the token is for
         "exp": expires,  # Expiration time
         "type": "refresh",
+    }
+
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
+def create_email_verification_token(user_id: str, email: str) -> str:
+    """Create a JWT for email verification.
+
+    Args:
+        user_id: User's database ID.
+        email: User's email address.
+
+    Returns:
+        Encoded JWT token valid for 24 hours.
+    """
+    expires = datetime.now(UTC) + timedelta(hours=24)
+
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "exp": expires,
+        "type": "email_verification",
     }
 
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
