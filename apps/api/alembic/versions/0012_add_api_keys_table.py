@@ -59,9 +59,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_api_keys_organization_id", "api_keys", ["organization_id"])
     op.create_index("ix_api_keys_key_prefix", "api_keys", ["key_prefix"])
-    op.create_index(
-        "ix_api_keys_org_active", "api_keys", ["organization_id", "is_active"]
-    )
+    op.create_index("ix_api_keys_org_active", "api_keys", ["organization_id", "is_active"])
 
 
 def downgrade() -> None:

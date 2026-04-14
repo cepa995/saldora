@@ -9,9 +9,7 @@ class APIKeyCreate(BaseModel):
     """Request body for creating a new API key."""
 
     name: str = Field(..., min_length=1, max_length=100, description="Label for the key")
-    expires_at: datetime | None = Field(
-        default=None, description="Optional expiration timestamp"
-    )
+    expires_at: datetime | None = Field(default=None, description="Optional expiration timestamp")
 
 
 class APIKeyCreatedResponse(BaseModel):

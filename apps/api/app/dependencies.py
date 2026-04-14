@@ -66,16 +66,14 @@ async def _authenticate_via_api_key(
         raise credentials_exception
 
     # Extract prefix for DB lookup (first 8 chars after sk_live_)
-    key_body = api_key[len(API_KEY_PREFIX):]
+    key_body = api_key[len(API_KEY_PREFIX) :]
     if len(key_body) < 8:
         raise credentials_exception
     prefix = key_body[:8]
 
     # Find active keys matching this prefix
     result = await db.execute(
-        select(APIKey).where(
-            and_(APIKey.key_prefix == prefix, APIKey.is_active.is_(True))
-        )
+        select(APIKey).where(and_(APIKey.key_prefix == prefix, APIKey.is_active.is_(True)))
     )
     candidates = list(result.scalars().all())
 
@@ -95,16 +93,12 @@ async def _authenticate_via_api_key(
 
     # Update last_used_at (fire-and-forget, don't block the request)
     await db.execute(
-        update(APIKey)
-        .where(APIKey.id == matched_key.id)
-        .values(last_used_at=datetime.now(UTC))
+        update(APIKey).where(APIKey.id == matched_key.id).values(last_used_at=datetime.now(UTC))
     )
     await db.commit()
 
     # Fetch the associated user
-    user_result = await db.execute(
-        select(User).where(User.id == matched_key.user_id)
-    )
+    user_result = await db.execute(select(User).where(User.id == matched_key.user_id))
     user = user_result.scalar_one_or_none()
     if user is None:
         raise credentials_exception

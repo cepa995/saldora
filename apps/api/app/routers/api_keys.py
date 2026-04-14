@@ -91,9 +91,7 @@ async def list_api_keys(
     """
     conditions = [APIKey.organization_id == user.organization_id]
 
-    count_result = await db.execute(
-        select(func.count(APIKey.id)).where(and_(*conditions))
-    )
+    count_result = await db.execute(select(func.count(APIKey.id)).where(and_(*conditions)))
     total = count_result.scalar() or 0
     total_pages = math.ceil(total / per_page) if total > 0 else 0
 
