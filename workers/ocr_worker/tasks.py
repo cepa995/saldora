@@ -1032,6 +1032,184 @@ def enforce_data_retention() -> dict[str, Any]:
     }
 
 
+@app.task(name="ocr_worker.tasks.backup_database")
+def backup_database() -> dict[str, Any]:
+    """Create a daily PostgreSQL backup and upload to S3/R2.
+
+    Generates a pg_dump, compresses it, creates a manifest with
+    record counts for validation, bundles both into a ZIP, and
+    uploads to S3. Deletes backups older than 30 days.
+
+    Returns:
+        Dict with status, file size, and manifest summary.
+    """
+    import gzip
+    import io
+    import json
+    import subprocess
+    import zipfile
+    from datetime import timedelta
+    from urllib.parse import urlparse
+
+    import boto3
+
+    from ocr_worker.database import get_session, text
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    logger.info("Starting daily database backup for %s", today)
+
+    # Parse DATABASE_URL for pg_dump
+    db_url = os.getenv("DATABASE_URL", "")
+    # Handle both async and sync URLs
+    db_url = db_url.replace("postgresql+asyncpg://", "postgresql://")
+    parsed = urlparse(db_url)
+
+    pg_env = {
+        **os.environ,
+        "PGPASSWORD": parsed.password or "",
+    }
+
+    pg_dump_cmd = [
+        "pg_dump",
+        "-h",
+        parsed.hostname or "localhost",
+        "-p",
+        str(parsed.port or 5432),
+        "-U",
+        parsed.username or "saldora",
+        "-d",
+        parsed.path.lstrip("/") if parsed.path else "saldora",
+        "--no-owner",
+        "--no-acl",
+        "--format=plain",
+    ]
+
+    # Run pg_dump
+    try:
+        result = subprocess.run(
+            pg_dump_cmd,
+            capture_output=True,
+            env=pg_env,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            error_msg = result.stderr.decode("utf-8", errors="replace")[:500]
+            logger.error("pg_dump failed: %s", error_msg)
+            return {"status": "failed", "error": f"pg_dump failed: {error_msg}"}
+
+        sql_bytes = result.stdout
+    except subprocess.TimeoutExpired:
+        logger.error("pg_dump timed out after 300s")
+        return {"status": "failed", "error": "pg_dump timed out"}
+
+    # Compress the SQL dump
+    compressed = gzip.compress(sql_bytes, compresslevel=6)
+
+    # Generate manifest with record counts
+    session = get_session()
+    try:
+        tables_row = session.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
+                "ORDER BY table_name"
+            )
+        ).fetchall()
+
+        table_counts = {}
+        total_records = 0
+        for row in tables_row:
+            table_name = row[0]
+            if table_name == "alembic_version":
+                continue
+            count = (
+                session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                or 0
+            )
+            table_counts[table_name] = count
+            total_records += count
+
+        # Get current schema version
+        try:
+            schema_version = (
+                session.execute(
+                    text("SELECT version_num FROM alembic_version LIMIT 1")
+                ).scalar()
+                or "unknown"
+            )
+        except Exception:
+            schema_version = "unknown"
+            session.rollback()
+
+    finally:
+        session.close()
+
+    manifest = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "database": parsed.path.lstrip("/") if parsed.path else "saldora",
+        "tables": table_counts,
+        "total_records": total_records,
+        "schema_version": schema_version,
+        "sql_dump_size_bytes": len(sql_bytes),
+        "compressed_size_bytes": len(compressed),
+    }
+
+    # Create ZIP with dump + manifest
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"saldora_{today}.sql.gz", compressed)
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
+
+    zip_bytes = zip_buffer.getvalue()
+
+    # Upload to S3/R2
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=os.getenv("STORAGE_ENDPOINT"),
+        aws_access_key_id=os.getenv("STORAGE_ACCESS_KEY"),
+        aws_secret_access_key=os.getenv("STORAGE_SECRET_KEY"),
+    )
+    bucket = os.getenv("STORAGE_BUCKET", "saldora-documents")
+    s3_key = f"backups/db/saldora_{today}.zip"
+
+    s3.put_object(
+        Bucket=bucket,
+        Key=s3_key,
+        Body=zip_bytes,
+        ContentType="application/zip",
+    )
+
+    logger.info(
+        "Backup uploaded: %s (%d bytes, %d records across %d tables)",
+        s3_key,
+        len(zip_bytes),
+        total_records,
+        len(table_counts),
+    )
+
+    # Delete backups older than 30 days
+    deleted_count = 0
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+    try:
+        response = s3.list_objects_v2(Bucket=bucket, Prefix="backups/db/saldora_")
+        for obj in response.get("Contents", []):
+            if obj["LastModified"].replace(tzinfo=UTC) < cutoff:
+                s3.delete_object(Bucket=bucket, Key=obj["Key"])
+                deleted_count += 1
+                logger.info("Deleted old backup: %s", obj["Key"])
+    except Exception:
+        logger.warning("Failed to clean up old backups", exc_info=True)
+
+    return {
+        "status": "success",
+        "s3_key": s3_key,
+        "file_size_bytes": len(zip_bytes),
+        "total_records": total_records,
+        "tables": len(table_counts),
+        "old_backups_deleted": deleted_count,
+    }
+
+
 @app.task(name="ocr_worker.tasks.run_monthly_archive_exports")
 def run_monthly_archive_exports() -> dict[str, Any]:
     """Run automated monthly archive exports for all organizations.

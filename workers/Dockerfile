@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender-dev \
     libgomp1 \
     curl \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
