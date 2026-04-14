@@ -1,13 +1,13 @@
 # Saldora Production Caddy Configuration
-# Handles HTTPS termination and reverse proxying.
-# When behind Cloudflare proxy, Caddy uses Cloudflare's origin cert.
+# Cloudflare handles SSL termination. Caddy serves HTTP only.
 
-# Main site — Next.js frontend
-{$DOMAIN:saldora.rs} {
-	reverse_proxy web:3000
-}
+:80 {
+	@api host api.saldora.rs
+	handle @api {
+		reverse_proxy api:8000
+	}
 
-# API subdomain — FastAPI backend
-api.{$DOMAIN:saldora.rs} {
-	reverse_proxy api:8000
+	handle {
+		reverse_proxy web:3000
+	}
 }
