@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { apiClient } from '@/lib/api-client';
 
 /**
  * Auth guard and slug validation layout for org-scoped pages.
@@ -69,5 +70,57 @@ export default function OrgSlugLayout({ children }: { children: React.ReactNode 
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {!user.emailVerified && <EmailVerificationBanner />}
+      {children}
+    </>
+  );
+}
+
+
+function EmailVerificationBanner() {
+  const t = useTranslations('common');
+  const [resending, setResending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function handleResend() {
+    setResending(true);
+    try {
+      await apiClient('/api/v1/auth/resend-verification', { method: 'POST' });
+      setSent(true);
+    } catch {
+      // Silently fail — rate limited or other error
+    } finally {
+      setResending(false);
+    }
+  }
+
+  return (
+    <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 text-sm text-amber-800">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
+          <span>
+            {t('emailNotVerified')}
+          </span>
+        </div>
+        {sent ? (
+          <span className="text-sm text-emerald-700 font-medium">
+            {t('verificationSent')}
+          </span>
+        ) : (
+          <button
+            onClick={handleResend}
+            disabled={resending}
+            className="text-sm font-medium text-amber-800 hover:text-amber-900 underline disabled:opacity-50"
+          >
+            {resending ? t('sending') : t('resendVerification')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }

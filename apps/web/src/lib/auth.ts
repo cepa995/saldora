@@ -15,6 +15,7 @@ export interface AuthUser {
   organizationId: string | null;
   orgSlug: string | null;
   role: string;
+  emailVerified: boolean;
 }
 
 // In-memory access token — never persisted to localStorage
@@ -95,6 +96,7 @@ export function extractUserFromToken(token: string): AuthUser | null {
       organizationId: (payload.org as string) || null,
       orgSlug: (payload.org_slug as string) || null,
       role: (payload.role as string) || "member",
+      emailVerified: (payload.email_verified as boolean) ?? false,
     };
   } catch {
     return null;

@@ -14,7 +14,7 @@ from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_feature, require_role
+from app.dependencies import get_current_user, require_feature, require_role, require_verified_email
 from app.models.export_template import ExportTemplate
 from app.models.invoice import Invoice
 from app.models.minimax_config import MiniMaxConfig
@@ -93,6 +93,7 @@ async def create_export(
     request: ExportRequest,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role("operator")),
+    _verified=Depends(require_verified_email),
 ) -> StreamingResponse:
     """Export invoices to the specified format.
 
