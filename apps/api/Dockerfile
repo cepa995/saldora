@@ -41,8 +41,10 @@ RUN pip install \
     "resend>=2.0.0" \
     "slowapi>=0.1.9"
 
-# Copy application code
+# Copy application code and alembic
 COPY apps/api/app /app/app
+COPY apps/api/alembic /app/alembic
+COPY apps/api/alembic.ini /app/alembic.ini
 
 # Switch to non-root user
 USER api

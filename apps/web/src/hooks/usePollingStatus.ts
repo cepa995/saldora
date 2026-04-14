@@ -15,7 +15,8 @@ export interface ProcessingStatusResponse {
 }
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed']);
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 10000;
+const MAX_CONCURRENT_POLLS = 3;
 
 interface UsePollingStatusOptions {
   onStatusUpdate: (jobId: string, status: ProcessingStatusResponse) => void;
@@ -25,8 +26,8 @@ interface UsePollingStatusOptions {
 /**
  * Polls the processing status endpoint for a set of invoice job IDs.
  *
- * Starts polling when jobIds are provided, stops when all reach
- * terminal states (completed/failed) or when the component unmounts.
+ * Polls up to MAX_CONCURRENT_POLLS at a time to avoid overwhelming the API.
+ * Stops when all reach terminal states (completed/failed) or on unmount.
  */
 export function usePollingStatus(
   jobIds: string[],
@@ -34,38 +35,50 @@ export function usePollingStatus(
 ) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const terminalRef = useRef<Set<string>>(new Set());
+  const pollingRef = useRef(false);
 
   const pollAll = useCallback(async () => {
-    const activeIds = jobIds.filter((id) => !terminalRef.current.has(id));
-    if (activeIds.length === 0) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      return;
-    }
+    // Prevent overlapping polls
+    if (pollingRef.current) return;
+    pollingRef.current = true;
 
-    await Promise.allSettled(
-      activeIds.map(async (jobId) => {
-        try {
-          const data = await apiClient<ProcessingStatusResponse>(
-            `/api/v1/invoices/${jobId}/status`,
-          );
-          onStatusUpdate(jobId, data);
-          if (TERMINAL_STATUSES.has(data.status)) {
-            terminalRef.current.add(jobId);
-          }
-        } catch (err) {
-          onError?.(jobId, err);
+    try {
+      const activeIds = jobIds.filter((id) => !terminalRef.current.has(id));
+      if (activeIds.length === 0) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
         }
-      }),
-    );
+        return;
+      }
+
+      // Poll in batches of MAX_CONCURRENT_POLLS
+      for (let i = 0; i < activeIds.length; i += MAX_CONCURRENT_POLLS) {
+        const batch = activeIds.slice(i, i + MAX_CONCURRENT_POLLS);
+        await Promise.allSettled(
+          batch.map(async (jobId) => {
+            try {
+              const data = await apiClient<ProcessingStatusResponse>(
+                `/api/v1/invoices/${jobId}/status`,
+              );
+              onStatusUpdate(jobId, data);
+              if (TERMINAL_STATUSES.has(data.status)) {
+                terminalRef.current.add(jobId);
+              }
+            } catch (err) {
+              onError?.(jobId, err);
+            }
+          }),
+        );
+      }
+    } finally {
+      pollingRef.current = false;
+    }
   }, [jobIds, onStatusUpdate, onError]);
 
   useEffect(() => {
     if (jobIds.length === 0) return;
 
-    // Reset terminal tracking when job IDs change
     terminalRef.current = new Set();
 
     // Poll immediately, then on interval

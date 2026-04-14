@@ -1,0 +1,13 @@
+# Saldora Production Caddy Configuration
+# Cloudflare handles SSL termination. Caddy serves HTTP only.
+
+:80 {
+	@api host api.saldora.rs
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

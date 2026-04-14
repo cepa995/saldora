@@ -136,6 +136,9 @@ async def _auth_headers(client: AsyncClient, plan: str = "agency") -> dict[str, 
             text("UPDATE organizations SET plan = :plan WHERE name = 'Export Org'"),
             {"plan": plan},
         )
+        await db.execute(
+            text("UPDATE users SET email_verified = true WHERE email = 'export-test@example.com'"),
+        )
         await db.commit()
         try:
             await db_gen.__anext__()
@@ -174,6 +177,9 @@ async def _auth_headers_alt(client: AsyncClient) -> dict[str, str]:
 
     await db.execute(
         text("UPDATE organizations SET plan = 'agency' WHERE name = 'Other Export Org'"),
+    )
+    await db.execute(
+        text("UPDATE users SET email_verified = true WHERE email = 'other-export@example.com'"),
     )
     await db.commit()
     try:
