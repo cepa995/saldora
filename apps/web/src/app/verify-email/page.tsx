@@ -11,13 +11,12 @@ export default function VerifyEmailPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  const [status, setStatus] = useState<'checking' | 'success' | 'already' | 'error'>('checking');
+  const [status, setStatus] = useState<'checking' | 'success' | 'already' | 'error'>(
+    token ? 'checking' : 'error',
+  );
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      return;
-    }
+    if (!token) return;
 
     async function verify() {
       try {
