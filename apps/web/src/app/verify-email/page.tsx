@@ -17,7 +17,8 @@ export default function VerifyEmailPage() {
   );
 
   async function goToDashboard() {
-    // Try to get fresh token to extract orgSlug
+    // Force full page reload so AuthContext picks up the refreshed JWT
+    // with email_verified=true (banner disappears immediately)
     let accessToken = getAccessToken();
     if (!accessToken) {
       accessToken = await refreshAccessToken();
@@ -25,11 +26,11 @@ export default function VerifyEmailPage() {
     if (accessToken) {
       const user = extractUserFromToken(accessToken);
       if (user?.orgSlug) {
-        router.push(`/${user.orgSlug}/dashboard`);
+        window.location.href = `/${user.orgSlug}/dashboard`;
         return;
       }
     }
-    router.push('/login');
+    window.location.href = '/login';
   }
 
   useEffect(() => {
