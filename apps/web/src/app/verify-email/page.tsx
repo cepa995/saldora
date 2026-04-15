@@ -94,12 +94,12 @@ export default function VerifyEmailPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailAlready')}</h1>
-            <Link
-              href="/"
+            <button
+              onClick={goToDashboard}
               className="inline-block mt-4 px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
-            </Link>
+            </button>
           </div>
         )}
 
