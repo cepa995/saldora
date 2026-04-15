@@ -61,7 +61,7 @@ export default function VerifyEmailPage() {
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailSuccess')}</h1>
             <p className="text-gray-600 mb-6">{t('verifyEmailSuccessDesc')}</p>
             <Link
-              href="/login"
+              href="/"
               className="inline-block px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
@@ -78,7 +78,7 @@ export default function VerifyEmailPage() {
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailAlready')}</h1>
             <Link
-              href="/login"
+              href="/"
               className="inline-block mt-4 px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
@@ -96,7 +96,7 @@ export default function VerifyEmailPage() {
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailFailed')}</h1>
             <p className="text-gray-600 mb-6">{t('verifyEmailFailedDesc')}</p>
             <Link
-              href="/login"
+              href="/"
               className="inline-block px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
