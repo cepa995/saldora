@@ -35,7 +35,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthRoute && isLoggedIn) {
+  if (isAuthRoute && isLoggedIn && !pathname.startsWith("/register/organization")) {
     // Redirect to landing page — AuthContext will redirect to /:orgSlug/dashboard
     return NextResponse.redirect(new URL("/", request.url));
   }
