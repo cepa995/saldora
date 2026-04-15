@@ -104,14 +104,7 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    # 4. Send verification email (non-blocking)
-    verification_token = create_email_verification_token(str(user.id), user.email)
-    verification_url = f"{settings.frontend_url}/verify-email?token={verification_token}"
-    background_tasks.add_task(
-        send_verification_email, user.email, user.first_name, verification_url
-    )
-
-    # 5. Issue tokens so user can proceed to org setup
+    # 4. Issue tokens so user can proceed to org setup
     access_token = create_access_token(
         str(user.id),
         None,
@@ -134,6 +127,7 @@ async def register(
 async def create_organization(
     body: CreateOrganizationRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> TokenResponse:
@@ -200,6 +194,14 @@ async def create_organization(
     )
 
     await db.commit()
+
+    # Send verification email now that user has an organization
+    if not user.email_verified:
+        verification_token = create_email_verification_token(str(user.id), user.email)
+        verification_url = f"{settings.frontend_url}/verify-email?token={verification_token}"
+        background_tasks.add_task(
+            send_verification_email, user.email, user.first_name, verification_url
+        )
 
     # Issue fresh tokens with org claim
     access_token = create_access_token(
