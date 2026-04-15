@@ -1,19 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
+import { extractUserFromToken, getAccessToken, refreshAccessToken } from '@/lib/auth';
 
 export default function VerifyEmailPage() {
   const t = useTranslations('common');
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
   const [status, setStatus] = useState<'checking' | 'success' | 'already' | 'error'>(
     token ? 'checking' : 'error',
   );
+
+  async function goToDashboard() {
+    // Try to get fresh token to extract orgSlug
+    let accessToken = getAccessToken();
+    if (!accessToken) {
+      accessToken = await refreshAccessToken();
+    }
+    if (accessToken) {
+      const user = extractUserFromToken(accessToken);
+      if (user?.orgSlug) {
+        router.push(`/${user.orgSlug}/dashboard`);
+        return;
+      }
+    }
+    router.push('/login');
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -60,12 +77,12 @@ export default function VerifyEmailPage() {
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailSuccess')}</h1>
             <p className="text-gray-600 mb-6">{t('verifyEmailSuccessDesc')}</p>
-            <Link
-              href="/"
+            <button
+              onClick={goToDashboard}
               className="inline-block px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
-            </Link>
+            </button>
           </div>
         )}
 
@@ -95,12 +112,12 @@ export default function VerifyEmailPage() {
             </div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">{t('verifyEmailFailed')}</h1>
             <p className="text-gray-600 mb-6">{t('verifyEmailFailedDesc')}</p>
-            <Link
-              href="/"
+            <button
+              onClick={goToDashboard}
               className="inline-block px-6 py-3 bg-violet-600 text-white rounded-xl font-medium hover:bg-violet-700 transition-colors"
             >
               {t('goToDashboard')}
-            </Link>
+            </button>
           </div>
         )}
       </div>
