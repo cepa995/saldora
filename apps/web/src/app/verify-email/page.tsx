@@ -39,13 +39,15 @@ export default function VerifyEmailPage() {
       try {
         const result = await apiClient<{ message: string }>(
           `/api/v1/auth/verify?token=${encodeURIComponent(token!)}`,
-          { method: 'GET' },
+          {},
           true, // skip auth — verification link works without login
         );
         if (result.message.includes('već')) {
           setStatus('already');
         } else {
           setStatus('success');
+          // Refresh token so JWT has email_verified=true
+          await refreshAccessToken();
         }
       } catch {
         setStatus('error');
