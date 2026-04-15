@@ -325,7 +325,7 @@ export default function ArchiveContent() {
       {/* Two-column layout: Form + Info */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-4">
         {/* Left: Generate form (3/5) */}
-        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4">
+        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-xl p-4 min-w-0 overflow-hidden">
           <h2 className="text-sm font-semibold text-gray-900 mb-3">{tAudit('sectionGenerate')}</h2>
 
           {/* Date range */}

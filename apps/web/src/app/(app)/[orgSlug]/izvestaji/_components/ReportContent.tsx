@@ -693,8 +693,8 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
     <div>
       {/* Filters bar */}
       <div className="mb-4 bg-white border border-gray-200 rounded-xl p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[140px]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3">
+          <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateFrom')}</label>
             <input
               type="date"
@@ -704,7 +704,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             />
           </div>
 
-          <div className="flex-1 min-w-[140px]">
+          <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateTo')}</label>
             <input
               type="date"
@@ -714,7 +714,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             />
           </div>
 
-          <div className="flex-1 min-w-[140px]">
+          <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('supplierPib')}</label>
             <input
               type="text"
@@ -726,7 +726,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             />
           </div>
 
-          <div className="flex-1 min-w-[180px]">
+          <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('description')}</label>
             <input
               type="text"
@@ -737,7 +737,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
             />
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 self-end">
+          <div className="col-span-2 sm:col-span-4 lg:col-span-1 flex items-center gap-2 self-end">
             <button
               type="button"
               onClick={handleGenerate}
