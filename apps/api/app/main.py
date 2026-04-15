@@ -112,12 +112,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "https://saldora.rs",
+        "https://www.saldora.rs",
         "https://saldora.ai",
         "https://www.saldora.ai",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With", "X-API-Key"],
     expose_headers=["Content-Disposition"],
 )
 
