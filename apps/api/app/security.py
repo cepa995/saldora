@@ -1,6 +1,7 @@
 """Security utilities: rate limiting, account lockout, token blacklisting."""
 
 import logging
+import os
 
 import redis.asyncio as aioredis
 from slowapi import Limiter
@@ -16,7 +17,7 @@ settings = get_settings()
 # Rate limiting (slowapi)
 # ---------------------------------------------------------------------------
 
-_is_testing = settings.database_url.endswith("_test")
+_is_testing = settings.database_url.endswith("_test") or os.environ.get("TESTING") == "1"
 
 limiter = Limiter(
     key_func=get_remote_address,

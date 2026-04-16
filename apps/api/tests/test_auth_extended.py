@@ -219,7 +219,9 @@ async def test_password_reset_confirm_old_password_no_longer_works(client: Async
     Args:
         client: Async HTTP client fixture.
     """
-    email = "auth-pr-oldpw@example.com"
+    from uuid import uuid4
+
+    email = f"auth-pr-oldpw-{uuid4().hex[:8]}@example.com"
     old_password = "securepass123"
     reg = await _register(client, email, old_password)
 
@@ -523,10 +525,13 @@ async def test_login_after_org_creation_token_includes_org(client: AsyncClient):
     Args:
         client: Async HTTP client fixture.
     """
+    from uuid import uuid4
+
     from app.auth import decode_token
 
-    email = "auth-login-org@example.com"
-    await _register_with_org(client, email, "Auth Login Org Test")
+    uid = uuid4().hex[:8]
+    email = f"auth-login-org-{uid}@example.com"
+    await _register_with_org(client, email, f"Auth Login Org {uid}")
 
     login_resp = await client.post(
         "/api/v1/auth/login",
@@ -545,9 +550,11 @@ async def test_login_before_org_creation_token_has_empty_org(client: AsyncClient
     Args:
         client: Async HTTP client fixture.
     """
+    from uuid import uuid4
+
     from app.auth import decode_token
 
-    email = "auth-login-noorg@example.com"
+    email = f"auth-login-noorg-{uuid4().hex[:8]}@example.com"
     await _register(client, email)
 
     login_resp = await client.post(

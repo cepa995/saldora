@@ -17,6 +17,10 @@ Why NullPool?
 """
 
 import os
+
+# Ensure rate limiting is disabled during tests — must be set BEFORE app import
+os.environ["TESTING"] = "1"
+
 from collections.abc import AsyncGenerator
 from unittest.mock import patch
 

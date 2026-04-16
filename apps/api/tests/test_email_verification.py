@@ -42,18 +42,28 @@ def _get_user_id(token: str) -> str:
 
 
 async def test_register_sends_verification_email(client: AsyncClient, test_engine):
-    """Registration triggers a verification email (not welcome email)."""
+    """Organization creation triggers a verification email."""
+    # Register first (no email sent at this step)
+    reg_resp = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "verify-send@test.com",
+            "password": "securepass123",
+            "first_name": "Test",
+            "last_name": "User",
+        },
+    )
+    assert reg_resp.status_code == 201
+    token = reg_resp.json()["access_token"]
+
+    # Create org — this is where verification email is sent
     with patch("app.routers.auth.send_verification_email") as mock_send:
-        resp = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "verify-send@test.com",
-                "password": "securepass123",
-                "first_name": "Test",
-                "last_name": "User",
-            },
+        org_resp = await client.post(
+            "/api/v1/auth/create-organization",
+            json={"name": "Verify Test Org"},
+            headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 201
+        assert org_resp.status_code == 200
         mock_send.assert_called_once()
         call_args = mock_send.call_args
         assert call_args[0][0] == "verify-send@test.com"
