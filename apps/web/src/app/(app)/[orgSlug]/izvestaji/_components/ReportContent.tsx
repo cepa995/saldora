@@ -693,14 +693,14 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
     <div>
       {/* Filters bar */}
       <div className="mb-4 bg-white border border-gray-200 rounded-xl p-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3">
           <div>
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateFrom')}</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
@@ -710,7 +710,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
@@ -722,7 +722,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
               onChange={(e) => setSellerPib(e.target.value)}
               placeholder="123456789"
               maxLength={20}
-              className="w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
@@ -733,11 +733,11 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('searchItems')}
-              className="w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
-          <div className="col-span-1 sm:col-span-2 lg:col-span-1 flex items-center gap-2 self-end">
+          <div className="col-span-1 md:col-span-2 lg:col-span-1 flex items-center gap-2 self-end">
             <button
               type="button"
               onClick={handleGenerate}

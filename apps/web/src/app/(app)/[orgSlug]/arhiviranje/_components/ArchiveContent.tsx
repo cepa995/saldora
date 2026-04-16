@@ -329,7 +329,7 @@ export default function ArchiveContent() {
           <h2 className="text-sm font-semibold text-gray-900 mb-3">{tAudit('sectionGenerate')}</h2>
 
           {/* Date range */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
               <label htmlFor="dateFrom" className="block text-xs font-medium text-gray-600 mb-1">
                 {tAudit('dateFrom')}
@@ -339,7 +339,7 @@ export default function ArchiveContent() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-base sm:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-500"
+                className="w-full max-w-full px-2.5 py-2 border border-gray-300 rounded-lg text-base sm:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-500"
               />
             </div>
             <div>
@@ -351,7 +351,7 @@ export default function ArchiveContent() {
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-base sm:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-500"
+                className="w-full max-w-full px-2.5 py-2 border border-gray-300 rounded-lg text-base sm:text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-500"
               />
             </div>
           </div>
