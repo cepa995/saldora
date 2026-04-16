@@ -692,8 +692,8 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
   return (
     <div>
       {/* Filters bar */}
-      <div className="mb-4 bg-white border border-gray-200 rounded-xl p-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3">
+      <div className="mb-4 bg-white border border-gray-200 rounded-xl p-3 overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3 overflow-hidden">
           <div className="min-w-0">
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateFrom')}</label>
             <input

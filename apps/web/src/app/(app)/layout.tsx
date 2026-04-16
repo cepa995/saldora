@@ -26,7 +26,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           isCollapsed ? 'md:ml-16' : 'md:ml-60'
         }`}
       >
-        <main id="main-content" className="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main id="main-content" className="flex-1 w-full min-w-0 overflow-x-hidden mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>
 
