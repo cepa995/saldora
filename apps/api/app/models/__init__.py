@@ -17,6 +17,7 @@ from app.models.exchange_rate import ExchangeRate
 from app.models.export_template import ExportTemplate
 from app.models.invitation import Invitation
 from app.models.invoice import Invoice
+from app.models.invoice_template import InvoiceTemplate
 from app.models.join_request import JoinRequest
 from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
@@ -43,6 +44,7 @@ __all__ = [
     "Invitation",
     "Invoice",
     "InvoiceLineItem",
+    "InvoiceTemplate",
     "JoinRequest",
     "MiniMaxConfig",
     "Organization",
