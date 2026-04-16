@@ -84,12 +84,12 @@ export default function IzvestajiPage() {
       </div>
 
       {/* ── Group pills ──────────────────────────────────────────── */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {GROUPS.map((g) => (
           <button
             key={g.key}
             onClick={() => handleGroupChange(g.key)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            className={`inline-flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-full text-xs md:text-sm font-medium whitespace-nowrap transition-all ${
               activeGroup === g.key
                 ? 'bg-violet-600 text-white shadow-sm shadow-violet-200'
                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900'

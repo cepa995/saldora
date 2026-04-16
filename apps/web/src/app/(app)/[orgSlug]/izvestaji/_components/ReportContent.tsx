@@ -694,27 +694,27 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
       {/* Filters bar */}
       <div className="mb-4 bg-white border border-gray-200 rounded-xl p-3">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr items-end gap-3">
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateFrom')}</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="block w-full min-w-0 px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('dateTo')}</label>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="block w-full min-w-0 px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('supplierPib')}</label>
             <input
               type="text"
@@ -722,18 +722,18 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
               onChange={(e) => setSellerPib(e.target.value)}
               placeholder="123456789"
               maxLength={20}
-              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="block w-full min-w-0 px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-[11px] font-medium text-gray-500 mb-1">{t('description')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('searchItems')}
-              className="w-full max-w-full px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+              className="block w-full min-w-0 px-2.5 py-2 text-base sm:text-sm border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
             />
           </div>
 
