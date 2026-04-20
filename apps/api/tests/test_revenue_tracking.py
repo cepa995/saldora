@@ -288,6 +288,42 @@ async def test_org_isolation(client: AsyncClient, test_engine):
 # ---------------------------------------------------------------------------
 
 
+async def test_portfolio_returns_one_row_per_pausalac(client: AsyncClient, test_engine):
+    """GET /pausal/portfolio aggregates revenue in a single response."""
+    headers = await _setup(client, test_engine, "rev-portfolio@example.com")
+    paušalac_a = await _create_pausalac(client, headers, pib="303030303")
+    paušalac_b = await _create_pausalac(client, headers, pib="404040404")
+
+    await _seed_manual_entry(client, headers, paušalac_a, amount="1000000.00")
+    await _seed_manual_entry(client, headers, paušalac_b, amount="5500000.00")
+
+    resp = await client.get("/api/v1/pausal/portfolio?year=2026", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["year"] == 2026
+    assert len(body["data"]) == 2
+    by_id = {row["client_id"]: row for row in body["data"]}
+    assert Decimal(by_id[paušalac_a]["total_revenue"]) == Decimal("1000000.00")
+    assert by_id[paušalac_a]["overall_alert_level"] == "ok"
+    assert Decimal(by_id[paušalac_b]["total_revenue"]) == Decimal("5500000.00")
+    assert by_id[paušalac_b]["overall_alert_level"] == "critical"
+
+
+async def test_portfolio_excludes_non_pausalac_clients(client: AsyncClient, test_engine):
+    """Regular VAT-payer clients don't appear in the paušalci portfolio."""
+    headers = await _setup(client, test_engine, "rev-portfolio-filter@example.com")
+    await _create_pausalac(client, headers, pib="505050505")
+    await client.post(
+        "/api/v1/clients/",
+        json={"name": "VAT", "pib": "606060606", "client_type": "vat_payer"},
+        headers=headers,
+    )
+
+    resp = await client.get("/api/v1/pausal/portfolio", headers=headers)
+    assert len(resp.json()["data"]) == 1
+    assert resp.json()["data"][0]["pib"] == "505050505"
+
+
 async def test_non_rsd_entries_excluded_and_counted(client: AsyncClient, test_engine):
     """Non-RSD entries do not inflate the RSD total but are reported via non_rsd_count."""
     headers = await _setup(client, test_engine, "rev-nonrsd@example.com")

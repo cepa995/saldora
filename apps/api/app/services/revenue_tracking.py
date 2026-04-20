@@ -15,14 +15,17 @@ alerts separately.
 from __future__ import annotations
 
 from decimal import Decimal
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.client import Client
 from app.models.kpo_entry import KPOEntry
 from app.schemas.revenue import (
     AlertLevel,
+    PortfolioResponse,
+    PortfolioRow,
     RevenueStatusResponse,
     ThresholdStatus,
 )
@@ -120,3 +123,75 @@ async def compute_revenue_status(
         overall_alert_level=_worst([pausal_status.alert_level, pdv_status.alert_level]),
         non_rsd_count=non_rsd_count,
     )
+
+
+async def compute_portfolio_status(
+    db: AsyncSession,
+    organization_id: UUID,
+    year: int,
+) -> PortfolioResponse:
+    """Compute revenue status for every paušalac in the organization.
+
+    Single-query aggregation over Client LEFT JOIN KPO_Entry filtered by
+    year, avoiding N+1 when rendering the agency portfolio view.
+
+    Args:
+        db: Database session.
+        organization_id: Agency organization scope.
+        year: Calendar year to compute.
+
+    Returns:
+        Portfolio response with one row per paušalac in the org.
+    """
+    rsd_amount = case(
+        (KPOEntry.currency == "RSD", KPOEntry.amount),
+        else_=Decimal("0"),
+    )
+    non_rsd_one = case(
+        (KPOEntry.currency != "RSD", 1),
+        else_=0,
+    )
+
+    stmt = (
+        select(
+            Client.id,
+            Client.name,
+            Client.pib,
+            Client.activity_code,
+            func.coalesce(func.sum(rsd_amount), Decimal("0")).label("total"),
+            func.coalesce(func.sum(non_rsd_one), 0).label("non_rsd_count"),
+        )
+        .select_from(Client)
+        .outerjoin(
+            KPOEntry,
+            (KPOEntry.client_id == Client.id) & (KPOEntry.year == year),
+        )
+        .where(
+            Client.organization_id == organization_id,
+            Client.client_type == "pausalac",
+            Client.is_active.is_(True),
+        )
+        .group_by(Client.id, Client.name, Client.pib, Client.activity_code)
+        .order_by(Client.name.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    portfolio: list[PortfolioRow] = []
+    for row in rows:
+        total: Decimal = row.total or Decimal("0")
+        pausal_status = _threshold_status(total, PAUSAL_STATUS_LIMIT)
+        pdv_status = _threshold_status(total, PDV_REGISTRATION_LIMIT)
+        portfolio.append(
+            PortfolioRow(
+                client_id=row.id,
+                name=row.name,
+                pib=row.pib,
+                activity_code=row.activity_code,
+                total_revenue=total,
+                pausal_status_pct=pausal_status.used_pct,
+                pdv_pct=pdv_status.used_pct,
+                overall_alert_level=_worst([pausal_status.alert_level, pdv_status.alert_level]),
+                non_rsd_count=int(row.non_rsd_count or 0),
+            )
+        )
+    return PortfolioResponse(year=year, data=portfolio)

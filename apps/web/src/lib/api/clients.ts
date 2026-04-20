@@ -43,6 +43,13 @@ export async function fetchClients(
 }
 
 /**
+ * Fetch a single client by id.
+ */
+export async function fetchClient(id: string): Promise<ClientResponse> {
+  return apiClient<ClientResponse>(`/api/v1/clients/${id}`);
+}
+
+/**
  * Create a new client.
  *
  * Args:

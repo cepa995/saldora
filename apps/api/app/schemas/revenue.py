@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -33,3 +34,24 @@ class RevenueStatusResponse(BaseModel):
     thresholds: dict[str, ThresholdStatus]
     overall_alert_level: AlertLevel
     non_rsd_count: int
+
+
+class PortfolioRow(BaseModel):
+    """One paušalac row in the agency portfolio view."""
+
+    client_id: UUID
+    name: str
+    pib: str
+    activity_code: str | None = None
+    total_revenue: Decimal
+    pausal_status_pct: float
+    pdv_pct: float
+    overall_alert_level: AlertLevel
+    non_rsd_count: int
+
+
+class PortfolioResponse(BaseModel):
+    """Agency portfolio of all paušalci with their current revenue status."""
+
+    year: int
+    data: list[PortfolioRow]

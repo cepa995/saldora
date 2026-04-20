@@ -19,6 +19,7 @@ interface NavItem {
     | "invoices"
     | "upload"
     | "clients"
+    | "pausal"
     | "rules"
     | "templates"
     | "archive"
@@ -185,6 +186,33 @@ const NAV_GROUPS: NavGroup[] = [
               strokeLinejoin="round"
               strokeWidth={1.75}
               d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
+        ),
+      },
+      {
+        href: "/pausali",
+        labelKey: "pausal",
+        minRole: "viewer",
+        planBadge: "AGENCY",
+        icon: (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M3 10h18M5 6h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M7 15h4"
             />
           </svg>
         ),
