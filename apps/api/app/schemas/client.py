@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+ClientType = Literal["vat_payer", "pausalac", "foreign_entity", "non_profit"]
 
 
 class ClientCreate(BaseModel):
@@ -26,12 +29,15 @@ class ClientCreate(BaseModel):
     name: str = Field(max_length=255)
     pib: str = Field(max_length=20, description="Tax ID (PIB)")
     mb: str | None = Field(default=None, max_length=20)
+    client_type: ClientType = Field(default="vat_payer")
     address: str | None = Field(default=None, max_length=500)
     city: str | None = Field(default=None, max_length=100)
     postal_code: str | None = Field(default=None, max_length=20)
     contact_email: str | None = Field(default=None, max_length=255)
     contact_phone: str | None = Field(default=None, max_length=50)
     notes: str | None = None
+    bank_account: str | None = Field(default=None, max_length=40)
+    activity_code: str | None = Field(default=None, max_length=10)
 
 
 class ClientUpdate(BaseModel):
@@ -53,6 +59,7 @@ class ClientUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     pib: str | None = Field(default=None, max_length=20)
     mb: str | None = None
+    client_type: ClientType | None = None
     address: str | None = None
     city: str | None = None
     postal_code: str | None = None
@@ -60,6 +67,8 @@ class ClientUpdate(BaseModel):
     contact_phone: str | None = None
     is_active: bool | None = None
     notes: str | None = None
+    bank_account: str | None = Field(default=None, max_length=40)
+    activity_code: str | None = Field(default=None, max_length=10)
 
 
 class ClientSummary(BaseModel):
@@ -74,6 +83,7 @@ class ClientSummary(BaseModel):
     id: UUID
     name: str
     pib: str
+    client_type: ClientType = "vat_payer"
 
     model_config = {"from_attributes": True}
 
@@ -105,6 +115,7 @@ class ClientResponse(BaseModel):
     name: str
     pib: str
     mb: str | None = None
+    client_type: ClientType = "vat_payer"
     address: str | None = None
     city: str | None = None
     postal_code: str | None = None
@@ -112,6 +123,8 @@ class ClientResponse(BaseModel):
     contact_phone: str | None = None
     is_active: bool
     notes: str | None = None
+    bank_account: str | None = None
+    activity_code: str | None = None
     invoice_count: int = Field(default=0)
     total_amount: str | None = Field(default=None)
     created_at: datetime
