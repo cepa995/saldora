@@ -34,9 +34,11 @@ from app.schemas.pausal_invoice import (
     PausalInvoiceIssueRequest,
     PausalInvoiceResponse,
 )
+from app.schemas.revenue import RevenueStatusResponse
 from app.services import storage
 from app.services.kpo_ledger import create_manual_kpo_entry, storno_kpo_entry
 from app.services.pausal_invoice_issuance import issue_pausal_invoice
+from app.services.revenue_tracking import compute_revenue_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -404,3 +406,28 @@ async def storno_kpo(
     await db.commit()
     await db.refresh(reversal)
     return reversal
+
+
+# ---------------------------------------------------------------------------
+# Revenue tracking
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{client_id}/revenue-status", response_model=RevenueStatusResponse)
+async def get_revenue_status(
+    client_id: UUID,
+    year: int | None = Query(
+        default=None,
+        ge=2000,
+        le=2100,
+        description="Calendar year to compute (defaults to the current year).",
+    ),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("viewer")),
+) -> RevenueStatusResponse:
+    """Return current revenue and threshold status for a paušalac."""
+    from datetime import UTC, datetime
+
+    paušalac = await _get_pausalac(db, client_id, user.organization_id)
+    effective_year = year if year is not None else datetime.now(UTC).year
+    return await compute_revenue_status(db, paušalac, effective_year)
