@@ -11,13 +11,14 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.customer import Customer
     from app.models.invoice import Invoice
     from app.models.organization import Organization
 
@@ -43,6 +44,14 @@ class Client(Base, UUIDMixin, TimestampMixin):
     pib: Mapped[str] = mapped_column(String(20), nullable=False)
     mb: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Client classification: vat_payer | pausalac | foreign_entity | non_profit
+    client_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="vat_payer",
+        default="vat_payer",
+    )
+
     # Contact details
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -56,12 +65,23 @@ class Client(Base, UUIDMixin, TimestampMixin):
     # Notes
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Paušal-only fields (nullable; required at invoice-issuance time)
+    bank_account: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    activity_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
     # Relationships
     organization: Mapped[Organization] = relationship()
     invoices: Mapped[list[Invoice]] = relationship(back_populates="client")
+    customers: Mapped[list[Customer]] = relationship(
+        back_populates="client", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     __table_args__ = (
         UniqueConstraint("organization_id", "pib", name="uq_client_pib_per_org"),
+        CheckConstraint(
+            "client_type IN ('vat_payer', 'pausalac', 'foreign_entity', 'non_profit')",
+            name="ck_clients_client_type",
+        ),
         Index("ix_clients_org_id", "organization_id"),
         Index("ix_clients_pib", "pib"),
         Index(
@@ -69,4 +89,5 @@ class Client(Base, UUIDMixin, TimestampMixin):
             "organization_id",
             "is_active",
         ),
+        Index("ix_clients_org_type", "organization_id", "client_type"),
     )
