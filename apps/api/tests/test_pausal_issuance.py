@@ -8,11 +8,47 @@ the new ``direction`` filter on ``/api/v1/invoices``.
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import decode_token
+
+
+class _FakeS3:
+    """No-op S3 client used as the default in tests.
+
+    CI has no MinIO/S3 reachable; real put_object calls would attempt
+    AWS DNS resolution. Tests that need to assert on put_object args
+    should patch again inside the test with their own spy.
+    """
+
+    def put_object(self, **kwargs):
+        pass
+
+    def generate_presigned_url(self, *args, **kwargs):
+        return "https://storage/fake-signed"
+
+
+@pytest.fixture(autouse=True)
+def _mock_s3_for_all_issuance_tests():
+    """Stub out S3 so issuance tests don't reach out to AWS in CI."""
+    with (
+        patch(
+            "app.services.pausal_invoice_issuance.storage.get_s3_client",
+            return_value=_FakeS3(),
+        ),
+        patch(
+            "app.services.storage._get_public_s3_client",
+            return_value=_FakeS3(),
+        ),
+        patch(
+            "app.services.storage.get_s3_client",
+            return_value=_FakeS3(),
+        ),
+    ):
+        yield
 
 
 async def _register_and_login(
