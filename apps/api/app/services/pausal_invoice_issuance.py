@@ -259,6 +259,12 @@ async def issue_pausal_invoice(
     invoice.document_path = key
     invoice.document_content_type = "application/pdf"
 
+    # Auto-populate KPO ledger — the entry shares the invoice's number
+    # because both consume the same per-client-per-year counter.
+    from app.services.kpo_ledger import create_auto_kpo_entry
+
+    await create_auto_kpo_entry(db, paušalac, invoice)
+
     logger.info(
         "Issued paušal invoice %s (client=%s, total=%s %s)",
         invoice_number,

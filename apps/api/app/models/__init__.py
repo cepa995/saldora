@@ -19,6 +19,7 @@ from app.models.invitation import Invitation
 from app.models.invoice import Invoice
 from app.models.invoice_counter import InvoiceCounter
 from app.models.join_request import JoinRequest
+from app.models.kpo_entry import KPOEntry
 from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
@@ -45,6 +46,7 @@ __all__ = [
     "InvoiceCounter",
     "InvoiceLineItem",
     "JoinRequest",
+    "KPOEntry",
     "MiniMaxConfig",
     "Organization",
     "ProductCatalog",
