@@ -29,6 +29,41 @@ function ruleTypeLabel(ruleType: string): string {
   return map[ruleType] ?? ruleType;
 }
 
+const TYPE_CHIP: Record<string, string> = {
+  KONTO_ASSIGNMENT: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+  VAT_TREATMENT: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  AUTO_APPROVE: 'bg-green-50 text-green-700 ring-green-600/20',
+  FLAG_FOR_REVIEW: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+  DOCUMENT_TYPE: 'bg-purple-50 text-purple-700 ring-purple-600/20',
+  CUSTOM_FIELD: 'bg-stone-100 text-stone-700 ring-stone-600/20',
+};
+
+const TYPE_ACCENT: Record<string, string> = {
+  KONTO_ASSIGNMENT: 'bg-blue-400',
+  VAT_TREATMENT: 'bg-emerald-400',
+  AUTO_APPROVE: 'bg-green-400',
+  FLAG_FOR_REVIEW: 'bg-amber-400',
+  DOCUMENT_TYPE: 'bg-purple-400',
+  CUSTOM_FIELD: 'bg-stone-400',
+};
+
+function lastExecutedLabel(iso: string | null): string {
+  if (!iso) return 'Nije još primenjeno';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'Pre manje od minuta';
+  if (minutes < 60) return `Pre ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Pre ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `Pre ${days} d`;
+  return new Date(iso).toLocaleDateString('sr-Latn', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function ClientRules({ clientId }: Props) {
   const tCommon = useTranslations('common');
   const orgPath = useOrgPath();
@@ -168,36 +203,37 @@ export function ClientRules({ clientId }: Props) {
             </p>
           ) : (
             <ul className="divide-y divide-violet-100">
-              {attachable.map((rule) => (
-                <li key={rule.id} className="py-2.5 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-stone-900 truncate">
-                        {rule.name}
-                      </span>
-                      <span className="text-[11px] text-stone-500 uppercase tracking-wider">
+              {attachable.map((rule) => {
+                const chip =
+                  TYPE_CHIP[rule.rule_type] ?? 'bg-stone-100 text-stone-700 ring-stone-600/20';
+                return (
+                  <li key={rule.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset shrink-0 ${chip}`}
+                      >
                         {ruleTypeLabel(rule.rule_type)}
                       </span>
-                      {rule.client_ids.length === 0 && (
-                        <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                          Svi klijenti
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-stone-900 truncate block">
+                          {rule.name}
                         </span>
-                      )}
+                        {rule.description && (
+                          <p className="text-[11px] text-stone-500 truncate">{rule.description}</p>
+                        )}
+                      </div>
                     </div>
-                    {rule.description && (
-                      <p className="text-xs text-stone-500 mt-0.5 truncate">{rule.description}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAttach(rule.id)}
-                    disabled={mutatingId === rule.id}
-                    className="px-3 py-1.5 text-xs font-medium text-violet-700 bg-white hover:bg-violet-50 ring-1 ring-violet-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
-                  >
-                    Dodaj
-                  </button>
-                </li>
-              ))}
+                    <button
+                      type="button"
+                      onClick={() => handleAttach(rule.id)}
+                      disabled={mutatingId === rule.id}
+                      className="px-3 py-1.5 text-xs font-medium text-violet-700 bg-white hover:bg-violet-50 ring-1 ring-violet-200 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      Dodaj
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -211,86 +247,135 @@ export function ClientRules({ clientId }: Props) {
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-stone-100 rounded-2xl border border-stone-200 bg-white overflow-hidden">
-          {attachedList.map((rule) => (
-            <li
-              key={rule.id}
-              className="p-4 flex items-start justify-between gap-3 hover:bg-stone-50/60 transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-stone-900">{rule.name}</span>
-                  <span className="text-[11px] text-stone-500 uppercase tracking-wider">
-                    {ruleTypeLabel(rule.rule_type)}
-                  </span>
-                  {!rule.is_active && (
-                    <span className="text-[11px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
-                      Neaktivno
-                    </span>
+        <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {attachedList.map((rule) => {
+            const accent = TYPE_ACCENT[rule.rule_type] ?? 'bg-stone-400';
+            const chip = TYPE_CHIP[rule.rule_type] ?? 'bg-stone-100 text-stone-700 ring-stone-600/20';
+            return (
+              <li
+                key={rule.id}
+                className={`group relative rounded-2xl bg-white ring-1 ring-stone-200 hover:ring-stone-300 hover:shadow-sm shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-all overflow-hidden ${
+                  !rule.is_active ? 'opacity-60' : ''
+                }`}
+              >
+                {/* Left accent stripe — colored by rule type */}
+                <span
+                  className={`absolute left-0 top-0 bottom-0 w-[3px] ${accent}`}
+                  aria-hidden="true"
+                />
+
+                <div className="p-4 pl-5 flex flex-col gap-2.5">
+                  {/* Header: name + type chip */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[15px] font-semibold text-stone-900 leading-snug truncate">
+                        {rule.name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset ${chip}`}
+                        >
+                          {ruleTypeLabel(rule.rule_type)}
+                        </span>
+                        {!rule.is_active && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-stone-100 text-stone-600 ring-1 ring-inset ring-stone-300">
+                            Neaktivno
+                          </span>
+                        )}
+                        {rule.client_ids.length > 1 && (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-600/20"
+                            title={`Deli se sa još ${rule.client_ids.length - 1} klijenata`}
+                          >
+                            +{rule.client_ids.length - 1}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  {rule.description && (
+                    <p className="text-[13px] text-stone-600 leading-relaxed line-clamp-2">
+                      {rule.description}
+                    </p>
                   )}
+
+                  {/* Footer: meta stats + actions */}
+                  <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-100 mt-1">
+                    <div className="text-[11px] text-stone-500 tabular-nums flex items-center gap-3 min-w-0">
+                      <span className="inline-flex items-center gap-1">
+                        <svg className="w-3 h-3 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {rule.execution_count}
+                      </span>
+                      <span className="truncate">{lastExecutedLabel(rule.last_executed_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Link
+                        href={orgPath(`/rules?rule=${rule.id}`)}
+                        className="px-2.5 py-1 text-[12px] font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-md transition-colors"
+                      >
+                        Izmeni
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDetach(rule.id)}
+                        disabled={mutatingId === rule.id}
+                        className="px-2.5 py-1 text-[12px] font-medium text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
+                      >
+                        Skini
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {rule.description && (
-                  <p className="text-xs text-stone-500 mt-1">{rule.description}</p>
-                )}
-                <div className="text-[11px] text-stone-400 tabular-nums mt-1.5 flex items-center gap-3">
-                  <span>Prioritet {rule.priority}</span>
-                  <span>· {rule.execution_count} primena</span>
-                  {rule.client_ids.length > 1 && (
-                    <span>· primenjuje se i na {rule.client_ids.length - 1} drugih klijenata</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Link
-                  href={orgPath(`/rules?rule=${rule.id}`)}
-                  className="text-xs font-medium text-stone-600 hover:text-stone-900 px-2.5 py-1.5 hover:bg-stone-100 rounded-md transition-colors"
-                >
-                  Izmeni
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => handleDetach(rule.id)}
-                  disabled={mutatingId === rule.id}
-                  className="text-xs font-medium text-rose-600 hover:text-rose-800 px-2.5 py-1.5 hover:bg-rose-50 rounded-md transition-colors disabled:opacity-50"
-                >
-                  Skini
-                </button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
       {/* Global rules — read-only context */}
       {globalRules.length > 0 && (
         <div>
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-2">
-            Globalna pravila — primenjuju se na sve klijente
-          </h3>
-          <ul className="divide-y divide-stone-100 rounded-2xl border border-stone-200 bg-stone-50/40">
-            {globalRules.map((rule) => (
-              <li key={rule.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm text-stone-800">{rule.name}</span>
-                    <span className="text-[11px] text-stone-500 uppercase tracking-wider">
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+              Globalna pravila
+            </h3>
+            <span className="text-[11px] text-stone-400">primenjuju se na sve klijente</span>
+          </div>
+          <ul className="divide-y divide-stone-200/60 rounded-2xl border border-stone-200 bg-stone-50/40 overflow-hidden">
+            {globalRules.map((rule) => {
+              const chip =
+                TYPE_CHIP[rule.rule_type] ?? 'bg-stone-100 text-stone-700 ring-stone-600/20';
+              return (
+                <li
+                  key={rule.id}
+                  className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-white/60 transition-colors"
+                >
+                  <div className="min-w-0 flex-1 flex items-center gap-2.5">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ring-1 ring-inset shrink-0 ${chip}`}
+                    >
                       {ruleTypeLabel(rule.rule_type)}
                     </span>
+                    <span className="text-sm text-stone-800 truncate">{rule.name}</span>
                     {!rule.is_active && (
-                      <span className="text-[11px] font-medium text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">
+                      <span className="text-[11px] font-medium text-stone-500 bg-white ring-1 ring-stone-300 px-1.5 py-0.5 rounded shrink-0">
                         Neaktivno
                       </span>
                     )}
                   </div>
-                </div>
-                <Link
-                  href={orgPath(`/rules?rule=${rule.id}`)}
-                  className="text-xs font-medium text-stone-500 hover:text-stone-800 shrink-0"
-                >
-                  Otvori →
-                </Link>
-              </li>
-            ))}
+                  <Link
+                    href={orgPath(`/rules?rule=${rule.id}`)}
+                    className="text-xs font-medium text-stone-500 hover:text-stone-800 shrink-0"
+                  >
+                    Otvori →
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
