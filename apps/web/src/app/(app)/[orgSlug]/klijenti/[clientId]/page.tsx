@@ -110,7 +110,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto w-full max-w-[100rem]">
         <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 text-rose-800">
           {error}
         </div>
@@ -119,7 +119,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs text-stone-500">
         <Link href={orgPath('/klijenti')} className="hover:text-violet-700 transition-colors">

@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl';
 
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
-import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
@@ -24,6 +23,10 @@ type FilterKey = 'all' | 'needs_attention' | 'ok';
 function currentYYYYMM(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatCompactNumber(n: number): string {
+  return n.toLocaleString('sr-Latn');
 }
 
 function timeAgo(iso: string | null): string {
@@ -52,7 +55,7 @@ export default function KlijentiPage({ params }: PageProps) {
   const { hasRole } = useAuth();
   const { refresh: refreshContext } = useClient();
 
-  const [period, setPeriod] = useState<string>(currentYYYYMM());
+  const [period] = useState<string>(currentYYYYMM());
   const [rows, setRows] = useState<PortfolioRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,11 +101,17 @@ export default function KlijentiPage({ params }: PageProps) {
   const counts = useMemo(() => {
     let needsAttention = 0;
     let ok = 0;
+    let pending = 0;
+    let blocked = 0;
+    let totalInvoices = 0;
     for (const r of rows) {
+      totalInvoices += r.invoice_count;
+      pending += r.pending_review_count;
+      blocked += r.blocked_count;
       if (r.blocked_count > 0 || r.pending_review_count > 0) needsAttention += 1;
       else ok += 1;
     }
-    return { all: rows.length, needsAttention, ok };
+    return { all: rows.length, needsAttention, ok, pending, blocked, totalInvoices };
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -178,11 +187,11 @@ export default function KlijentiPage({ params }: PageProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="mx-auto w-full max-w-[110rem] space-y-7">
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-stone-900 tracking-tight">
+          <h1 className="text-[32px] sm:text-[36px] font-bold text-stone-900 tracking-tight leading-[1.1]">
             {t('title')}
           </h1>
           <p className="text-sm text-stone-500 mt-2">
@@ -204,62 +213,71 @@ export default function KlijentiPage({ params }: PageProps) {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <MonthPicker value={period} onChange={setPeriod} />
-          {hasRole('manager') && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingClient(null);
-                setModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
-              </svg>
-              {t('addClient')}
-            </button>
-          )}
-        </div>
+        {hasRole('manager') && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingClient(null);
+              setModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
+            </svg>
+            {t('addClient')}
+          </button>
+        )}
       </header>
 
-      {/* Filter pills — ghost style */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <FilterPill
-          label={tPortfolio('filterAll')}
-          count={counts.all}
-          active={filter === 'all'}
-          tone="neutral"
-          onClick={() => setFilter('all')}
+      {/* Agency summary strip */}
+      {counts.all > 0 && (
+        <AgencySummary
+          clients={counts.all}
+          invoices={counts.totalInvoices}
+          pending={counts.pending}
+          blocked={counts.blocked}
         />
-        <FilterPill
-          label={tPortfolio('filterNeedsAttention')}
-          count={counts.needsAttention}
-          active={filter === 'needs_attention'}
-          tone="amber"
-          onClick={() => setFilter('needs_attention')}
-        />
-        <FilterPill
-          label={tPortfolio('filterOk')}
-          count={counts.ok}
-          active={filter === 'ok'}
-          tone="emerald"
-          onClick={() => setFilter('ok')}
-        />
-      </div>
+      )}
 
-      {/* Search */}
-      <div className="relative">
-        <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
-        </svg>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('searchPlaceholder')}
-          className="w-full pl-10 pr-3 py-2.5 text-sm bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-violet-500/15 focus:border-violet-500 placeholder:text-stone-400"
-        />
+      {/* Sticky filter + search bar */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-gradient-to-b from-gray-50 via-gray-50/95 to-gray-50/70 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <FilterPill
+              label={tPortfolio('filterAll')}
+              count={counts.all}
+              active={filter === 'all'}
+              tone="neutral"
+              onClick={() => setFilter('all')}
+            />
+            <FilterPill
+              label={tPortfolio('filterNeedsAttention')}
+              count={counts.needsAttention}
+              active={filter === 'needs_attention'}
+              tone="amber"
+              onClick={() => setFilter('needs_attention')}
+            />
+            <FilterPill
+              label={tPortfolio('filterOk')}
+              count={counts.ok}
+              active={filter === 'ok'}
+              tone="emerald"
+              onClick={() => setFilter('ok')}
+            />
+          </div>
+          <div className="relative flex-1 sm:max-w-md sm:ml-auto">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
+            </svg>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="w-full pl-10 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-violet-500/15 focus:border-violet-500 placeholder:text-stone-400"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Error */}
@@ -283,7 +301,7 @@ export default function KlijentiPage({ params }: PageProps) {
           noDataLabel={tCommon('noData')}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
           {filtered.map((row) => (
             <ClientCard
               key={row.client_id}
@@ -330,6 +348,52 @@ export default function KlijentiPage({ params }: PageProps) {
           {toast.message}
         </div>
       )}
+    </div>
+  );
+}
+
+function AgencySummary({
+  clients,
+  invoices,
+  pending,
+  blocked,
+}: {
+  clients: number;
+  invoices: number;
+  pending: number;
+  blocked: number;
+}) {
+  const t = useTranslations('clients');
+  const tPortfolio = useTranslations('portfolio');
+  const tWorkspace = useTranslations('clientWorkspace');
+
+  const stats: { label: string; value: number; tone: 'neutral' | 'amber' | 'rose' }[] = [
+    { label: t('title'), value: clients, tone: 'neutral' },
+    { label: tPortfolio('colInvoices'), value: invoices, tone: 'neutral' },
+    { label: tWorkspace('tilePending'), value: pending, tone: pending > 0 ? 'amber' : 'neutral' },
+    { label: tWorkspace('tileBlocked'), value: blocked, tone: blocked > 0 ? 'rose' : 'neutral' },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-stone-200/70 rounded-2xl bg-white ring-1 ring-stone-200/70 overflow-hidden">
+      {stats.map((s) => (
+        <div key={s.label} className="px-5 py-4 min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+            {s.label}
+          </p>
+          <p
+            className={`mt-1 text-[28px] font-bold tabular-nums leading-none ${
+              s.tone === 'amber'
+                ? 'text-amber-700'
+                : s.tone === 'rose'
+                  ? 'text-rose-700'
+                  : 'text-stone-900'
+            }`}
+          >
+            {formatCompactNumber(s.value)}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
