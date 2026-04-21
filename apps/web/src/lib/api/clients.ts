@@ -64,26 +64,22 @@ interface CountResp {
 }
 
 /**
- * Compute per-period stats for a client by probing the invoice list endpoint.
+ * Compute all-time stats for a client by probing the invoice list endpoint.
  *
- * Uses three parallel counted queries (pending / blocked / all). Avoids a
- * dedicated stats endpoint; fine for a single client where result sets are
- * small. Upgrade to a backend aggregation if the workspace ever paints more
- * than these three tiles.
+ * Deliberately not period-scoped: the /klijenti list card shows lifetime
+ * counts (portfolio endpoint aggregates across all time), and having the
+ * workspace disagree with the card by silently applying a month filter was
+ * confusing — a client could show "2 fakture" on the card and "0" on the
+ * workspace for the same account. The Timeline tab owns its own period
+ * picker because events are temporal; these top-level tiles aren't.
  */
 export async function fetchClientWorkspaceStats(
   clientId: string,
-  period: string,
 ): Promise<ClientWorkspaceStats> {
-  const [y, m] = period.split('-').map(Number);
-  const from = `${y}-${String(m).padStart(2, '0')}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  const base = `client_id=${encodeURIComponent(clientId)}&date_from=${from}&date_to=${to}`;
-  // Backend caps per_page at 100. Summing total_amount across the first 100 invoices
-  // covers every client we target (a café/bar rarely exceeds that in a single month).
-  // If we ever need exact totals for heavier clients, move this to a backend aggregate.
+  const base = `client_id=${encodeURIComponent(clientId)}`;
+  // Backend caps per_page at 100. Summing total_amount across the first 100
+  // invoices is fine for the clients we target (hospitality SMBs). If we ever
+  // need exact totals past that, move this to a backend aggregate.
   const [all, pending, blocked] = await Promise.all([
     apiClient<CountResp>(`/api/v1/invoices?${base}&per_page=100`),
     apiClient<CountResp>(`/api/v1/invoices?${base}&status=review&per_page=1`),

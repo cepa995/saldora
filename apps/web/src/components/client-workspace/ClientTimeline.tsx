@@ -13,13 +13,18 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
+import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import type { ClientEventResponse } from '@/lib/api/clients';
 import { fetchClientEvents } from '@/lib/api/clients';
 import { useOrgPath } from '@/lib/navigation';
 
 interface Props {
   clientId: string;
-  period: string; // YYYY-MM
+}
+
+function currentYYYYMM(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 const EVENT_TYPES = [
@@ -138,11 +143,12 @@ function describe(e: ClientEventResponse, t: (k: string, v?: Record<string, stri
   }
 }
 
-export function ClientTimeline({ clientId, period }: Props) {
+export function ClientTimeline({ clientId }: Props) {
   const t = useTranslations('clientWorkspace');
   const tCommon = useTranslations('common');
   const orgPath = useOrgPath();
 
+  const [period, setPeriod] = useState<string>(currentYYYYMM());
   const [events, setEvents] = useState<ClientEventResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -183,36 +189,39 @@ export function ClientTimeline({ clientId, period }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Filter chips */}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => setFilterTypes(new Set())}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            filterTypes.size === 0
-              ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-          }`}
-        >
-          {tCommon('all')}
-        </button>
-        {EVENT_TYPES.map((tp) => {
-          const active = filterTypes.has(tp);
-          return (
-            <button
-              key={tp}
-              type="button"
-              onClick={() => toggleType(tp)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                active
-                  ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {t(`eventType_${tp}`)}
-            </button>
-          );
-        })}
+      {/* Toolbar: period picker on the left, type filters on the right */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <MonthPicker value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+          <button
+            type="button"
+            onClick={() => setFilterTypes(new Set())}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filterTypes.size === 0
+                ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {tCommon('all')}
+          </button>
+          {EVENT_TYPES.map((tp) => {
+            const active = filterTypes.has(tp);
+            return (
+              <button
+                key={tp}
+                type="button"
+                onClick={() => toggleType(tp)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  active
+                    ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {t(`eventType_${tp}`)}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {error && (

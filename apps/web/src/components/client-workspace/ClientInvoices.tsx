@@ -12,7 +12,6 @@ import type { InvoiceResponse, InvoiceStatus } from '@/lib/types/invoice';
 
 interface Props {
   clientId: string;
-  period: string;
 }
 
 const STATUS_FILTERS: (InvoiceStatus | 'all')[] = [
@@ -23,15 +22,7 @@ const STATUS_FILTERS: (InvoiceStatus | 'all')[] = [
   'error',
 ];
 
-function periodBounds(period: string): { from: string; to: string } {
-  const [y, m] = period.split('-').map(Number);
-  const from = `${y}-${String(m).padStart(2, '0')}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  return { from, to };
-}
-
-export function ClientInvoices({ clientId, period }: Props) {
+export function ClientInvoices({ clientId }: Props) {
   const t = useTranslations('invoices');
   const tCommon = useTranslations('common');
   const tStatus = useTranslations('status');
@@ -47,11 +38,8 @@ export function ClientInvoices({ clientId, period }: Props) {
     setIsLoading(true);
     setError(null);
     try {
-      const { from, to } = periodBounds(period);
       const resp = await fetchInvoices({
         client_id: clientId,
-        date_from: from,
-        date_to: to,
         status: statusFilter === 'all' ? undefined : statusFilter,
         sort: 'invoice_date',
         order: 'desc',
@@ -64,7 +52,7 @@ export function ClientInvoices({ clientId, period }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, period, statusFilter, tCommon]);
+  }, [clientId, statusFilter, tCommon]);
 
   useEffect(() => {
     void load();

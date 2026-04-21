@@ -9,7 +9,6 @@ import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
 import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
-import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import { TabBar, type TabKey } from '@/components/client-workspace/TabBar';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -27,11 +26,6 @@ interface PageProps {
   params: Promise<{ orgSlug: string; clientId: string }>;
 }
 
-function currentYYYYMM(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export default function ClientWorkspacePage({ params }: PageProps) {
   const { orgSlug, clientId } = use(params);
   const searchParams = useSearchParams();
@@ -42,7 +36,6 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   const { hasRole } = useAuth();
 
   const activeTab = (searchParams.get('tab') as TabKey | null) ?? 'timeline';
-  const [period, setPeriod] = useState<string>(currentYYYYMM());
 
   const [client, setClient] = useState<ClientResponse | null>(null);
   const [stats, setStats] = useState<ClientWorkspaceStats | null>(null);
@@ -59,7 +52,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
     try {
       const [c, s] = await Promise.all([
         fetchClient(clientId),
-        fetchClientWorkspaceStats(clientId, period).catch(() => null),
+        fetchClientWorkspaceStats(clientId).catch(() => null),
       ]);
       setClient(c);
       setStats(s);
@@ -68,7 +61,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, period, tCommon]);
+  }, [clientId, tCommon]);
 
   useEffect(() => {
     void load();
@@ -160,7 +153,6 @@ export default function ClientWorkspacePage({ params }: PageProps) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <MonthPicker value={period} onChange={setPeriod} />
           {hasRole('manager') && client && (
             <div className="flex items-center gap-1">
               <button
@@ -191,10 +183,10 @@ export default function ClientWorkspacePage({ params }: PageProps) {
       {/* Tab content */}
       <div>
         {activeTab === 'timeline' && (
-          <ClientTimeline clientId={clientId} period={period} />
+          <ClientTimeline clientId={clientId} />
         )}
         {activeTab === 'fakture' && (
-          <ClientInvoices clientId={clientId} period={period} />
+          <ClientInvoices clientId={clientId} />
         )}
         {activeTab === 'izvestaji' && (
           <TabPlaceholder
