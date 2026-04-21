@@ -102,8 +102,7 @@ class InvoiceResponse(BaseModel):
     """Full invoice response."""
 
     id: UUID
-    status: Literal["processing", "review", "verified", "exported", "error", "issued", "cancelled"]
-    direction: Literal["incoming", "outgoing"] = "incoming"
+    status: Literal["processing", "review", "verified", "exported", "error"]
     confidence_score: float | None = Field(ge=0, le=100)
 
     # Core fields

@@ -663,7 +663,6 @@ def _build_invoice_response(
     return InvoiceResponse(
         id=invoice.id,
         status=invoice.status,
-        direction=invoice.direction,
         confidence_score=confidence_score,
         invoice_number=invoice.invoice_number,
         invoice_date=invoice.invoice_date,
@@ -793,11 +792,6 @@ async def list_invoices(
     accounting_review: bool | None = Query(default=None),
     book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
     client_id: UUID | None = Query(default=None, description="Filter by client ID"),
-    direction: str | None = Query(
-        default="incoming",
-        pattern="^(incoming|outgoing|all)$",
-        description="Filter by direction; 'all' returns both",
-    ),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -825,10 +819,6 @@ async def list_invoices(
 
     # Base filter: multi-tenant isolation
     conditions = [Invoice.organization_id == user.organization_id]
-
-    # Direction filter (default: incoming, so existing UI sees only OCR'd invoices)
-    if direction and direction != "all":
-        conditions.append(Invoice.direction == direction)
 
     # Status filter
     if invoice_status:

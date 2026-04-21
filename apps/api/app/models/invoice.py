@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, CheckConstraint, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import JSON, Date, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,17 +39,7 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
     # Status
     status: Mapped[str] = mapped_column(
         String(20), default="processing", index=True
-    )  # incoming: processing, review, verified, exported, error
-    # outgoing: issued, cancelled
-
-    # Direction: incoming (from supplier) | outgoing (issued by org, paušal)
-    direction: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-        server_default="incoming",
-        default="incoming",
-        index=True,
-    )
+    )  # processing, review, verified, exported, error
 
     # Core fields (populated by OCR)
     invoice_number: Mapped[str | None] = mapped_column(String(100))
@@ -100,11 +90,4 @@ class Invoice(Base, UUIDMixin, TimestampMixin):
         uselist=False,
         cascade="all, delete-orphan",
         passive_deletes=True,
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "direction IN ('incoming', 'outgoing')",
-            name="ck_invoices_direction",
-        ),
     )
