@@ -48,6 +48,7 @@ export default function InvoicesPage() {
     error,
     selectedIds,
     setStatus,
+    setDirection,
     setAccountingReview,
     setBookType,
     setSearch,
@@ -194,6 +195,38 @@ export default function InvoicesPage() {
 
         {/* Filter chips + Date range */}
         <div className="space-y-3">
+          {/* Direction segmented control — incoming | outgoing | all.
+              Defaults to undefined (= backend's "incoming"), so the page
+              behaves like before until the user opts into outgoing/all. */}
+          <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+            {(
+              [
+                { key: undefined, labelKey: 'directionIncoming' },
+                { key: 'outgoing' as const, labelKey: 'directionOutgoing' },
+                { key: 'all' as const, labelKey: 'directionAll' },
+              ] as const
+            ).map(({ key, labelKey }) => {
+              // "incoming" is the default on the server when no filter is
+              // sent, so treat undefined and 'incoming' as the same tab.
+              const isActive =
+                (filters.direction ?? undefined) === key ||
+                (key === undefined && filters.direction === 'incoming');
+              return (
+                <button
+                  key={labelKey}
+                  onClick={() => setDirection(key)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-white text-violet-700 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {t(labelKey)}
+                </button>
+              );
+            })}
+          </div>
+
           {/* All filter chips in one wrapping row */}
           <div className="flex flex-wrap items-center gap-2">
             {STATUS_OPTIONS.map((status) => {

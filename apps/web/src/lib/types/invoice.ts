@@ -177,10 +177,13 @@ export interface AccountingIntentResponse {
 
 export type SortOrder = 'asc' | 'desc';
 
+export type InvoiceDirection = 'incoming' | 'outgoing' | 'all';
+
 export interface InvoiceFilters {
   page: number;
   per_page: number;
   status?: InvoiceStatus;
+  direction?: InvoiceDirection;
   date_from?: string;
   date_to?: string;
   search?: string;

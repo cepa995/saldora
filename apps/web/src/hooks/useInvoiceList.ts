@@ -6,6 +6,7 @@ import { useClient } from '@/contexts/ClientContext';
 import type {
   InvoiceResponse,
   InvoiceStatus,
+  InvoiceDirection,
   PaginationInfo,
   InvoiceFilters,
   SortColumn,
@@ -27,6 +28,7 @@ interface UseInvoiceListReturn {
   error: string | null;
   selectedIds: Set<string>;
   setStatus: (status: InvoiceStatus | undefined) => void;
+  setDirection: (direction: InvoiceDirection | undefined) => void;
   setAccountingReview: (value: boolean | undefined) => void;
   setBookType: (value: 'KPR' | 'KIR' | undefined) => void;
   setSearch: (search: string) => void;
@@ -94,6 +96,11 @@ export function useInvoiceList(): UseInvoiceListReturn {
 
   const setStatus = useCallback((status: InvoiceStatus | undefined) => {
     setFilters((prev) => ({ ...prev, status, page: 1 }));
+    setSelectedIds(new Set());
+  }, []);
+
+  const setDirection = useCallback((direction: InvoiceDirection | undefined) => {
+    setFilters((prev) => ({ ...prev, direction, page: 1 }));
     setSelectedIds(new Set());
   }, []);
 
@@ -198,6 +205,7 @@ export function useInvoiceList(): UseInvoiceListReturn {
     error,
     selectedIds,
     setStatus,
+    setDirection,
     setAccountingReview,
     setBookType,
     setSearch,
