@@ -44,6 +44,7 @@ async def compute_portfolio(
             func.count(Invoice.id).label("invoice_count"),
             func.coalesce(func.sum(pending), 0).label("pending_review_count"),
             func.coalesce(func.sum(blocked), 0).label("blocked_count"),
+            func.coalesce(func.sum(Invoice.total_amount), 0).label("total_amount"),
         )
         .where(Invoice.organization_id == organization_id)
         .group_by(Invoice.client_id)
@@ -69,6 +70,7 @@ async def compute_portfolio(
             func.coalesce(invoice_stats.c.invoice_count, 0).label("invoice_count"),
             func.coalesce(invoice_stats.c.pending_review_count, 0).label("pending_review_count"),
             func.coalesce(invoice_stats.c.blocked_count, 0).label("blocked_count"),
+            func.coalesce(invoice_stats.c.total_amount, 0).label("total_amount"),
             activity_stats.c.last_activity_at,
         )
         .outerjoin(invoice_stats, invoice_stats.c.client_id == Client.id)
@@ -88,6 +90,7 @@ async def compute_portfolio(
         # response schema takes Pydantic's datetime, which tolerates either.
         if isinstance(last_activity, datetime):
             pass
+        total_amount_raw = row.total_amount
         data.append(
             PortfolioRow(
                 client_id=row.id,
@@ -97,6 +100,7 @@ async def compute_portfolio(
                 invoice_count=int(row.invoice_count or 0),
                 pending_review_count=int(row.pending_review_count or 0),
                 blocked_count=int(row.blocked_count or 0),
+                total_amount=str(total_amount_raw) if total_amount_raw is not None else None,
                 last_activity_at=last_activity,
             )
         )

@@ -12,6 +12,7 @@ export interface PortfolioRow {
   invoice_count: number;
   pending_review_count: number;
   blocked_count: number;
+  total_amount: string | null;
   last_activity_at: string | null;
 }
 

@@ -11,6 +11,7 @@ import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
 import { createClient, deleteClient, fetchClient, updateClient } from '@/lib/api/clients';
 import { fetchPortfolio, type PortfolioRow } from '@/lib/api/portfolio';
+import { formatAmountSr } from '@/lib/formatters';
 import type { ClientCreate, ClientResponse, ClientUpdate } from '@/lib/types/client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 
@@ -277,7 +278,7 @@ export default function KlijentiPage({ params }: PageProps) {
           noDataLabel={tCommon('noData')}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((row) => (
             <ClientCard
               key={row.client_id}
@@ -567,14 +568,16 @@ function ClientCard({
   const severity = row.blocked_count > 0 ? 'blocked' : row.pending_review_count > 0 ? 'pending' : 'ok';
   const toneCls =
     severity === 'blocked'
-      ? 'bg-rose-50/50 ring-1 ring-rose-200 hover:ring-rose-300'
+      ? 'bg-rose-50/40 ring-1 ring-rose-200 hover:ring-rose-300'
       : severity === 'pending'
-        ? 'bg-amber-50/40 ring-1 ring-amber-200 hover:ring-amber-300'
+        ? 'bg-amber-50/30 ring-1 ring-amber-200 hover:ring-amber-300'
         : 'bg-white ring-1 ring-stone-200/80 hover:ring-stone-300';
+
+  const totalAmountNum = Number(row.total_amount ?? 0);
 
   return (
     <div
-      className={`group relative rounded-2xl flex flex-col overflow-hidden transition-all hover:-translate-y-px hover:shadow-lg shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${toneCls}`}
+      className={`group relative rounded-2xl flex flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${toneCls}`}
     >
       <Link
         href={`/${orgSlug}/klijenti/${row.client_id}`}
@@ -582,40 +585,59 @@ function ClientCard({
         className="absolute inset-0 z-10 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
       />
 
-      <div className="flex items-start gap-3 p-4">
-        <ClientAvatar name={row.name} seed={row.client_id} size="md" />
+      {/* Header */}
+      <div className="flex items-start gap-4 p-5 pb-4">
+        <ClientAvatar name={row.name} seed={row.client_id} size="lg" />
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-stone-900 truncate leading-tight">{row.name}</h3>
-          <p className="text-[11px] text-stone-500 tabular-nums mt-0.5 tracking-wide">PIB {row.pib}</p>
+          <h3 className="text-[17px] font-semibold text-stone-900 truncate leading-tight">
+            {row.name}
+          </h3>
+          <p className="text-[12px] text-stone-500 tabular-nums mt-1 tracking-wide">PIB {row.pib}</p>
+          {severity !== 'ok' && (
+            <div className="mt-2.5 flex items-center gap-1.5">
+              {severity === 'blocked' && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-100/70 ring-1 ring-rose-200/70">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
+                </span>
+              )}
+              {severity === 'pending' && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-amber-700 bg-amber-100/70 ring-1 ring-amber-200/70">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <span className="text-[11px] text-stone-400 tabular-nums whitespace-nowrap pt-1">
           {row.last_activity_at ? timeAgo(row.last_activity_at) : tPortfolio('indicatorStale')}
         </span>
       </div>
 
-      <div className="px-4 pb-3 flex-1">
-        <div className="flex items-center gap-3 text-xs text-stone-500">
-          <span className="tabular-nums">
-            <span className="font-semibold text-stone-700">{row.invoice_count}</span>{' '}
-            {tPortfolio('colInvoices').toLowerCase()}
-          </span>
-          {severity === 'blocked' && (
-            <span className="inline-flex items-center gap-1 text-rose-700 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-              {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
-            </span>
-          )}
-          {severity === 'pending' && (
-            <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
-            </span>
-          )}
+      {/* Metrics */}
+      <div className="grid grid-cols-2 gap-4 px-5 py-4 border-t border-stone-200/50 bg-white/50">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+            {tPortfolio('colInvoices')}
+          </p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-stone-900">
+            {row.invoice_count.toLocaleString('sr-Latn')}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+            {t('totalAmount')}
+          </p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-stone-900 truncate">
+            {totalAmountNum > 0 ? formatAmountSr(String(totalAmountNum), 'RSD') : '—'}
+          </p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-stone-200/60 bg-white/40">
-        <span className="text-xs text-violet-700 font-medium">
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-stone-200/60 bg-white/30">
+        <span className="text-[13px] text-violet-700 font-medium">
           {tPortfolio('openWorkspace')} →
         </span>
         {canEdit && (

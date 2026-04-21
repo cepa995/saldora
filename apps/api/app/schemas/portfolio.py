@@ -18,6 +18,7 @@ class PortfolioRow(BaseModel):
     invoice_count: int
     pending_review_count: int
     blocked_count: int
+    total_amount: str | None = None
     last_activity_at: datetime | None = None
 
 
