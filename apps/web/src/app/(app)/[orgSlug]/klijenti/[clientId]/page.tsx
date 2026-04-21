@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl';
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
 import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
+import { ClientRules } from '@/components/client-workspace/ClientRules';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
 import { TabBar, type TabKey } from '@/components/client-workspace/TabBar';
 import { ReportsSurface } from '@/components/reports/ReportsSurface';
@@ -192,15 +193,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
         {activeTab === 'izvestaji' && (
           <ReportsSurface clientId={clientId} />
         )}
-        {activeTab === 'pravila' && (
-          <TabPlaceholder
-            title={t('tabPravila')}
-            description={t('tabPravilaHint')}
-            href={orgPath(`/rules?client_id=${clientId}`)}
-            ctaLabel={t('openFeaturePage')}
-            isLoading={isLoading}
-          />
-        )}
+        {activeTab === 'pravila' && <ClientRules clientId={clientId} />}
       </div>
 
       {/* Edit modal */}
@@ -361,40 +354,3 @@ function ClientKebab({
   );
 }
 
-function TabPlaceholder({
-  title,
-  description,
-  href,
-  ctaLabel,
-  isLoading,
-}: {
-  title: string;
-  description: string;
-  href: string;
-  ctaLabel: string;
-  isLoading: boolean;
-}) {
-  if (isLoading) {
-    return (
-      <div className="rounded-2xl border border-stone-200 bg-white p-10 animate-pulse">
-        <div className="h-5 bg-stone-100 rounded w-1/3 mb-3" />
-        <div className="h-4 bg-stone-100 rounded w-2/3" />
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-2xl border border-dashed border-stone-200 bg-white/60 p-8 sm:p-10">
-      <h2 className="text-lg font-semibold text-stone-900 mb-1">{title}</h2>
-      <p className="text-sm text-stone-500 max-w-lg">{description}</p>
-      <Link
-        href={href}
-        className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
-      >
-        {ctaLabel}
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-        </svg>
-      </Link>
-    </div>
-  );
-}
