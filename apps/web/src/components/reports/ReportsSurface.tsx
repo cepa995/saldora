@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import ReportContent from './_components/ReportContent';
-import CatalogContent from './_components/CatalogContent';
-import DpuContent from './_components/DpuContent';
 
-// ── Navigation data ─────────────────────────────────────────────────
+import CatalogContent from '@/components/reports/CatalogContent';
+import DpuContent from '@/components/reports/DpuContent';
+import ReportContent from '@/components/reports/ReportContent';
 
 type NavItem = {
   id: string;
@@ -61,9 +60,18 @@ const REPORT_IDS = NAV_ITEMS
   .filter((i) => i.group !== 'management' && i.id !== 'dpu')
   .map((i) => i.id);
 
-// ── Page ─────────────────────────────────────────────────────────────
+interface Props {
+  /** When set, scopes every report run to this client. */
+  clientId?: string | null;
+}
 
-export default function IzvestajiPage() {
+/**
+ * Reports surface: group pills, report tabs, and the active template's panel.
+ *
+ * Used both by the client workspace Izveštaji tab (clientId scoped) and any
+ * future agency-wide placement (no clientId → lifetime aggregates).
+ */
+export function ReportsSurface({ clientId }: Props) {
   const [activeGroup, setActiveGroup] = useState<NavItem['group']>('general');
   const [selected, setSelected] = useState<string>('receivedGoods');
 
@@ -77,13 +85,7 @@ export default function IzvestajiPage() {
 
   return (
     <div className="space-y-4">
-      {/* ── Header ───────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Izveštaji</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Analitika, kalkulacije i upravljanje katalogom</p>
-      </div>
-
-      {/* ── Group pills ──────────────────────────────────────────── */}
+      {/* Group pills */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {GROUPS.map((g) => (
           <button
@@ -101,8 +103,8 @@ export default function IzvestajiPage() {
         ))}
       </div>
 
-      {/* ── Report tabs (horizontal) ─────────────────────────────── */}
-      <div className="border-b border-gray-200">
+      {/* Report tabs (horizontal) */}
+      <div className="border-b border-stone-200">
         <div className="flex gap-0 overflow-x-auto scrollbar-hide -mb-px">
           {groupItems.map((item) => (
             <button
@@ -111,7 +113,7 @@ export default function IzvestajiPage() {
               className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 selected === item.id
                   ? 'border-violet-600 text-violet-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  : 'border-transparent text-stone-500 hover:text-stone-700 hover:border-stone-300'
               }`}
             >
               {item.shortLabel}
@@ -120,11 +122,13 @@ export default function IzvestajiPage() {
         </div>
       </div>
 
-      {/* ── Content ──────────────────────────────────────────────── */}
+      {/* Content */}
       <div>
         {selected === 'catalog' && <CatalogContent />}
         {selected === 'dpu' && <DpuContent />}
-        {REPORT_IDS.includes(selected) && <ReportContent selectedTemplate={selected} />}
+        {REPORT_IDS.includes(selected) && (
+          <ReportContent selectedTemplate={selected} clientId={clientId} />
+        )}
       </div>
     </div>
   );

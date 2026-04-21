@@ -10,6 +10,7 @@ import { ClientModal } from '@/components/clients/ClientModal';
 import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
 import { TabBar, type TabKey } from '@/components/client-workspace/TabBar';
+import { ReportsSurface } from '@/components/reports/ReportsSurface';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   fetchClient,
@@ -189,13 +190,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
           <ClientInvoices clientId={clientId} />
         )}
         {activeTab === 'izvestaji' && (
-          <TabPlaceholder
-            title={t('tabIzvestaji')}
-            description={t('tabIzvestajiHint')}
-            href={orgPath(`/izvestaji?client_id=${clientId}`)}
-            ctaLabel={t('openFeaturePage')}
-            isLoading={isLoading}
-          />
+          <ReportsSurface clientId={clientId} />
         )}
         {activeTab === 'pravila' && (
           <TabPlaceholder

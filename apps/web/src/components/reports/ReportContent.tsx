@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { useClient } from '@/contexts/ClientContext';
 import {
   fetchReceivedGoods,
   fetchSpendingBySupplier,
@@ -616,6 +615,8 @@ const SKELETON_COLS: Record<TemplateId, number> = {
 
 interface ReportContentProps {
   selectedTemplate: string;
+  /** When set, every report run by this panel is scoped to this client. */
+  clientId?: string | null;
 }
 
 /**
@@ -628,10 +629,9 @@ interface ReportContentProps {
  *   A React element with date pickers, PIB filter, description search,
  *   generate/export buttons, and the results table.
  */
-export default function ReportContent({ selectedTemplate }: ReportContentProps) {
+export default function ReportContent({ selectedTemplate, clientId }: ReportContentProps) {
   const t = useTranslations('reports');
   const templateId = selectedTemplate as TemplateId;
-  const { selectedClientId } = useClient();
 
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(`${now.getFullYear()}-01-01`);
@@ -661,7 +661,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
       date_to: dateTo || undefined,
       seller_pib: sellerPib.trim() || undefined,
       description: description.trim() || undefined,
-      client_id: selectedClientId || undefined,
+      client_id: clientId ?? undefined,
     };
 
     try {
@@ -680,7 +680,7 @@ export default function ReportContent({ selectedTemplate }: ReportContentProps) 
     } finally {
       setLoading(false);
     }
-  }, [templateId, dateFrom, dateTo, sellerPib, description, t]);
+  }, [templateId, dateFrom, dateTo, sellerPib, description, clientId, t]);
 
   function hasItems(): boolean {
     if (!data) return false;
