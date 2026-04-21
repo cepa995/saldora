@@ -242,41 +242,27 @@ export default function KlijentiPage({ params }: PageProps) {
 
       {/* Sticky filter + search bar */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-gradient-to-b from-gray-50 via-gray-50/95 to-gray-50/70 backdrop-blur-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <FilterPill
-              label={tPortfolio('filterAll')}
-              count={counts.all}
-              active={filter === 'all'}
-              tone="neutral"
-              onClick={() => setFilter('all')}
-            />
-            <FilterPill
-              label={tPortfolio('filterNeedsAttention')}
-              count={counts.needsAttention}
-              active={filter === 'needs_attention'}
-              tone="amber"
-              onClick={() => setFilter('needs_attention')}
-            />
-            <FilterPill
-              label={tPortfolio('filterOk')}
-              count={counts.ok}
-              active={filter === 'ok'}
-              tone="emerald"
-              onClick={() => setFilter('ok')}
-            />
+        {/* Mobile / tablet: stacked */}
+        <div className="flex flex-col gap-3 lg:hidden">
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterPill label={tPortfolio('filterAll')} count={counts.all} active={filter === 'all'} tone="neutral" onClick={() => setFilter('all')} />
+            <FilterPill label={tPortfolio('filterNeedsAttention')} count={counts.needsAttention} active={filter === 'needs_attention'} tone="amber" onClick={() => setFilter('needs_attention')} />
+            <FilterPill label={tPortfolio('filterOk')} count={counts.ok} active={filter === 'ok'} tone="emerald" onClick={() => setFilter('ok')} />
           </div>
-          <div className="relative flex-1 sm:max-w-md sm:ml-auto">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
-            </svg>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('searchPlaceholder')}
-              className="w-full pl-10 pr-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-violet-500/15 focus:border-violet-500 placeholder:text-stone-400"
-            />
+          <SearchInput search={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
+        </div>
+
+        {/* Desktop: pills left, search centered, equal-width spacer right */}
+        <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
+          <div className="flex items-center gap-2 flex-wrap justify-self-start">
+            <FilterPill label={tPortfolio('filterAll')} count={counts.all} active={filter === 'all'} tone="neutral" onClick={() => setFilter('all')} />
+            <FilterPill label={tPortfolio('filterNeedsAttention')} count={counts.needsAttention} active={filter === 'needs_attention'} tone="amber" onClick={() => setFilter('needs_attention')} />
+            <FilterPill label={tPortfolio('filterOk')} count={counts.ok} active={filter === 'ok'} tone="emerald" onClick={() => setFilter('ok')} />
           </div>
+          <div className="w-full min-w-[22rem] max-w-xl justify-self-center">
+            <SearchInput search={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
+          </div>
+          <div aria-hidden="true" />
         </div>
       </div>
 
@@ -301,7 +287,7 @@ export default function KlijentiPage({ params }: PageProps) {
           noDataLabel={tCommon('noData')}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
           {filtered.map((row) => (
             <ClientCard
               key={row.client_id}
@@ -400,16 +386,19 @@ function AgencySummary({
 
 const PILL_TONES = {
   neutral: {
-    active: 'bg-violet-600 text-white',
-    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
+    activeWrap: 'bg-white text-stone-900 ring-1 ring-stone-300 shadow-sm shadow-stone-900/[0.03]',
+    activeBadge: 'bg-stone-100 text-stone-700',
+    dot: '',
   },
   amber: {
-    active: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200',
-    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
+    activeWrap: 'bg-amber-50 text-amber-800 ring-1 ring-amber-300 shadow-sm shadow-amber-600/[0.06]',
+    activeBadge: 'bg-amber-100 text-amber-800',
+    dot: 'bg-amber-500',
   },
   emerald: {
-    active: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200',
-    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
+    activeWrap: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300 shadow-sm shadow-emerald-600/[0.06]',
+    activeBadge: 'bg-emerald-100 text-emerald-800',
+    dot: 'bg-emerald-500',
   },
 } as const;
 
@@ -427,23 +416,53 @@ function FilterPill({
   onClick: () => void;
 }) {
   const cls = PILL_TONES[tone];
+  const inactiveWrap = 'bg-stone-100 text-stone-700 hover:bg-stone-200/80 ring-1 ring-transparent';
+  const inactiveBadge = 'bg-white text-stone-500';
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
-        active ? cls.active : cls.inactive
+      className={`inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium rounded-full transition-all ${
+        active ? cls.activeWrap : inactiveWrap
       }`}
     >
-      {label}
+      {cls.dot && (
+        <span className={`w-1.5 h-1.5 rounded-full ${cls.dot}`} aria-hidden="true" />
+      )}
+      <span>{label}</span>
       <span
-        className={`tabular-nums px-1.5 py-0.5 text-[10px] rounded-full ${
-          active ? 'bg-white/20' : 'bg-white text-stone-500'
+        className={`tabular-nums px-1.5 min-w-[1.25rem] h-5 inline-flex items-center justify-center text-[11px] rounded-full ${
+          active ? cls.activeBadge : inactiveBadge
         }`}
       >
         {count}
       </span>
     </button>
+  );
+}
+
+function SearchInput({
+  search,
+  onChange,
+  placeholder,
+}: {
+  search: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
+      </svg>
+      <input
+        value={search}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full pl-11 pr-3 h-11 text-sm bg-white border border-stone-200 rounded-xl shadow-sm shadow-stone-900/[0.02] focus:ring-2 focus:ring-violet-500/15 focus:border-violet-500 placeholder:text-stone-400"
+      />
+    </div>
   );
 }
 
