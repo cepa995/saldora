@@ -242,27 +242,17 @@ export default function KlijentiPage({ params }: PageProps) {
 
       {/* Sticky filter + search bar */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-gradient-to-b from-gray-50 via-gray-50/95 to-gray-50/70 backdrop-blur-sm">
-        {/* Mobile / tablet: stacked */}
-        <div className="flex flex-col gap-3 lg:hidden">
-          <div className="flex items-center gap-2 flex-wrap">
-            <FilterPill label={tPortfolio('filterAll')} count={counts.all} active={filter === 'all'} tone="neutral" onClick={() => setFilter('all')} />
-            <FilterPill label={tPortfolio('filterNeedsAttention')} count={counts.needsAttention} active={filter === 'needs_attention'} tone="amber" onClick={() => setFilter('needs_attention')} />
-            <FilterPill label={tPortfolio('filterOk')} count={counts.ok} active={filter === 'ok'} tone="emerald" onClick={() => setFilter('ok')} />
-          </div>
-          <SearchInput search={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
-        </div>
-
-        {/* Desktop: pills left, search centered, equal-width spacer right */}
-        <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-4">
-          <div className="flex items-center gap-2 flex-wrap justify-self-start">
-            <FilterPill label={tPortfolio('filterAll')} count={counts.all} active={filter === 'all'} tone="neutral" onClick={() => setFilter('all')} />
-            <FilterPill label={tPortfolio('filterNeedsAttention')} count={counts.needsAttention} active={filter === 'needs_attention'} tone="amber" onClick={() => setFilter('needs_attention')} />
-            <FilterPill label={tPortfolio('filterOk')} count={counts.ok} active={filter === 'ok'} tone="emerald" onClick={() => setFilter('ok')} />
-          </div>
-          <div className="w-full min-w-[22rem] max-w-xl justify-self-center">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="relative sm:w-[22rem] sm:shrink-0">
             <SearchInput search={search} onChange={setSearch} placeholder={t('searchPlaceholder')} />
           </div>
-          <div aria-hidden="true" />
+          <div className="flex items-center gap-2 flex-wrap sm:mx-auto">
+            <FilterPill label={tPortfolio('filterAll')} count={counts.all} active={filter === 'all'} tone="neutral" onClick={() => setFilter('all')} />
+            <FilterPill label={tPortfolio('filterNeedsAttention')} count={counts.needsAttention} active={filter === 'needs_attention'} tone="amber" onClick={() => setFilter('needs_attention')} />
+            <FilterPill label={tPortfolio('filterOk')} count={counts.ok} active={filter === 'ok'} tone="emerald" onClick={() => setFilter('ok')} />
+          </div>
+          {/* Invisible mirror column (same width as search) keeps pills truly centered */}
+          <div aria-hidden="true" className="hidden sm:block sm:w-[22rem] sm:shrink-0" />
         </div>
       </div>
 
@@ -287,7 +277,7 @@ export default function KlijentiPage({ params }: PageProps) {
           noDataLabel={tCommon('noData')}
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
           {filtered.map((row) => (
             <ClientCard
               key={row.client_id}
