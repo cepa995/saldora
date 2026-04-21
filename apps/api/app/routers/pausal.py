@@ -6,7 +6,7 @@ import logging
 import math
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -309,12 +309,14 @@ async def delete_customer(
 async def issue_invoice(
     client_id: UUID,
     body: PausalInvoiceIssueRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("operator")),
 ) -> dict:
     """Issue a new outgoing paušal invoice."""
     paušalac = await _get_pausalac(db, client_id, user.organization_id)
-    invoice = await issue_pausal_invoice(db, paušalac, body)
+    redis = getattr(request.app.state, "redis", None)
+    invoice = await issue_pausal_invoice(db, paušalac, body, redis=redis)
     await db.commit()
     await db.refresh(invoice)
 

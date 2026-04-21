@@ -79,6 +79,13 @@ async def create_auto_kpo_entry(
         The persisted KPOEntry (flushed, not committed).
     """
     buyer = invoice.buyer or {}
+    # KPO amounts are always in RSD so the threshold math (6M / 8M) is
+    # apples-to-apples regardless of the original invoice currency.
+    # For non-RSD invoices, use the NBS-converted ``total_amount_rsd``.
+    if invoice.currency and invoice.currency != "RSD" and invoice.total_amount_rsd is not None:
+        amount = invoice.total_amount_rsd
+    else:
+        amount = invoice.total_amount or Decimal("0")
     entry = KPOEntry(
         client_id=paušalac.id,
         organization_id=paušalac.organization_id,
@@ -89,8 +96,8 @@ async def create_auto_kpo_entry(
         invoice_number=invoice.invoice_number,
         customer_name=buyer.get("name") or "—",
         customer_pib=buyer.get("pib"),
-        amount=invoice.total_amount or Decimal("0"),
-        currency=invoice.currency or "RSD",
+        amount=amount,
+        currency="RSD",
     )
     db.add(entry)
     await db.flush()

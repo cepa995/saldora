@@ -1202,6 +1202,7 @@
     "formRemoveItem": "Уклони ставку",
     "formNotes": "Напомена",
     "formCurrency": "Валута",
+    "formNbsRateAt": "НБС средњи курс на дан {date}",
     "formSubmit": "Издај фактуру",
     "formSubmitting": "Издавање...",
     "formMissingFieldsTitle": "Паушалац није потпуно подешен",

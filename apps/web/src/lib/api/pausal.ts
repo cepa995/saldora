@@ -47,6 +47,40 @@ export async function createCustomer(
 }
 
 // ---------------------------------------------------------------------------
+// NBS currency conversion
+// ---------------------------------------------------------------------------
+
+export interface ConversionResult {
+  rsd_amount: string | null;
+  exchange_rate: string | null;
+  rate_date: string | null;
+  source: string | null;
+  error: string | null;
+}
+
+/**
+ * Convert a foreign-currency amount to RSD via the NBS middle rate.
+ *
+ * Used by the issuance modal to show a live "≈ X RSD" hint while the
+ * user types amounts. The server still re-converts at issuance time
+ * so the stored RSD amount matches the rate on the actual invoice date.
+ */
+export async function convertToRsd(
+  amount: string,
+  currency: string,
+  rateDate?: string,
+): Promise<ConversionResult> {
+  return apiClient<ConversionResult>('/api/v1/exchange-rates/convert', {
+    method: 'POST',
+    body: JSON.stringify({
+      amount,
+      currency,
+      rate_date: rateDate ?? null,
+    }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Issuance
 // ---------------------------------------------------------------------------
 

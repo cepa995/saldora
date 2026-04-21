@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -21,8 +23,16 @@ from app.schemas.pausal_invoice import (
     PausalInvoiceItem,
 )
 from app.services import storage
+from app.services.nbs import convert_to_rsd
 from app.services.pausal_pdf import build_pausal_invoice_pdf
 from app.services.pib import validate_pib
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+# ISO 4217 currency codes the NBS service can look up for us. Keep in
+# sync with settings.nbs_supported_currencies; "RSD" is always allowed.
+SUPPORTED_CURRENCIES = {"RSD", "EUR", "USD", "CHF", "GBP"}
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -189,6 +199,7 @@ async def issue_pausal_invoice(
     db: AsyncSession,
     paušalac: Client,
     body: PausalInvoiceIssueRequest,
+    redis: Redis | None = None,
 ) -> Invoice:
     """Issue a new outgoing paušal invoice.
 
@@ -215,11 +226,50 @@ async def issue_pausal_invoice(
         )
     _require_pausal_fields(paušalac)
 
+    currency = (body.currency or "RSD").upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "unsupported_currency",
+                "supported": sorted(SUPPORTED_CURRENCIES),
+                "message": f"Valuta {currency} nije podržana",
+            },
+        )
+
     customer = await _resolve_or_create_customer(db, paušalac, body)
     invoice_number = await _next_invoice_number(db, paušalac.id, body.invoice_date.year)
 
     serialised_items, subtotal = _items_payload(body.items)
     invoice_id = uuid4()
+
+    # Resolve RSD equivalent via NBS for non-RSD invoices. Legally required
+    # for Serbian tax reporting and for KPO threshold tracking.
+    exchange_rate: Decimal | None = None
+    exchange_rate_date: date | None = None
+    total_amount_rsd: Decimal | None = None
+    if currency != "RSD":
+        # Redis is used only as a caching layer in convert_to_rsd; when
+        # it's None the service falls back to DB + NBS API, so we pass
+        # it through unconditionally.
+        conv = await convert_to_rsd(db, redis, subtotal, currency, body.invoice_date)
+        if conv.get("error") or conv.get("rsd_amount") is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "exchange_rate_unavailable",
+                    "currency": currency,
+                    "invoice_date": body.invoice_date.isoformat(),
+                    "message": (
+                        f"NBS srednji kurs za {currency} na dan "
+                        f"{body.invoice_date.isoformat()} nije dostupan. "
+                        "Pokušajte sa sledećim radnim danom."
+                    ),
+                },
+            )
+        exchange_rate = conv["exchange_rate"]
+        exchange_rate_date = conv["rate_date"]
+        total_amount_rsd = conv["rsd_amount"]
 
     invoice = Invoice(
         id=invoice_id,
@@ -236,7 +286,10 @@ async def issue_pausal_invoice(
         tax_rate=Decimal("0"),
         tax_amount=Decimal("0"),
         total_amount=subtotal,
-        currency=body.currency,
+        currency=currency,
+        exchange_rate=exchange_rate,
+        exchange_rate_date=exchange_rate_date,
+        total_amount_rsd=total_amount_rsd,
         line_items=serialised_items,
     )
     db.add(invoice)
@@ -253,8 +306,11 @@ async def issue_pausal_invoice(
         customer=_customer_snapshot(customer),
         items=serialised_items,
         subtotal=subtotal,
-        currency=body.currency,
+        currency=currency,
         notes=body.notes,
+        total_amount_rsd=total_amount_rsd,
+        exchange_rate=exchange_rate,
+        exchange_rate_date=exchange_rate_date,
     )
     key = f"organizations/{paušalac.organization_id}/invoices/{invoice_id}/issued.pdf"
     await asyncio.to_thread(

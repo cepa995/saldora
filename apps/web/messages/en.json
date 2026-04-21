@@ -1202,6 +1202,7 @@
     "formRemoveItem": "Remove",
     "formNotes": "Notes",
     "formCurrency": "Currency",
+    "formNbsRateAt": "NBS middle rate on {date}",
     "formSubmit": "Issue invoice",
     "formSubmitting": "Issuing...",
     "formMissingFieldsTitle": "Paušalac is not fully configured",

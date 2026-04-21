@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import {
+  convertToRsd,
   createCustomer,
   fetchCustomers,
   issueInvoice,
@@ -49,6 +50,31 @@ const COUNTRIES: Array<{ code: string; label: string }> = [
   { code: 'HU', label: '🇭🇺 Mađarska' },
   { code: 'OTHER', label: '🌍 Ostalo' },
 ];
+
+// Subset of NBS-supported currencies. Keep in sync with the backend's
+// SUPPORTED_CURRENCIES in pausal_invoice_issuance.py.
+const CURRENCIES = ['RSD', 'EUR', 'USD', 'CHF', 'GBP'] as const;
+
+// Country → currency default used when the user first picks the country.
+// The user can still override.
+const COUNTRY_CURRENCY_HINT: Record<string, string> = {
+  RS: 'RSD',
+  US: 'USD',
+  GB: 'GBP',
+  CH: 'CHF',
+  // All eurozone / EU presets → EUR
+  DE: 'EUR',
+  AT: 'EUR',
+  IT: 'EUR',
+  FR: 'EUR',
+  NL: 'EUR',
+  IE: 'EUR',
+  HR: 'EUR',
+  SI: 'EUR',
+  ME: 'EUR',
+  BG: 'EUR',
+  // Non-euro neighbours left unset → keep user's last choice
+};
 
 interface Props {
   paušalac: ClientResponse;
@@ -92,7 +118,12 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
   const [deliveryPlace, setDeliveryPlace] = useState('');
   const [items, setItems] = useState<PausalInvoiceItem[]>([DEFAULT_ITEM]);
   const [notes, setNotes] = useState('');
-  const [currency] = useState('RSD');
+  const [currency, setCurrency] = useState<string>('RSD');
+  const [rsdEquivalent, setRsdEquivalent] = useState<{
+    amount: string;
+    rate: string;
+    rateDate: string;
+  } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +169,41 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
       })
       .catch(() => setCustomers([]));
   }, [paušalac.id, missingFields.length]);
+
+  // Live NBS conversion hint for non-RSD invoices — debounced.
+  useEffect(() => {
+    if (currency === 'RSD') {
+      setRsdEquivalent(null);
+      return;
+    }
+    const total = items.reduce((sum, item) => {
+      const q = Number(item.quantity) || 0;
+      const p = Number(item.unit_price) || 0;
+      return sum + q * p;
+    }, 0);
+    if (total <= 0 || !invoiceDate) {
+      setRsdEquivalent(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void convertToRsd(String(total), currency, invoiceDate).then((result) => {
+        if (cancelled || !result || !result.rsd_amount) return;
+        const formatted = new Intl.NumberFormat('sr-Latn-RS', {
+          maximumFractionDigits: 0,
+        }).format(Math.round(Number(result.rsd_amount)));
+        setRsdEquivalent({
+          amount: formatted,
+          rate: result.exchange_rate ?? '',
+          rateDate: result.rate_date ?? invoiceDate,
+        });
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [currency, invoiceDate, items]);
 
   const subtotal = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -350,8 +416,12 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
                       <select
                         value={newCustomerCountry}
                         onChange={(e) => {
-                          setNewCustomerCountry(e.target.value);
+                          const nextCountry = e.target.value;
+                          setNewCustomerCountry(nextCountry);
                           setNewCustomerPibTouched(false);
+                          // Auto-suggest a currency based on the country.
+                          const hint = COUNTRY_CURRENCY_HINT[nextCountry];
+                          if (hint) setCurrency(hint);
                         }}
                         className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white"
                       >
@@ -544,12 +614,36 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
                   );
                 })}
               </div>
-              <div className="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
-                <span className="text-sm text-gray-500">{t('total')}</span>
-                <span className="text-xl font-bold text-gray-900 tabular-nums">
-                  {fmtRsd(subtotal)} RSD
-                </span>
+              <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-500">{t('formCurrency')}</label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="px-2 py-1 text-xs font-semibold border border-gray-200 rounded-md bg-white focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 tabular-nums"
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm text-gray-500">{t('total')}</span>
+                  <span className="text-xl font-bold text-gray-900 tabular-nums">
+                    {fmtRsd(subtotal)} {currency}
+                  </span>
+                </div>
               </div>
+              {currency !== 'RSD' && rsdEquivalent && (
+                <div className="mt-1 text-right text-xs text-gray-500">
+                  ≈ <span className="font-medium text-gray-700">{rsdEquivalent.amount} RSD</span>{' '}
+                  <span className="text-gray-400">
+                    ({t('formNbsRateAt', { date: rsdEquivalent.rateDate })})
+                  </span>
+                </div>
+              )}
             </section>
 
             {/* Notes */}

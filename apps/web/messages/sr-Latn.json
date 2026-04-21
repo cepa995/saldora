@@ -1234,6 +1234,7 @@
     "formRemoveItem": "Ukloni stavku",
     "formNotes": "Napomena",
     "formCurrency": "Valuta",
+    "formNbsRateAt": "NBS srednji kurs na dan {date}",
     "formSubmit": "Izdaj fakturu",
     "formSubmitting": "Izdavanje...",
     "formMissingFieldsTitle": "Paušalac nije potpuno podešen",

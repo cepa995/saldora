@@ -84,6 +84,9 @@ def build_pausal_invoice_pdf(
     subtotal: Decimal,
     currency: str,
     notes: str | None,
+    total_amount_rsd: Decimal | None = None,
+    exchange_rate: Decimal | None = None,
+    exchange_rate_date: date | None = None,
 ) -> bytes:
     """Render a paušal invoice to an A4 PDF and return the bytes.
 
@@ -228,6 +231,21 @@ def build_pausal_invoice_pdf(
     )
     story.append(items_table)
     story.append(Spacer(1, 6 * mm))
+
+    # RSD equivalent block — legally required for non-RSD paušal invoices.
+    if currency != "RSD" and total_amount_rsd is not None and exchange_rate is not None:
+        rate_date_str = (
+            exchange_rate_date.isoformat() if exchange_rate_date else invoice_date.isoformat()
+        )
+        story.append(
+            Paragraph(
+                f"<b>Iznos u RSD:</b> {_fmt_money(total_amount_rsd, 'RSD')} "
+                f"<font color='#6b7280'>(NBS srednji kurs "
+                f"{_fmt_money(exchange_rate, '')} na dan {rate_date_str})</font>",
+                normal,
+            )
+        )
+        story.append(Spacer(1, 3 * mm))
 
     # Bank / payment info
     if seller.get("bank_account"):
