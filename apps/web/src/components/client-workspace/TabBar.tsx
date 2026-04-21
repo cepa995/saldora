@@ -59,8 +59,8 @@ export function TabBar({ activeTab, orgSlug, clientId }: Props) {
   const t = useTranslations('clientWorkspace');
 
   return (
-    <div className="border-b border-gray-200 overflow-x-auto">
-      <nav className="-mb-px flex gap-6">
+    <div className="border-b border-stone-200 overflow-x-auto">
+      <nav className="-mb-px flex gap-7">
         {TABS.map((tab) => {
           const isActive = tab.key === activeTab;
           const href =
@@ -73,8 +73,8 @@ export function TabBar({ activeTab, orgSlug, clientId }: Props) {
               href={href}
               className={`inline-flex items-center gap-2 whitespace-nowrap pb-3 pt-2 border-b-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? 'border-violet-600 text-violet-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+                  ? 'border-stone-900 text-stone-900'
+                  : 'border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300'
               }`}
             >
               {tab.icon}

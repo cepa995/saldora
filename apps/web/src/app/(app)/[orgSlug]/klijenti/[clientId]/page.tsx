@@ -2,15 +2,26 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { use, useCallback, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
+import { ClientAvatar } from '@/components/clients/ClientAvatar';
+import { ClientModal } from '@/components/clients/ClientModal';
+import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
 import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import { TabBar, type TabKey } from '@/components/client-workspace/TabBar';
-import { fetchClient } from '@/lib/api/clients';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  fetchClient,
+  fetchClientWorkspaceStats,
+  toggleClientActive,
+  updateClient,
+  type ClientWorkspaceStats,
+} from '@/lib/api/clients';
+import { formatAmountSr } from '@/lib/formatters';
 import { useOrgPath } from '@/lib/navigation';
-import type { ClientResponse } from '@/lib/types/client';
+import type { ClientResponse, ClientUpdate } from '@/lib/types/client';
 
 interface PageProps {
   params: Promise<{ orgSlug: string; clientId: string }>;
@@ -25,44 +36,81 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   const { orgSlug, clientId } = use(params);
   const searchParams = useSearchParams();
   const t = useTranslations('clientWorkspace');
+  const tClients = useTranslations('clients');
   const tCommon = useTranslations('common');
   const orgPath = useOrgPath();
+  const { hasRole } = useAuth();
 
   const activeTab = (searchParams.get('tab') as TabKey | null) ?? 'timeline';
   const [period, setPeriod] = useState<string>(currentYYYYMM());
 
   const [client, setClient] = useState<ClientResponse | null>(null);
+  const [stats, setStats] = useState<ClientWorkspaceStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      setClient(await fetchClient(clientId));
+      const [c, s] = await Promise.all([
+        fetchClient(clientId),
+        fetchClientWorkspaceStats(clientId, period).catch(() => null),
+      ]);
+      setClient(c);
+      setStats(s);
     } catch (err) {
       setError(err instanceof Error ? err.message : tCommon('error'));
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, tCommon]);
+  }, [clientId, period, tCommon]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const headerMeta = useMemo(() => {
-    if (!client) return null;
-    return [
-      client.pib ? `PIB ${client.pib}` : null,
-      client.mb ? `MB ${client.mb}` : null,
-      client.city ?? null,
-    ].filter(Boolean);
-  }, [client]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  async function handleSave(data: ClientUpdate) {
+    setSaving(true);
+    try {
+      const updated = await updateClient(clientId, data);
+      setClient(updated);
+      setEditOpen(false);
+      setToast({ message: tClients('editSuccess'), type: 'success' });
+    } catch {
+      setToast({ message: tClients('saveError'), type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggleActive() {
+    if (!client) return;
+    try {
+      const result = await toggleClientActive(clientId);
+      setClient({ ...client, is_active: result.is_active });
+      setToast({
+        message: result.is_active ? tClients('editSuccess') : tClients('deleteSuccess'),
+        type: 'success',
+      });
+    } catch {
+      setToast({ message: tClients('saveError'), type: 'error' });
+    }
+  }
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 text-rose-800">
           {error}
         </div>
@@ -71,44 +119,71 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-xs text-gray-500">
+      <nav className="flex items-center gap-2 text-xs text-stone-500">
         <Link href={orgPath('/klijenti')} className="hover:text-violet-700 transition-colors">
           {t('breadcrumbClients')}
         </Link>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-900 font-medium">
-          {client?.name ?? tCommon('loading')}
-        </span>
+        <span className="text-stone-300">/</span>
+        <span className="text-stone-700 font-medium">{client?.name ?? tCommon('loading')}</span>
       </nav>
 
-      {/* Header */}
-      <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {client?.name ?? '…'}
-            </h1>
-            {!client?.is_active && (
-              <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold text-gray-600 bg-gray-100 rounded-full">
-                {t('inactive')}
-              </span>
+      {/* Hero header */}
+      <header className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+        <div className="flex items-start gap-4 min-w-0 flex-1">
+          {client ? (
+            <ClientAvatar name={client.name} seed={client.id} size="xl" />
+          ) : (
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-stone-100 animate-pulse" />
+          )}
+          <div className="min-w-0 flex-1 pt-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl sm:text-4xl font-bold text-stone-900 tracking-tight leading-tight">
+                {client?.name ?? '…'}
+              </h1>
+              {client && !client.is_active && (
+                <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold text-stone-600 bg-stone-100 rounded-full">
+                  {t('inactive')}
+                </span>
+              )}
+            </div>
+            {client && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-3">
+                <MetaChip label="PIB" value={client.pib} />
+                {client.mb && <MetaChip label="MB" value={client.mb} />}
+                {client.city && <MetaChip value={client.city} />}
+                {client.contact_email && <MetaChip value={client.contact_email} />}
+              </div>
             )}
           </div>
-          {headerMeta && headerMeta.length > 0 && (
-            <p className="text-sm text-gray-500 mt-1 flex items-center gap-3 flex-wrap">
-              {headerMeta.map((bit, i) => (
-                <span key={i} className="after:content-['·'] after:ml-3 after:text-gray-300 last:after:content-['']">
-                  {bit}
-                </span>
-              ))}
-            </p>
-          )}
         </div>
 
-        <MonthPicker value={period} onChange={setPeriod} />
+        <div className="flex items-center gap-2 shrink-0">
+          <MonthPicker value={period} onChange={setPeriod} />
+          {hasRole('manager') && client && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-stone-700 bg-white ring-1 ring-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                {tCommon('edit')}
+              </button>
+              <ClientKebab
+                isActive={client.is_active}
+                onToggleActive={handleToggleActive}
+              />
+            </div>
+          )}
+        </div>
       </header>
+
+      {/* Health strip */}
+      <HealthStrip stats={stats} isLoading={isLoading} />
 
       {/* Tab bar */}
       <TabBar activeTab={activeTab} clientId={clientId} orgSlug={orgSlug} />
@@ -119,13 +194,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
           <ClientTimeline clientId={clientId} period={period} />
         )}
         {activeTab === 'fakture' && (
-          <TabPlaceholder
-            title={t('tabFakture')}
-            description={t('tabFaktureHint')}
-            href={orgPath(`/invoices?client_id=${clientId}`)}
-            ctaLabel={t('openFeaturePage')}
-            isLoading={isLoading}
-          />
+          <ClientInvoices clientId={clientId} period={period} />
         )}
         {activeTab === 'izvestaji' && (
           <TabPlaceholder
@@ -146,6 +215,161 @@ export default function ClientWorkspacePage({ params }: PageProps) {
           />
         )}
       </div>
+
+      {/* Edit modal */}
+      {editOpen && client && (
+        <ClientModal
+          client={client}
+          saving={saving}
+          onSave={(data) => handleSave(data as ClientUpdate)}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+            toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetaChip({ label, value }: { label?: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-100 text-[11px] font-medium text-stone-600 tabular-nums">
+      {label && <span className="text-stone-400">{label}</span>}
+      <span className="text-stone-700">{value}</span>
+    </span>
+  );
+}
+
+function HealthStrip({
+  stats,
+  isLoading,
+}: {
+  stats: ClientWorkspaceStats | null;
+  isLoading: boolean;
+}) {
+  const t = useTranslations('clientWorkspace');
+
+  if (isLoading && !stats) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-20 rounded-2xl bg-white ring-1 ring-stone-200/80 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+  if (!stats) return null;
+
+  const needsAttention = stats.pending_count > 0 || stats.blocked_count > 0;
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <StatTile
+        label={t('tileInvoices')}
+        value={stats.invoice_count}
+        accent="neutral"
+        hint={
+          stats.total_amount > 0
+            ? formatAmountSr(String(stats.total_amount), 'RSD')
+            : undefined
+        }
+      />
+      <StatTile
+        label={t('tilePending')}
+        value={stats.pending_count}
+        accent={stats.pending_count > 0 ? 'amber' : 'neutral'}
+      />
+      <StatTile
+        label={t('tileBlocked')}
+        value={stats.blocked_count}
+        accent={stats.blocked_count > 0 ? 'rose' : needsAttention ? 'neutral' : 'emerald'}
+      />
+    </div>
+  );
+}
+
+const TILE_ACCENTS = {
+  neutral: 'bg-white ring-1 ring-stone-200/80',
+  amber: 'bg-amber-50/60 ring-1 ring-amber-200',
+  rose: 'bg-rose-50/60 ring-1 ring-rose-200',
+  emerald: 'bg-emerald-50/60 ring-1 ring-emerald-200',
+} as const;
+
+function StatTile({
+  label,
+  value,
+  hint,
+  accent,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+  accent: keyof typeof TILE_ACCENTS;
+}) {
+  return (
+    <div className={`rounded-2xl p-4 ${TILE_ACCENTS[accent]}`}>
+      <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-stone-900 tabular-nums">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-stone-500 tabular-nums">{hint}</p>}
+    </div>
+  );
+}
+
+function ClientKebab({
+  isActive,
+  onToggleActive,
+}: {
+  isActive: boolean;
+  onToggleActive: () => void;
+}) {
+  const tClients = useTranslations('clients');
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((p) => !p);
+        }}
+        aria-label="Više opcija"
+        className="p-2 text-stone-500 bg-white ring-1 ring-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg ring-1 ring-stone-200 z-30 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onToggleActive();
+            }}
+            className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+          >
+            {isActive ? tClients('inactive') : tClients('active')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -165,16 +389,16 @@ function TabPlaceholder({
 }) {
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-10 animate-pulse">
-        <div className="h-5 bg-gray-100 rounded w-1/3 mb-3" />
-        <div className="h-4 bg-gray-100 rounded w-2/3" />
+      <div className="rounded-2xl border border-stone-200 bg-white p-10 animate-pulse">
+        <div className="h-5 bg-stone-100 rounded w-1/3 mb-3" />
+        <div className="h-4 bg-stone-100 rounded w-2/3" />
       </div>
     );
   }
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-8 sm:p-10">
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">{title}</h2>
-      <p className="text-sm text-gray-500 max-w-lg">{description}</p>
+    <div className="rounded-2xl border border-dashed border-stone-200 bg-white/60 p-8 sm:p-10">
+      <h2 className="text-lg font-semibold text-stone-900 mb-1">{title}</h2>
+      <p className="text-sm text-stone-500 max-w-lg">{description}</p>
       <Link
         href={href}
         className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"

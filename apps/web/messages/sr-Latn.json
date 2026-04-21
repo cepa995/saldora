@@ -1178,7 +1178,10 @@
     "descInvoiceVerified": "Verifikovana faktura {invoiceNumber}",
     "descInvoiceExported": "Faktura {invoiceNumber} izvezena ({destination})",
     "descClientAssigned": "Faktura {invoiceNumber} dodeljena klijentu",
-    "descClientAutoAssigned": "Faktura {invoiceNumber} automatski dodeljena po PIB-u"
+    "descClientAutoAssigned": "Faktura {invoiceNumber} automatski dodeljena po PIB-u",
+    "tileInvoices": "Fakture",
+    "tilePending": "Na pregledu",
+    "tileBlocked": "Blokirano"
   },
   "portfolio": {
     "title": "Pregled portfelja",

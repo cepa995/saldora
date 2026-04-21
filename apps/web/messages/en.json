@@ -1146,7 +1146,10 @@
     "descInvoiceVerified": "Verified invoice {invoiceNumber}",
     "descInvoiceExported": "Invoice {invoiceNumber} exported ({destination})",
     "descClientAssigned": "Invoice {invoiceNumber} assigned to client",
-    "descClientAutoAssigned": "Invoice {invoiceNumber} auto-assigned by PIB"
+    "descClientAutoAssigned": "Invoice {invoiceNumber} auto-assigned by PIB",
+    "tileInvoices": "Invoices",
+    "tilePending": "In review",
+    "tileBlocked": "Blocked"
   },
   "portfolio": {
     "title": "Portfolio overview",

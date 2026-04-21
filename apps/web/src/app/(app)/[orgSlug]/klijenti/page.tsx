@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
-import { MonthPicker } from '@/components/client-workspace/MonthPicker';
+import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
+import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
@@ -25,18 +26,18 @@ function currentYYYYMM(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function timeAgo(iso: string | null, locale: string): string {
+function timeAgo(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const minutes = Math.floor(diffMs / 60000);
   if (minutes < 1) return 'sada';
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h`;
+  if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} d`;
-  return d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
+  if (days < 30) return `${days}d`;
+  return d.toLocaleDateString('sr-Latn', { day: '2-digit', month: 'short' });
 }
 
 function severity(row: PortfolioRow): number {
@@ -177,15 +178,18 @@ export default function KlijentiPage({ params }: PageProps) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl sm:text-4xl font-bold text-stone-900 tracking-tight">
+            {t('title')}
+          </h1>
+          <p className="text-sm text-stone-500 mt-2">
             {counts.all > 0 ? (
               <>
-                {counts.all} {counts.all === 1 ? t('clientSingular') : t('clientPlural')}
+                <span className="tabular-nums">{counts.all}</span>{' '}
+                {counts.all === 1 ? t('clientSingular') : t('clientPlural')}
                 {counts.needsAttention > 0 && (
                   <>
                     {' · '}
@@ -209,10 +213,10 @@ export default function KlijentiPage({ params }: PageProps) {
                 setEditingClient(null);
                 setModalOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
               </svg>
               {t('addClient')}
             </button>
@@ -220,13 +224,13 @@ export default function KlijentiPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Filter pills — equal width */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      {/* Filter pills — ghost style */}
+      <div className="flex items-center gap-1.5 flex-wrap">
         <FilterPill
           label={tPortfolio('filterAll')}
           count={counts.all}
           active={filter === 'all'}
-          tone="violet"
+          tone="neutral"
           onClick={() => setFilter('all')}
         />
         <FilterPill
@@ -245,16 +249,16 @@ export default function KlijentiPage({ params }: PageProps) {
         />
       </div>
 
-      {/* Search — matches pill row width */}
+      {/* Search */}
       <div className="relative">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10a7.5 7.5 0 0013.15 6.65z" />
         </svg>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('searchPlaceholder')}
-          className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white"
+          className="w-full pl-10 pr-3 py-2.5 text-sm bg-white border border-stone-200 rounded-xl focus:ring-2 focus:ring-violet-500/15 focus:border-violet-500 placeholder:text-stone-400"
         />
       </div>
 
@@ -267,20 +271,19 @@ export default function KlijentiPage({ params }: PageProps) {
 
       {/* Grid / empty / loading */}
       {isLoading && rows.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-500">
+        <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
           {tCommon('loading')}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center">
-          <p className="text-gray-600 text-base font-medium">
-            {rows.length === 0 ? t('emptyState') : tCommon('noData')}
-          </p>
-          {rows.length === 0 && (
-            <p className="text-gray-400 text-sm mt-1">{t('emptyStateSubtitle')}</p>
-          )}
-        </div>
+        <EmptyState
+          total={rows.length}
+          filter={filter}
+          emptyLabel={t('emptyState')}
+          emptySubtitle={t('emptyStateSubtitle')}
+          noDataLabel={tCommon('noData')}
+        />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((row) => (
             <ClientCard
               key={row.client_id}
@@ -295,7 +298,7 @@ export default function KlijentiPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Create/Edit modal */}
+      {/* Modals */}
       {modalOpen && (
         <ClientModal
           client={editingClient}
@@ -307,40 +310,21 @@ export default function KlijentiPage({ params }: PageProps) {
           }}
         />
       )}
-
-      {/* Delete confirmation */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('deleteConfirmTitle')}</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              <span className="font-medium text-gray-900">{deleteTarget.name}</span>
-              {' — '}
-              {t('deleteConfirmMessage')}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-              >
-                {tCommon('cancel')}
-              </button>
-              <button
-                onClick={() => handleDelete(deleteTarget.client_id)}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
-                {tCommon('delete')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteDialog
+          clientName={deleteTarget.name}
+          title={t('deleteConfirmTitle')}
+          message={t('deleteConfirmMessage')}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => handleDelete(deleteTarget.client_id)}
+          cancelLabel={tCommon('cancel')}
+          confirmLabel={tCommon('delete')}
+        />
       )}
-
-      {/* Toast */}
       {toast && (
         <div
           className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
-            toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
           }`}
         >
           {toast.message}
@@ -350,21 +334,18 @@ export default function KlijentiPage({ params }: PageProps) {
   );
 }
 
-const TONES = {
-  violet: {
-    activeBg: 'bg-violet-600 text-white border-violet-600',
-    inactiveCount: 'text-gray-900',
-    inactiveLabel: 'text-gray-500',
+const PILL_TONES = {
+  neutral: {
+    active: 'bg-violet-600 text-white',
+    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
   },
   amber: {
-    activeBg: 'bg-amber-500 text-white border-amber-500',
-    inactiveCount: 'text-gray-900',
-    inactiveLabel: 'text-amber-700',
+    active: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200',
+    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
   },
   emerald: {
-    activeBg: 'bg-emerald-600 text-white border-emerald-600',
-    inactiveCount: 'text-gray-900',
-    inactiveLabel: 'text-emerald-700',
+    active: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200',
+    inactive: 'text-stone-600 bg-stone-100 hover:bg-stone-200',
   },
 } as const;
 
@@ -378,25 +359,117 @@ function FilterPill({
   label: string;
   count: number;
   active: boolean;
-  tone: keyof typeof TONES;
+  tone: keyof typeof PILL_TONES;
   onClick: () => void;
 }) {
-  const toneCls = TONES[tone];
+  const cls = PILL_TONES[tone];
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-4 py-3 text-left transition-all ${
-        active
-          ? toneCls.activeBg
-          : 'border-gray-200 bg-white hover:border-gray-300'
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all ${
+        active ? cls.active : cls.inactive
       }`}
     >
-      <p className={`text-xs ${active ? 'text-white/80' : toneCls.inactiveLabel}`}>{label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${active ? 'text-white' : toneCls.inactiveCount}`}>
+      {label}
+      <span
+        className={`tabular-nums px-1.5 py-0.5 text-[10px] rounded-full ${
+          active ? 'bg-white/20' : 'bg-white text-stone-500'
+        }`}
+      >
         {count}
-      </p>
+      </span>
     </button>
+  );
+}
+
+function EmptyState({
+  total,
+  filter,
+  emptyLabel,
+  emptySubtitle,
+  noDataLabel,
+}: {
+  total: number;
+  filter: FilterKey;
+  emptyLabel: string;
+  emptySubtitle: string;
+  noDataLabel: string;
+}) {
+  if (total === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-stone-200 bg-white p-12 text-center">
+        <div className="w-12 h-12 mx-auto rounded-xl bg-stone-100 flex items-center justify-center mb-4">
+          <svg className="w-6 h-6 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87M9 12a4 4 0 100-8 4 4 0 000 8zm6-4a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </div>
+        <p className="text-base font-semibold text-stone-900">{emptyLabel}</p>
+        <p className="text-sm text-stone-500 mt-1">{emptySubtitle}</p>
+      </div>
+    );
+  }
+  // We have clients, but the filter is empty — positive signal on "OK" filter
+  if (filter === 'needs_attention') {
+    return (
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-10 text-center">
+        <div className="w-12 h-12 mx-auto rounded-xl bg-emerald-100 flex items-center justify-center mb-4">
+          <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <p className="text-base font-semibold text-emerald-900">Sve je u redu</p>
+        <p className="text-sm text-emerald-700/80 mt-1">Nijedan klijent ne zahteva pažnju za ovaj mesec.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
+      {noDataLabel}
+    </div>
+  );
+}
+
+function DeleteDialog({
+  clientName,
+  title,
+  message,
+  onCancel,
+  onConfirm,
+  cancelLabel,
+  confirmLabel,
+}: {
+  clientName: string;
+  title: string;
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  cancelLabel: string;
+  confirmLabel: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+        <h3 className="text-lg font-semibold text-stone-900 mb-2">{title}</h3>
+        <p className="text-sm text-stone-600 mb-5">
+          <span className="font-medium text-stone-900">{clientName}</span> — {message}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 rounded-lg"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm bg-rose-600 text-white rounded-lg hover:bg-rose-700"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -417,93 +490,94 @@ function ClientCard({
 }) {
   const t = useTranslations('clients');
   const tPortfolio = useTranslations('portfolio');
-  const needsAttention = row.blocked_count > 0 || row.pending_review_count > 0;
+
+  const severity = row.blocked_count > 0 ? 'blocked' : row.pending_review_count > 0 ? 'pending' : 'ok';
+  const toneCls =
+    severity === 'blocked'
+      ? 'bg-rose-50/50 ring-1 ring-rose-200 hover:ring-rose-300'
+      : severity === 'pending'
+        ? 'bg-amber-50/40 ring-1 ring-amber-200 hover:ring-amber-300'
+        : 'bg-white ring-1 ring-stone-200/80 hover:ring-stone-300';
 
   return (
     <div
-      className={`group relative bg-white border rounded-xl flex flex-col transition-all hover:shadow-md ${
-        needsAttention ? 'border-amber-200 hover:border-amber-300' : 'border-gray-200 hover:border-violet-200'
-      }`}
+      className={`group relative rounded-2xl flex flex-col overflow-hidden transition-all hover:-translate-y-px hover:shadow-lg shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${toneCls}`}
     >
       <Link
         href={`/${orgSlug}/klijenti/${row.client_id}`}
         aria-label={`${t('openWorkspace')} — ${row.name}`}
-        className="absolute inset-0 z-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+        className="absolute inset-0 z-10 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
       />
 
-      <div className="flex items-start justify-between gap-3 p-4 pb-3">
+      <div className="flex items-start gap-3 p-4">
+        <ClientAvatar name={row.name} seed={row.client_id} size="md" />
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 truncate">{row.name}</h3>
-          <p className="text-xs text-gray-500 tabular-nums mt-0.5">PIB {row.pib}</p>
+          <h3 className="font-semibold text-stone-900 truncate leading-tight">{row.name}</h3>
+          <p className="text-[11px] text-stone-500 tabular-nums mt-0.5 tracking-wide">PIB {row.pib}</p>
         </div>
-        <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap pt-1">
-          {row.last_activity_at ? timeAgo(row.last_activity_at, 'sr-Latn') : tPortfolio('indicatorStale')}
+        <span className="text-[11px] text-stone-400 tabular-nums whitespace-nowrap pt-1">
+          {row.last_activity_at ? timeAgo(row.last_activity_at) : tPortfolio('indicatorStale')}
         </span>
       </div>
 
-      <div className="px-4 pb-3 flex-1 flex flex-wrap items-start gap-1.5">
-        {row.blocked_count > 0 && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-rose-700 bg-rose-50 ring-1 ring-inset ring-rose-100 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-            {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
+      <div className="px-4 pb-3 flex-1">
+        <div className="flex items-center gap-3 text-xs text-stone-500">
+          <span className="tabular-nums">
+            <span className="font-semibold text-stone-700">{row.invoice_count}</span>{' '}
+            {tPortfolio('colInvoices').toLowerCase()}
           </span>
-        )}
-        {row.pending_review_count > 0 && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-50 ring-1 ring-inset ring-amber-100 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
-          </span>
-        )}
-        {!needsAttention && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-emerald-700 bg-emerald-50 ring-1 ring-inset ring-emerald-100 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            {tPortfolio('filterOk')}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-t border-gray-100">
-        <span className="text-xs text-gray-500 tabular-nums">
-          {row.invoice_count} {tPortfolio('colInvoices').toLowerCase()}
-        </span>
-        <div className="flex items-center gap-1">
-          {canEdit && (
-            <div className="relative z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                disabled={isEditLoading}
-                aria-label={t('editClient')}
-                className="p-1.5 text-gray-400 hover:text-violet-700 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                aria-label={t('deleteConfirmTitle')}
-                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 3h4a2 2 0 012 2v2H8V5a2 2 0 012-2z" />
-                </svg>
-              </button>
-            </div>
+          {severity === 'blocked' && (
+            <span className="inline-flex items-center gap-1 text-rose-700 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
+            </span>
           )}
-          <span className="text-xs text-violet-700 font-medium pl-1">
-            {tPortfolio('openWorkspace')} →
-          </span>
+          {severity === 'pending' && (
+            <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
+            </span>
+          )}
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-stone-200/60 bg-white/40">
+        <span className="text-xs text-violet-700 font-medium">
+          {tPortfolio('openWorkspace')} →
+        </span>
+        {canEdit && (
+          <div className="relative z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit();
+              }}
+              disabled={isEditLoading}
+              aria-label={t('editClient')}
+              className="p-1.5 text-stone-400 hover:text-violet-700 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete();
+              }}
+              aria-label={t('deleteConfirmTitle')}
+              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 3h4a2 2 0 012 2v2H8V5a2 2 0 012-2z" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
