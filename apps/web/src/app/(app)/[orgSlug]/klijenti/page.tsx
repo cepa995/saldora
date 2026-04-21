@@ -593,22 +593,21 @@ function ClientCard({
             {row.name}
           </h3>
           <p className="text-[12px] text-stone-500 tabular-nums mt-1 tracking-wide">PIB {row.pib}</p>
-          {severity !== 'ok' && (
-            <div className="mt-2.5 flex items-center gap-1.5">
-              {severity === 'blocked' && (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-100/70 ring-1 ring-rose-200/70">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                  {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
-                </span>
-              )}
-              {severity === 'pending' && (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-amber-700 bg-amber-100/70 ring-1 ring-amber-200/70">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Chip slot — fixed height so dividers align across cards with and without a chip */}
+          <div className="mt-2.5 h-[1.375rem] flex items-center">
+            {severity === 'blocked' && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-100/70 ring-1 ring-rose-200/70">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
+              </span>
+            )}
+            {severity === 'pending' && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-amber-700 bg-amber-100/70 ring-1 ring-amber-200/70">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}
+              </span>
+            )}
+          </div>
         </div>
         <span className="text-[11px] text-stone-400 tabular-nums whitespace-nowrap pt-1">
           {row.last_activity_at ? timeAgo(row.last_activity_at) : tPortfolio('indicatorStale')}
@@ -616,7 +615,7 @@ function ClientCard({
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 gap-4 px-5 py-4 border-t border-stone-200/50 bg-white/50">
+      <div className="grid grid-cols-2 gap-4 px-5 py-4 border-t border-stone-200/40 bg-white/50">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
             {tPortfolio('colInvoices')}
@@ -636,7 +635,7 @@ function ClientCard({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-stone-200/60 bg-white/30">
+      <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-stone-200/40 bg-white/30">
         <span className="text-[13px] text-violet-700 font-medium">
           {tPortfolio('openWorkspace')} →
         </span>
