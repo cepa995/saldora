@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { MonthPicker } from '@/components/client-workspace/MonthPicker';
+import { FilterPill, type PillTone } from '@/components/clients/FilterPill';
 import type { ClientEventResponse } from '@/lib/api/clients';
 import { fetchClientEvents } from '@/lib/api/clients';
 import { useOrgPath } from '@/lib/navigation';
@@ -41,6 +42,13 @@ const ICON_BG: Record<string, string> = {
   invoice_verified: 'bg-emerald-50 text-emerald-600 ring-emerald-100',
   invoice_exported: 'bg-violet-50 text-violet-600 ring-violet-100',
   client_assigned: 'bg-amber-50 text-amber-600 ring-amber-100',
+};
+
+const TYPE_TONE: Record<EventType, PillTone> = {
+  invoice_uploaded: 'blue',
+  invoice_verified: 'emerald',
+  invoice_exported: 'violet',
+  client_assigned: 'amber',
 };
 
 const FALLBACK_ICON_BG = 'bg-gray-50 text-gray-500 ring-gray-100';
@@ -192,35 +200,22 @@ export function ClientTimeline({ clientId }: Props) {
       {/* Toolbar: period picker on the left, type filters on the right */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <MonthPicker value={period} onChange={setPeriod} />
-        <div className="flex flex-wrap gap-1.5 sm:ml-auto">
-          <button
-            type="button"
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <FilterPill
+            label={tCommon('all')}
+            active={filterTypes.size === 0}
+            tone="neutral"
             onClick={() => setFilterTypes(new Set())}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filterTypes.size === 0
-                ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {tCommon('all')}
-          </button>
-          {EVENT_TYPES.map((tp) => {
-            const active = filterTypes.has(tp);
-            return (
-              <button
-                key={tp}
-                type="button"
-                onClick={() => toggleType(tp)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  active
-                    ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-200'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {t(`eventType_${tp}`)}
-              </button>
-            );
-          })}
+          />
+          {EVENT_TYPES.map((tp) => (
+            <FilterPill
+              key={tp}
+              label={t(`eventType_${tp}`)}
+              active={filterTypes.has(tp)}
+              tone={TYPE_TONE[tp]}
+              onClick={() => toggleType(tp)}
+            />
+          ))}
         </div>
       </div>
 

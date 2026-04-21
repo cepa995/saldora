@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
+import { FilterPill } from '@/components/clients/FilterPill';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
@@ -372,64 +373,6 @@ function AgencySummary({
         </div>
       ))}
     </div>
-  );
-}
-
-const PILL_TONES = {
-  neutral: {
-    activeWrap: 'bg-white text-stone-900 ring-1 ring-stone-300 shadow-sm shadow-stone-900/[0.03]',
-    activeBadge: 'bg-stone-100 text-stone-700',
-    dot: '',
-  },
-  amber: {
-    activeWrap: 'bg-amber-50 text-amber-800 ring-1 ring-amber-300 shadow-sm shadow-amber-600/[0.06]',
-    activeBadge: 'bg-amber-100 text-amber-800',
-    dot: 'bg-amber-500',
-  },
-  emerald: {
-    activeWrap: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300 shadow-sm shadow-emerald-600/[0.06]',
-    activeBadge: 'bg-emerald-100 text-emerald-800',
-    dot: 'bg-emerald-500',
-  },
-} as const;
-
-function FilterPill({
-  label,
-  count,
-  active,
-  tone,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  tone: keyof typeof PILL_TONES;
-  onClick: () => void;
-}) {
-  const cls = PILL_TONES[tone];
-  const inactiveWrap = 'bg-stone-100 text-stone-700 hover:bg-stone-200/80 ring-1 ring-transparent';
-  const inactiveBadge = 'bg-white text-stone-500';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 h-9 px-3.5 text-sm font-medium rounded-full transition-all ${
-        active ? cls.activeWrap : inactiveWrap
-      }`}
-    >
-      {cls.dot && (
-        <span className={`w-1.5 h-1.5 rounded-full ${cls.dot}`} aria-hidden="true" />
-      )}
-      <span>{label}</span>
-      <span
-        className={`tabular-nums px-1.5 min-w-[1.25rem] h-5 inline-flex items-center justify-center text-[11px] rounded-full ${
-          active ? cls.activeBadge : inactiveBadge
-        }`}
-      >
-        {count}
-      </span>
-    </button>
   );
 }
 

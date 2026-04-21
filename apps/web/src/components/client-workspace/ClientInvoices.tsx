@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { StatusBadge } from '@/components/StatusBadge';
+import { FilterPill, type PillTone } from '@/components/clients/FilterPill';
 import { fetchInvoices } from '@/lib/api/invoices';
 import { formatAmountSr, formatDateSr } from '@/lib/formatters';
 import { useOrgPath } from '@/lib/navigation';
@@ -21,6 +22,15 @@ const STATUS_FILTERS: (InvoiceStatus | 'all')[] = [
   'exported',
   'error',
 ];
+
+const STATUS_TONE: Record<InvoiceStatus | 'all', PillTone> = {
+  all: 'neutral',
+  processing: 'amber',
+  review: 'blue',
+  verified: 'emerald',
+  exported: 'violet',
+  error: 'rose',
+};
 
 export function ClientInvoices({ clientId }: Props) {
   const t = useTranslations('invoices');
@@ -65,26 +75,17 @@ export function ClientInvoices({ clientId }: Props) {
   return (
     <div className="space-y-4">
       {/* Filter chips */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {STATUS_FILTERS.map((s) => {
-          const active = statusFilter === s;
-          const label = s === 'all' ? tCommon('all') : tStatus(s);
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                active
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-        <span className="ml-auto text-xs text-gray-500 tabular-nums">
+      <div className="flex items-center gap-2 flex-wrap">
+        {STATUS_FILTERS.map((s) => (
+          <FilterPill
+            key={s}
+            label={s === 'all' ? tCommon('all') : tStatus(s)}
+            active={statusFilter === s}
+            tone={STATUS_TONE[s]}
+            onClick={() => setStatusFilter(s)}
+          />
+        ))}
+        <span className="ml-auto text-xs text-stone-500 tabular-nums">
           {total} {t('title').toLowerCase()}
           {totalAmount > 0 && <> · {formatAmountSr(String(totalAmount), 'RSD')}</>}
         </span>
