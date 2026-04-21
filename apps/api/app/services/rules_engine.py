@@ -13,11 +13,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.invoice import Invoice
+from app.models.rule_client_association import RuleClientAssociation
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ async def evaluate_rules(
             requires_review, review_reasons, auto_approve, custom_fields.
         applied_rules: list of {rule_id, rule_name, actions_applied} dicts.
     """
-    rules = await _get_active_rules(db, organization_id)
+    rules = await _get_active_rules(db, organization_id, invoice.client_id)
     if not rules:
         return {}, []
 
@@ -103,23 +104,61 @@ async def evaluate_rules(
 # ---------------------------------------------------------------------------
 
 
-async def _get_active_rules(db: AsyncSession, organization_id: UUID) -> list[AutomationRule]:
-    """Fetch active rules for an organization, ordered by priority.
+async def _get_active_rules(
+    db: AsyncSession,
+    organization_id: UUID,
+    invoice_client_id: UUID | None,
+) -> list[AutomationRule]:
+    """Fetch active rules applicable to an invoice, ordered by priority.
+
+    A rule is applicable when:
+
+    * it has no client associations (global — applies everywhere), OR
+    * the invoice's client_id matches one of its associations (scoped).
+
+    Invoices without a client_id only match global rules.
 
     Args:
         db: Database session.
         organization_id: Organization UUID.
+        invoice_client_id: The invoice's assigned client, or None if unassigned.
 
     Returns:
         List of active AutomationRule instances sorted by priority ASC,
-        then created_at ASC.
+        then created_at ASC, deduplicated.
     """
+    # EXISTS subquery — "does this rule have any client associations?"
+    has_any_association = select(RuleClientAssociation.id).where(
+        RuleClientAssociation.rule_id == AutomationRule.id
+    )
+    # EXISTS subquery — "is this rule associated with the invoice's client?"
+    has_matching_association = (
+        select(RuleClientAssociation.id).where(
+            and_(
+                RuleClientAssociation.rule_id == AutomationRule.id,
+                RuleClientAssociation.client_id == invoice_client_id,
+            )
+        )
+        if invoice_client_id is not None
+        else None
+    )
+
+    scope_clause = (
+        or_(
+            ~has_any_association.exists(),
+            has_matching_association.exists(),
+        )
+        if has_matching_association is not None
+        else ~has_any_association.exists()
+    )
+
     result = await db.execute(
         select(AutomationRule)
         .where(
             and_(
                 AutomationRule.organization_id == organization_id,
                 AutomationRule.is_active.is_(True),
+                scope_clause,
             )
         )
         .order_by(AutomationRule.priority.asc(), AutomationRule.created_at.asc())

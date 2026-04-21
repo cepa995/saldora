@@ -9,14 +9,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import require_feature, require_role
+from app.models.automation_rule import AutomationRule
 from app.models.client import Client
 from app.models.client_event import ClientEvent
 from app.models.invoice import Invoice
+from app.models.rule_client_association import RuleClientAssociation
 from app.models.user import User
 from app.plans import Feature
+from app.schemas.automation_rule import AutomationRuleResponse
 from app.schemas.client import (
     ClientCreate,
     ClientListResponse,
@@ -527,3 +531,142 @@ async def _retroactive_client_assignment(
         await db.commit()
 
     return assigned
+
+
+# ---------------------------------------------------------------------------
+# Per-client rule attachments
+# ---------------------------------------------------------------------------
+
+
+async def _ensure_client_in_org(db: AsyncSession, client_id: UUID, organization_id: UUID) -> Client:
+    """Load a client and verify it belongs to the given org, or raise 404."""
+    result = await db.execute(
+        select(Client).where(
+            and_(Client.id == client_id, Client.organization_id == organization_id)
+        )
+    )
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+    return client
+
+
+async def _ensure_rule_in_org(
+    db: AsyncSession, rule_id: UUID, organization_id: UUID
+) -> AutomationRule:
+    """Load a rule (with associations) and verify it belongs to the given org."""
+    result = await db.execute(
+        select(AutomationRule)
+        .where(
+            and_(
+                AutomationRule.id == rule_id,
+                AutomationRule.organization_id == organization_id,
+            )
+        )
+        .options(selectinload(AutomationRule.client_associations))
+    )
+    rule = result.scalar_one_or_none()
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Pravilo nije pronađeno")
+    return rule
+
+
+@router.get("/{client_id}/rules", response_model=list[AutomationRuleResponse])
+async def list_client_rules(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> list[AutomationRule]:
+    """Return the rules explicitly scoped to this client.
+
+    Global rules (rules with zero client associations) are NOT returned here;
+    they apply to every invoice in the org and belong to the agency-wide
+    /api/v1/rules surface.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+
+    result = await db.execute(
+        select(AutomationRule)
+        .join(
+            RuleClientAssociation,
+            RuleClientAssociation.rule_id == AutomationRule.id,
+        )
+        .where(
+            and_(
+                AutomationRule.organization_id == user.organization_id,
+                RuleClientAssociation.client_id == client_id,
+            )
+        )
+        .options(selectinload(AutomationRule.client_associations))
+        .order_by(AutomationRule.priority.asc(), AutomationRule.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/{client_id}/rules/{rule_id}",
+    response_model=AutomationRuleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def attach_rule_to_client(
+    client_id: UUID,
+    rule_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("manager")),
+) -> AutomationRule:
+    """Attach a rule to this client.
+
+    Idempotent — attaching a rule that's already attached is a no-op and
+    still returns the current rule state.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+    rule = await _ensure_rule_in_org(db, rule_id, user.organization_id)
+
+    already_attached = any(assoc.client_id == client_id for assoc in rule.client_associations)
+    if not already_attached:
+        rule.client_associations.append(RuleClientAssociation(rule_id=rule_id, client_id=client_id))
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Race: another request attached at the same time. Recover gracefully.
+            await db.rollback()
+        # Re-load with fresh associations so the response includes the new attach.
+        db.expire(rule, ["client_associations"])
+        result = await db.execute(
+            select(AutomationRule)
+            .where(AutomationRule.id == rule_id)
+            .options(selectinload(AutomationRule.client_associations))
+        )
+        rule = result.scalar_one()
+    return rule
+
+
+@router.delete(
+    "/{client_id}/rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def detach_rule_from_client(
+    client_id: UUID,
+    rule_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("manager")),
+) -> None:
+    """Detach a rule from this client.
+
+    Idempotent — if the rule wasn't attached, the response is still 204.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+    await _ensure_rule_in_org(db, rule_id, user.organization_id)
+
+    result = await db.execute(
+        select(RuleClientAssociation).where(
+            and_(
+                RuleClientAssociation.rule_id == rule_id,
+                RuleClientAssociation.client_id == client_id,
+            )
+        )
+    )
+    assoc = result.scalar_one_or_none()
+    if assoc is not None:
+        await db.delete(assoc)
+        await db.commit()

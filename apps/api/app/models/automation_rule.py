@@ -29,6 +29,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
+    from app.models.rule_client_association import RuleClientAssociation
     from app.models.user import User
 
 
@@ -87,6 +88,16 @@ class AutomationRule(Base, UUIDMixin, TimestampMixin):
     executions: Mapped[list[RuleExecution]] = relationship(
         back_populates="rule", cascade="all, delete-orphan"
     )
+    client_associations: Mapped[list[RuleClientAssociation]] = relationship(
+        "RuleClientAssociation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    @property
+    def client_ids(self) -> list[uuid.UUID]:
+        """IDs of clients this rule is scoped to (empty = global)."""
+        return [assoc.client_id for assoc in self.client_associations]
 
     __table_args__ = (
         UniqueConstraint("organization_id", "name", name="uq_rule_name_per_org"),
