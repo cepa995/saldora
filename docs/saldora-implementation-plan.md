@@ -4,125 +4,79 @@ Companion to [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-r
 
 ---
 
-## Strategic Adjustments
+## Status
 
-A few refinements to the suggestions made alongside this plan:
-
-1. **Paušal module ships with full functionality from day one.** No read-only intermediate. Excel import is available as an optional convenience, not as the primary flow. Rationale: every agency organizes Excel differently, building a universal importer is harder than building the module properly.
-
-2. **Pricing is tiered, not per-paušalac.** Example structure:
-   - **Pro**: 1,500 invoices (OCR + AccountingIntent) + 20 paušalci clients — 14,999 RSD/mo
-   - **Agency**: 3,000 invoices + unlimited paušalci — 24,999 RSD/mo
-   - **Enterprise**: custom
-   This is simpler for the buyer and avoids per-seat friction.
-
-3. **No MiniMax partnership / certification.** Integration stays technical. Avoids bureaucratic drag.
-
-4. **SEF integration as a data source** (vs. SEF being the threat). Ingest e-invoices directly from SEF API and run the full AccountingIntent pipeline on them. Turns SEF from competition into distribution.
-
-5. **Public Serbian tax calendar as SEO / lead gen.** Free widget, builds reputation, maintained automatically.
-
-6. **Rule template marketplace.** Public templates for rules engine — restaurants, IT services, retail. Network effect moat.
-
-7. **Strip "OCR" from marketing.** All user-facing copy talks about intelligence, classification, compliance — not OCR.
-
-8. **Agency-referral sales motion.** Pilot agencies earn commission for peer referrals. SMB go-to-market default.
+- **M14 (Paušal Module)** — **dropped**, closed. Paušalci are not the target market.
+- **M15 (Foreign Invoice Reverse-Charge)** — **deferred** indefinitely. Revisit only if hospitality agencies report it as a pain.
+- **M16 (Client Portal)** — **dropped**. End clients are not the buyer; agency remains the sole user class.
+- **M17 (Client-First UI Redesign)** — **active**. Renumbered / renamed below to reflect hospitality thesis.
+- **M18 (Compliance Watchdog)** — **dropped**.
 
 ---
 
-## Sequenced Milestones
+## Active milestone
 
-The sequencing is chosen so each milestone builds on the prior one, and each can ship independently with real customer value.
+### M19 — Client-First UI
 
-### M14 — Paušal module (the wedge)
+Reorganise the app around the client axis. Introduces the portfolio view, per-client workspace, timeline event log, and re-homes existing client-scoped features as tabs within the workspace. Agency-level operations remain as sidebar utilities.
 
-The most concrete, most defensible, most underexploited pain point in Serbian accounting. Every agency has 20-50 paušalci clients tracked in Excel today.
+**Shipping model:** single feature branch that fully replaces the existing feature-indexed UI at merge time. No live coexistence. Existing feature pages are reachable from within the new shell during development only, as a completeness-check safety net; they are removed before the branch merges.
 
-**Scope:** client_type + direction data model, KPO ledger, revenue tracking, outgoing invoice issuance, PU rešenje OCR, paušal calendar, per-client and portfolio views.
+**Scope of issues** (each independently mergeable to the feature branch):
 
-**Issues:**
-- 14.1 — Extend data model: `client_type` on clients, `direction` on invoices (+ migration)
-- 14.2 — KPO ledger service and API (CRUD + auto-population from outgoing invoices)
-- 14.3 — Revenue tracking and threshold alerts (6M RSD paušal status, 8M RSD PDV threshold)
-- 14.4 — Outgoing invoice issuance (sequential numbering + PDF generation)
-- 14.5 — PU rešenje OCR (extract monthly doprinosi + quarterly paušalni porez)
-- 14.6 — Paušal tax calendar with QR payment codes
-- 14.7 — Paušal client dashboard (frontend)
-- 14.8 — Agency paušalci portfolio view (frontend)
-- 14.9 — Optional Excel import for historical KPO data
-- 14.10 — Paušal module tests
+- **19.1 — Event log data model and backfill.** New `client_events` table (append-only). Event emitters wired into the existing write sites: invoice upload, verify, export, accounting-intent classification, rule execution, client assignment. Backfill script populates historical events from existing tables (audit log, correction log, invoices) so timelines are not empty at deploy time. `GET /api/v1/clients/{id}/events?period=YYYY-MM` endpoint.
 
-### M15 — Foreign invoice reverse-charge
+- **19.2 — Client workspace shell.** New route `/klijenti/{id}` with the header (name, PIB, activity details, month navigation). Tabs below as an extensible structure. Default tab is Timeline; the rest render placeholders that link to the existing feature pages until each is migrated. No sidebar changes yet — this is accessible only via deep link for now.
 
-Extends AccountingIntent with the accounting logic for foreign suppliers. High-value, currently manual work with high error rates.
+- **19.3 — Timeline view.** The default tab inside the client workspace. Renders events from `GET /clients/{id}/events`, grouped by day. Event type icons and filters. Clicking an event opens the detail for the underlying entity (invoice, rule execution, etc.).
 
-**Issues:**
-- 15.1 — Extend AccountingIntent classifier for foreign invoices
-- 15.2 — Multi-language foreign VAT recognition (MwSt, IVA, TVA, BTW, etc.)
-- 15.3 — Reverse-charge self-assessment service
-- 15.4 — Internal PDV document generator (*interni obračun PDV*)
-- 15.5 — JCI (customs declaration) matching to supplier invoice
-- 15.6 — Withholding tax (*porez po odbitku*) per country + DTA rules
-- 15.7 — Foreign invoice tests
+- **19.4 — Fakture tab.** Embed the existing invoice list component into the client workspace, pre-scoped to the current client. Remove the client-filter control from the embedded version; keep all other filters.
 
-### M16 — Client portal
+- **19.5 — Izveštaji tab.** Embed the existing reports page into the client workspace, pre-scoped to the current client. Note: the reports themselves are minimally useful today; new hospitality forms land here in a future milestone post-accountant-meeting.
 
-The structural expansion that raises switching costs and improves data quality at source. Auth is the risky part — must be done carefully.
+- **19.6 — Pravila tab.** Tab inside the client workspace showing rules scoped to this client. "Create rule for this client" CTA pre-fills the client filter. The existing global `/pravila` page stays as an agency-level sidebar entry for org-wide rules.
 
-**Issues:**
-- 16.1 — New user role `client_portal_user` with scoped data access
-- 16.2 — Portal invitation flow (one-time token)
-- 16.3 — Portal authentication and session separation from agency auth
-- 16.4 — Mobile-first document submission (camera capture, drag-drop)
-- 16.5 — End-client dashboard (own documents, status, KPO for paušalci)
-- 16.6 — Self-service invoice issuance for paušalci in portal
-- 16.7 — Portal notifications (in-app + email fallback)
-- 16.8 — Security review of role boundaries and data scoping
-- 16.9 — Portal tests
+- **19.7 — Portfolio view.** New route `/pregled` — the agency-wide home. Grid of clients with today's health indicators (invoices pending review, invoices blocked, activity recency). Each card clicks through to the client workspace. Designed so new indicator types plug in as data lights up.
 
-### M17 — Client-first UI redesign
+- **19.8 — Sidebar replacement.** Restructure the sidebar into two sections: Client workspace (Pregled, Klijenti list), Agency operations (Pravila, Arhiviranje, Katalog proizvoda, Dashboard). Remove top-level `Fakture` and `Izveštaji` entries. Update `i18n` accordingly.
 
-Reorganizes the whole experience around the per-client workflow. Runs in parallel with the existing feature-indexed UI during transition.
+- **19.9 — Client list page redesign.** Existing `/klijenti` becomes a quick-jump list — rows link to `/klijenti/{id}`. Keeps existing CRUD operations. No major visual change beyond a prominent "Otvori radnu tablu" affordance per row.
 
-**Issues:**
-- 17.1 — Period entity with close/lock semantics (+ migration)
-- 17.2 — Client view (single-page workspace)
-- 17.3 — Timeline: event log data model + API
-- 17.4 — Timeline: frontend with filtering by type/status
-- 17.5 — Close checklist: per client-type templates
-- 17.6 — Portfolio view (agency home)
-- 17.7 — Dual-UI migration path (run old + new in parallel, gradual cutover)
-- 17.8 — UI redesign tests
+- **19.10 — End-to-end verification and old-page cleanup.** Run the pre-written end-to-end test plan against the feature branch (upload invoice, verify, edit line items, export to MiniMax, create client, assign invoice, every existing report, every existing rule operation, archiving, etc.). Remove the safety-net links to old feature pages. Delete / redirect any now-orphan routes.
 
-### M18 — Compliance watchdog
-
-Extends the existing rules engine with scheduled evaluation. Smallest milestone because the foundation already exists.
-
-**Issues:**
-- 18.1 — Scheduled rule evaluation engine (daily cron)
-- 18.2 — Built-in compliance rules (PDV deadlines, revenue limits, doprinosi)
-- 18.3 — Ambient alerts in timeline and client header
-- 18.4 — Portfolio-wide alert aggregation
-- 18.5 — Law citations and auto-update on regulation changes
-- 18.6 — Watchdog tests
+- **19.11 — Milestone tests.** Integration tests for the new event log, portfolio endpoint, client workspace tab routing, and the timeline API. End-to-end smoke test for the primary flow (upload → verify → timeline event visible).
 
 ---
 
-## Suggested out-of-milestone work
+## Deferred milestones
 
-These don't belong to any single milestone but are worth doing in parallel:
+### M20 — Hospitality Legal Forms (post-accountant-meeting)
 
-- **SEF ingestion** — could slot into M15 or be its own M19
-- **Public tax calendar widget** — marketing/SEO, lightweight
-- **Rule template marketplace** — extends existing rules engine, after M14 ships
-- **Pricing page update** — reflects the new tiered plans, should ship with M14
+Placeholder. Scope specified after the agency meeting produces a requirements document for the forms (kalkulacije, šank lista, cenovnik, KEP, popis). At minimum:
+
+- Data model additions (e.g., product markup per client).
+- Form generators (one per legal form).
+- Tab additions within the Izveštaji surface of the client workspace.
+- Export templates (PDF at minimum; Excel likely also).
+
+No issues created until the meeting output exists.
+
+### M21 — Close Checklist and Period Semantics (post-M20)
+
+Placeholder. The checklist content is determined by the hospitality workflow surfaced in the accountant meeting and the forms work in M20. Period entity with close/lock semantics lands here.
+
+### Out-of-milestone ongoing work
+
+- **SEF ingestion as a data source** — pulling SEF'd invoices into the pipeline for agency visibility. Independently useful; can slot in whenever.
+- **Public Serbian tax calendar widget** — marketing / SEO, lightweight.
+- **Rule template marketplace** — extends existing rules engine.
+- **Pricing page update** — reflects the hospitality positioning once ready.
 
 ---
 
 ## Sequencing principles
 
-1. **Paušal first** because it's the most concrete pain with the smallest scope.
-2. **Foreign invoices second** because it's a natural extension of AccountingIntent once paušal is proven.
-3. **Portal third** because paušalci are the obvious first portal users — don't build the portal without paušal customers asking for it.
-4. **UI redesign fourth** because redesigning containers before you have enough new features to fill them is building empty rooms.
-5. **Watchdog fifth** because it's small, leverages existing infrastructure, and benefits most from having all the other features to monitor.
+1. **Client-first UI first.** The structural organisation is additive under any version of the forms story and unblocks every future client-scoped feature from living in a clean home.
+2. **No forms work before the meeting.** The cost of building the wrong columns is higher than the cost of waiting.
+3. **One branch, one cutover.** Saldora has no live users; coexistence is friction for the developer, not safety for the user.
+4. **Every new feature lands inside the client workspace** unless it legitimately is agency-scoped. Resist the temptation to add new top-level sidebar entries.
