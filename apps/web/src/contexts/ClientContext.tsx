@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { fetchClients } from '@/lib/api/clients';
 import { isPlanError } from '@/lib/api-client';
+import { useAuth } from '@/contexts/AuthContext';
 import type { ClientResponse } from '@/lib/types/client';
 
 interface ClientContextValue {
@@ -36,6 +37,7 @@ const STORAGE_KEY = 'saldora_selected_client';
  * (non-Agency plan), sets isAgency=false and returns empty clients.
  */
 export function ClientProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [clients, setClients] = useState<ClientResponse[]>([]);
   const [isAgency, setIsAgency] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -53,6 +55,12 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Wait until AuthContext has finished its silent-refresh init and we know
+    // whether the user is authenticated. Firing fetchClients() before auth
+    // handlers are registered sends an unauthenticated request → 401 and an
+    // empty client list in the sidebar.
+    if (authLoading || !isAuthenticated) return;
+
     let cancelled = false;
 
     async function load() {
@@ -75,7 +83,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, authLoading, isAuthenticated]);
 
   const selectClient = useCallback(() => {
     /* no-op — selection is URL-driven now */

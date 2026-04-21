@@ -65,8 +65,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   }, [router]);
 
-  // Register auth handlers for the API client
-  useEffect(() => {
+  // Register auth handlers synchronously during render (via useMemo) so they
+  // are live before any child component's useEffect fires. Registering in a
+  // useEffect caused a race where children (ClientContext, workspace page)
+  // would fire fetch calls in their mount effect before the token getter was
+  // set, producing 401s on the first request.
+  useMemo(() => {
     registerAuthHandlers({
       getAccessToken,
       refreshTokens: refreshAccessToken,
