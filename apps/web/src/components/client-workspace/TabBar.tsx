@@ -59,7 +59,7 @@ export function TabBar({ activeTab, orgSlug, clientId }: Props) {
   const t = useTranslations('clientWorkspace');
 
   return (
-    <div className="border-b border-stone-200 overflow-x-auto">
+    <div className="border-b border-stone-200 overflow-x-auto scrollbar-hide">
       <nav className="-mb-px flex gap-7">
         {TABS.map((tab) => {
           const isActive = tab.key === activeTab;

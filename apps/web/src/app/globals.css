@@ -51,6 +51,16 @@ body {
   background: #9ca3af;
 }
 
+/* Hide scrollbar but keep scroll behavior — used on horizontal tab strips
+   that need overflow:auto on mobile but shouldn't render a track. */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Animations */
 @keyframes blob {
   0%, 100% {
