@@ -282,6 +282,13 @@ export default function InvoiceDetailPage({
 
   if (!invoice) return null;
 
+  const backHref = invoice.client_id
+    ? orgPath(`/klijenti/${invoice.client_id}?tab=fakture`)
+    : orgPath('/invoices');
+  const backLabel = invoice.client?.name
+    ? `${t('backToList')} — ${invoice.client.name}`
+    : t('backToList');
+
   return (
     <div className="space-y-4">
       {/* Toast */}
@@ -297,13 +304,13 @@ export default function InvoiceDetailPage({
       <div className="space-y-3">
         {/* Back link */}
         <Link
-          href={orgPath("/invoices")}
+          href={backHref}
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors w-full justify-center sm:justify-start sm:w-auto"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          {t('backToList')}
+          {backLabel}
         </Link>
 
         {/* Title row: invoice number + status + confidence + actions */}
