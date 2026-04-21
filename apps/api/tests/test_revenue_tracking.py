@@ -82,7 +82,7 @@ async def _seed_manual_entry(
         json={
             "entry_date": f"{year}-06-15",
             "customer_name": "Kupac",
-            "customer_pib": "111222333",
+            "customer_pib": "100000032",
             "amount": amount,
         },
         headers=headers,
@@ -98,7 +98,7 @@ async def _seed_manual_entry(
 async def test_revenue_status_empty_returns_ok(client: AsyncClient, test_engine):
     """No KPO entries → total_revenue=0, both thresholds ok."""
     headers = await _setup(client, test_engine, "rev-empty@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="100100101")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000104")
 
     resp = await client.get(
         f"/api/v1/pausal/{paušalac_id}/revenue-status?year=2026", headers=headers
@@ -116,7 +116,7 @@ async def test_revenue_status_empty_returns_ok(client: AsyncClient, test_engine)
 async def test_warning_level_at_75_percent_of_pausal_limit(client: AsyncClient, test_engine):
     """75% of 6M = 4.5M → pausal_status warning; pdv still ok (56.25%)."""
     headers = await _setup(client, test_engine, "rev-warn@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="200200202")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000112")
 
     await _seed_manual_entry(client, headers, paušalac_id, amount="4500000.00")
 
@@ -133,7 +133,7 @@ async def test_warning_level_at_75_percent_of_pausal_limit(client: AsyncClient, 
 async def test_critical_level_at_90_percent(client: AsyncClient, test_engine):
     """90% of 6M = 5.4M → critical for pausal_status."""
     headers = await _setup(client, test_engine, "rev-crit@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="300300303")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000129")
 
     await _seed_manual_entry(client, headers, paušalac_id, amount="5400000.00")
 
@@ -148,7 +148,7 @@ async def test_critical_level_at_90_percent(client: AsyncClient, test_engine):
 async def test_exceeded_level_over_pausal_limit(client: AsyncClient, test_engine):
     """Over 6M → pausal_status exceeded."""
     headers = await _setup(client, test_engine, "rev-exceed@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="400400404")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000137")
 
     await _seed_manual_entry(client, headers, paušalac_id, amount="6500000.00")
 
@@ -164,7 +164,7 @@ async def test_exceeded_level_over_pausal_limit(client: AsyncClient, test_engine
 async def test_overall_alert_is_worst_of_two(client: AsyncClient, test_engine):
     """At 8.5M: pausal_status exceeded, pdv also exceeded → exceeded overall."""
     headers = await _setup(client, test_engine, "rev-worst@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="500500505")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000145")
 
     await _seed_manual_entry(client, headers, paušalac_id, amount="8500000.00")
 
@@ -185,7 +185,7 @@ async def test_overall_alert_is_worst_of_two(client: AsyncClient, test_engine):
 async def test_storno_cancels_out_in_revenue(client: AsyncClient, test_engine):
     """A storno'd entry contributes 0 net revenue."""
     headers = await _setup(client, test_engine, "rev-storno@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="600600606")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000153")
 
     # Two manual entries: 3M and 2M
     await _seed_manual_entry(client, headers, paušalac_id, amount="3000000.00")
@@ -216,7 +216,7 @@ async def test_storno_cancels_out_in_revenue(client: AsyncClient, test_engine):
 async def test_year_filter_scopes_revenue(client: AsyncClient, test_engine):
     """Revenue in 2025 does not leak into 2026 status."""
     headers = await _setup(client, test_engine, "rev-year@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="700700707")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000161")
 
     await _seed_manual_entry(client, headers, paušalac_id, amount="3000000.00", year=2025)
     await _seed_manual_entry(client, headers, paušalac_id, amount="1000000.00", year=2026)
@@ -291,7 +291,7 @@ async def test_org_isolation(client: AsyncClient, test_engine):
 async def test_portfolio_returns_one_row_per_pausalac(client: AsyncClient, test_engine):
     """GET /pausal/portfolio aggregates revenue in a single response."""
     headers = await _setup(client, test_engine, "rev-portfolio@example.com")
-    paušalac_a = await _create_pausalac(client, headers, pib="303030303")
+    paušalac_a = await _create_pausalac(client, headers, pib="100000170")
     paušalac_b = await _create_pausalac(client, headers, pib="404040404")
 
     await _seed_manual_entry(client, headers, paušalac_a, amount="1000000.00")
@@ -312,16 +312,16 @@ async def test_portfolio_returns_one_row_per_pausalac(client: AsyncClient, test_
 async def test_portfolio_excludes_non_pausalac_clients(client: AsyncClient, test_engine):
     """Regular VAT-payer clients don't appear in the paušalci portfolio."""
     headers = await _setup(client, test_engine, "rev-portfolio-filter@example.com")
-    await _create_pausalac(client, headers, pib="505050505")
+    await _create_pausalac(client, headers, pib="100000188")
     await client.post(
         "/api/v1/clients/",
-        json={"name": "VAT", "pib": "606060606", "client_type": "vat_payer"},
+        json={"name": "VAT", "pib": "100000196", "client_type": "vat_payer"},
         headers=headers,
     )
 
     resp = await client.get("/api/v1/pausal/portfolio", headers=headers)
     assert len(resp.json()["data"]) == 1
-    assert resp.json()["data"][0]["pib"] == "505050505"
+    assert resp.json()["data"][0]["pib"] == "100000188"
 
 
 async def test_non_rsd_entries_excluded_and_counted(client: AsyncClient, test_engine):

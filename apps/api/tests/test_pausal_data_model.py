@@ -67,7 +67,7 @@ async def test_create_client_defaults_to_vat_payer(client: AsyncClient, test_eng
     headers = await _setup(client, test_engine, "default-type@example.com")
     resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Default Type", "pib": "100000001"},
+        json={"name": "Default Type", "pib": "100000207"},
         headers=headers,
     )
     assert resp.status_code == 201
@@ -77,11 +77,13 @@ async def test_create_client_defaults_to_vat_payer(client: AsyncClient, test_eng
 async def test_create_client_with_each_valid_type(client: AsyncClient, test_engine):
     """All four client types are accepted on create."""
     headers = await _setup(client, test_engine, "all-types@example.com")
+    # 4 distinct checksum-valid Serbian PIBs (the router enforces mod-11).
+    valid_pibs = ["100000008", "200000005", "300000002", "400000000"]
     valid = ["vat_payer", "pausalac", "foreign_entity", "non_profit"]
-    for i, ct in enumerate(valid):
+    for ct, pib in zip(valid, valid_pibs, strict=True):
         resp = await client.post(
             "/api/v1/clients/",
-            json={"name": f"Client {ct}", "pib": f"20000000{i}", "client_type": ct},
+            json={"name": f"Client {ct}", "pib": pib, "client_type": ct},
             headers=headers,
         )
         assert resp.status_code == 201, f"{ct} rejected: {resp.text}"
@@ -93,7 +95,7 @@ async def test_create_client_rejects_invalid_type(client: AsyncClient, test_engi
     headers = await _setup(client, test_engine, "bad-type@example.com")
     resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Bad", "pib": "300000001", "client_type": "corporation"},
+        json={"name": "Bad", "pib": "100000215", "client_type": "corporation"},
         headers=headers,
     )
     assert resp.status_code == 422
@@ -104,7 +106,7 @@ async def test_update_client_type(client: AsyncClient, test_engine):
     headers = await _setup(client, test_engine, "change-type@example.com")
     created = await client.post(
         "/api/v1/clients/",
-        json={"name": "Grad", "pib": "400000001", "client_type": "pausalac"},
+        json={"name": "Grad", "pib": "100000223", "client_type": "pausalac"},
         headers=headers,
     )
     cid = created.json()["id"]
@@ -123,7 +125,7 @@ async def test_client_response_includes_type(client: AsyncClient, test_engine):
     headers = await _setup(client, test_engine, "get-type@example.com")
     created = await client.post(
         "/api/v1/clients/",
-        json={"name": "Foreign Co", "pib": "500000001", "client_type": "foreign_entity"},
+        json={"name": "Foreign Co", "pib": "100000231", "client_type": "foreign_entity"},
         headers=headers,
     )
     cid = created.json()["id"]

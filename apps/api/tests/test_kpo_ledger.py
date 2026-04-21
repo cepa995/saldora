@@ -62,7 +62,7 @@ async def _create_pausalac(
     client: AsyncClient,
     headers: dict,
     *,
-    pib: str = "123456789",
+    pib: str = "100000008",
 ) -> str:
     resp = await client.post(
         "/api/v1/clients/",
@@ -130,7 +130,7 @@ async def _issue_invoice(
 async def test_issued_invoice_auto_creates_kpo_entry(client: AsyncClient, test_engine):
     """Issuing a paušal invoice creates exactly one KPO entry with matching fields."""
     headers = await _setup(client, test_engine, "kpo-auto@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="100100100")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000240")
 
     invoice = await _issue_invoice(
         client, headers, paušalac_id, customer_pib="200200200", amount="7500.00"
@@ -153,11 +153,11 @@ async def test_issued_invoice_auto_creates_kpo_entry(client: AsyncClient, test_e
 async def test_kpo_entries_share_counter_with_invoices(client: AsyncClient, test_engine):
     """Manual and auto entries share one monotonic sequence per client per year."""
     headers = await _setup(client, test_engine, "kpo-counter@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="300300300")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000258")
 
     # Issue one invoice → KPO entry 2026-001 + counter at 1
     inv1 = await _issue_invoice(
-        client, headers, paušalac_id, customer_pib="400400400", amount="1000.00"
+        client, headers, paušalac_id, customer_pib="100000266", amount="1000.00"
     )
     assert inv1["invoice_number"] == "2026-001"
 
@@ -176,7 +176,7 @@ async def test_kpo_entries_share_counter_with_invoices(client: AsyncClient, test
 
     # Next issued invoice → 2026-003
     inv2 = await _issue_invoice(
-        client, headers, paušalac_id, customer_pib="500500500", amount="3000.00"
+        client, headers, paušalac_id, customer_pib="100000274", amount="3000.00"
     )
     assert inv2["invoice_number"] == "2026-003"
 
@@ -189,7 +189,7 @@ async def test_kpo_entries_share_counter_with_invoices(client: AsyncClient, test
 async def test_manual_kpo_entry_creation(client: AsyncClient, test_engine):
     """Manual KPO entries create a ledger row without an invoice link."""
     headers = await _setup(client, test_engine, "kpo-manual@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="600600600")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000282")
 
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/kpo",
@@ -197,7 +197,7 @@ async def test_manual_kpo_entry_creation(client: AsyncClient, test_engine):
             "entry_date": "2026-02-01",
             "invoice_number": "LEGACY-007",
             "customer_name": "Stari Kupac",
-            "customer_pib": "700700700",
+            "customer_pib": "100000299",
             "amount": "12345.67",
             "notes": "Preneseno iz Excel",
         },
@@ -217,7 +217,7 @@ async def test_manual_entry_rejects_non_pausalac(client: AsyncClient, test_engin
     headers = await _setup(client, test_engine, "kpo-non-paus@example.com")
     resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "VAT", "pib": "700700701", "client_type": "vat_payer"},
+        json={"name": "VAT", "pib": "100000303", "client_type": "vat_payer"},
         headers=headers,
     )
     vat_id = resp.json()["id"]
@@ -243,9 +243,9 @@ async def test_manual_entry_rejects_non_pausalac(client: AsyncClient, test_engin
 async def test_storno_marks_original_and_creates_reversal(client: AsyncClient, test_engine):
     """Storno cancels the original and inserts a negated-amount entry linked to it."""
     headers = await _setup(client, test_engine, "kpo-storno@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="800800800")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000311")
 
-    await _issue_invoice(client, headers, paušalac_id, customer_pib="900900900", amount="5000.00")
+    await _issue_invoice(client, headers, paušalac_id, customer_pib="100000320", amount="5000.00")
 
     # Find the auto-created entry id
     list_resp = await client.get(f"/api/v1/pausal/{paušalac_id}/kpo", headers=headers)
@@ -271,7 +271,7 @@ async def test_storno_marks_original_and_creates_reversal(client: AsyncClient, t
 async def test_cannot_storno_cancelled_entry(client: AsyncClient, test_engine):
     """Stornoing an already-cancelled entry returns 422."""
     headers = await _setup(client, test_engine, "kpo-dup-storno@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="110110110")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000338")
 
     await _issue_invoice(client, headers, paušalac_id, customer_pib="120120120", amount="100.00")
     list_resp = await client.get(f"/api/v1/pausal/{paušalac_id}/kpo", headers=headers)
@@ -296,9 +296,9 @@ async def test_cannot_storno_cancelled_entry(client: AsyncClient, test_engine):
 async def test_cannot_storno_a_storno_entry(client: AsyncClient, test_engine):
     """Storno of a storno entry returns 422."""
     headers = await _setup(client, test_engine, "kpo-recurse@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="130130130")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000346")
 
-    await _issue_invoice(client, headers, paušalac_id, customer_pib="140140140", amount="100.00")
+    await _issue_invoice(client, headers, paušalac_id, customer_pib="100000354", amount="100.00")
     list_resp = await client.get(f"/api/v1/pausal/{paušalac_id}/kpo", headers=headers)
     original_id = list_resp.json()["data"][0]["id"]
 
@@ -327,13 +327,13 @@ async def test_cannot_storno_a_storno_entry(client: AsyncClient, test_engine):
 async def test_list_filters_by_year(client: AsyncClient, test_engine):
     """?year=2025 returns only 2025 entries."""
     headers = await _setup(client, test_engine, "kpo-year@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="150150150")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000362")
 
     await _issue_invoice(
         client,
         headers,
         paušalac_id,
-        customer_pib="160160160",
+        customer_pib="100000379",
         amount="100.00",
         invoice_date="2025-05-05",
     )
@@ -355,9 +355,9 @@ async def test_list_filters_by_year(client: AsyncClient, test_engine):
 async def test_list_excludes_cancelled_when_asked(client: AsyncClient, test_engine):
     """include_cancelled=false hides cancelled originals but keeps storno rows."""
     headers = await _setup(client, test_engine, "kpo-hide-cancel@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="180180180")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000387")
 
-    await _issue_invoice(client, headers, paušalac_id, customer_pib="190190190", amount="100.00")
+    await _issue_invoice(client, headers, paušalac_id, customer_pib="100000395", amount="100.00")
     list_resp = await client.get(f"/api/v1/pausal/{paušalac_id}/kpo", headers=headers)
     original_id = list_resp.json()["data"][0]["id"]
     await client.post(
@@ -383,9 +383,9 @@ async def test_kpo_org_isolation(client: AsyncClient, test_engine):
     """Org B cannot read org A's KPO entries."""
     headers_a = await _setup(client, test_engine, "kpo-org-a@example.com")
     headers_b = await _setup(client, test_engine, "kpo-org-b@example.com")
-    paušalac_a = await _create_pausalac(client, headers_a, pib="210210210")
+    paušalac_a = await _create_pausalac(client, headers_a, pib="100000400")
 
-    await _issue_invoice(client, headers_a, paušalac_a, customer_pib="220220220", amount="50.00")
+    await _issue_invoice(client, headers_a, paušalac_a, customer_pib="100000418", amount="50.00")
 
     # Org B hits 404 on the client lookup
     resp = await client.get(f"/api/v1/pausal/{paušalac_a}/kpo", headers=headers_b)
@@ -395,7 +395,7 @@ async def test_kpo_org_isolation(client: AsyncClient, test_engine):
 async def test_get_nonexistent_entry_returns_404(client: AsyncClient, test_engine):
     """404 for an unknown KPO entry id."""
     headers = await _setup(client, test_engine, "kpo-404@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="230230230")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000426")
 
     resp = await client.get(f"/api/v1/pausal/{paušalac_id}/kpo/{uuid4()}", headers=headers)
     assert resp.status_code == 404

@@ -88,11 +88,11 @@ async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
             due_date=overrides.get("due_date", date(2025, 2, 15)),
             seller=overrides.get(
                 "seller",
-                {"pib": "123456789", "name": "Prodavac DOO", "address": "Beograd"},
+                {"pib": "500000007", "name": "Prodavac DOO", "address": "Beograd"},
             ),
             buyer=overrides.get(
                 "buyer",
-                {"pib": "987654321", "name": "Kupac DOO", "address": "Novi Sad"},
+                {"pib": "500000179", "name": "Kupac DOO", "address": "Novi Sad"},
             ),
             subtotal=overrides.get("subtotal", Decimal("10000.00")),
             tax_rate=overrides.get("tax_rate", Decimal("20.00")),
@@ -154,7 +154,7 @@ async def test_get_invoice_success(client: AsyncClient, test_engine):
     assert data["id"] == inv_id
     assert data["status"] == "review"
     assert data["invoice_number"] == "INV-001"
-    assert data["seller"]["pib"] == "123456789"
+    assert data["seller"]["pib"] == "500000007"
     assert data["buyer"]["name"] == "Kupac DOO"
     assert data["total_amount"] == "12000.00"
     assert data["document_url"] == "https://s3.example.com/doc"
@@ -387,11 +387,11 @@ async def test_update_invoice_seller_fields(client: AsyncClient, test_engine):
     resp = await client.patch(
         f"/api/v1/invoices/{inv_id}",
         headers=headers,
-        json={"seller_pib": "111222333", "seller_name": "Novi Prodavac"},
+        json={"seller_pib": "500000015", "seller_name": "Novi Prodavac"},
     )
     assert resp.status_code == 200
     seller = resp.json()["seller"]
-    assert seller["pib"] == "111222333"
+    assert seller["pib"] == "500000015"
     assert seller["name"] == "Novi Prodavac"
     # Original address should be preserved
     assert seller["address"] == "Beograd"

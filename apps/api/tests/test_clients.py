@@ -114,13 +114,13 @@ async def test_create_client(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "create-client@example.com")
     resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Test Company", "pib": "123456789"},
+        json={"name": "Test Company", "pib": "500000007"},
         headers=headers,
     )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Test Company"
-    assert data["pib"] == "123456789"
+    assert data["pib"] == "500000007"
     assert data["is_active"] is True
     assert data["invoice_count"] == 0
 
@@ -130,12 +130,12 @@ async def test_duplicate_pib_rejected(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "dup-pib@example.com")
     await client.post(
         "/api/v1/clients/",
-        json={"name": "Company A", "pib": "111222333"},
+        json={"name": "Company A", "pib": "500000015"},
         headers=headers,
     )
     resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Company B", "pib": "111222333"},
+        json={"name": "Company B", "pib": "500000015"},
         headers=headers,
     )
     assert resp.status_code == 409
@@ -146,12 +146,12 @@ async def test_list_clients_with_search(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "list-search@example.com")
     await client.post(
         "/api/v1/clients/",
-        json={"name": "Alfa Corp", "pib": "100000001"},
+        json={"name": "Alfa Corp", "pib": "500000023"},
         headers=headers,
     )
     await client.post(
         "/api/v1/clients/",
-        json={"name": "Beta LLC", "pib": "200000002"},
+        json={"name": "Beta LLC", "pib": "500000031"},
         headers=headers,
     )
 
@@ -163,7 +163,7 @@ async def test_list_clients_with_search(client: AsyncClient, test_engine):
     assert data["data"][0]["name"] == "Alfa Corp"
 
     # Search by PIB
-    resp = await client.get("/api/v1/clients/?search=200000002", headers=headers)
+    resp = await client.get("/api/v1/clients/?search=500000031", headers=headers)
     assert resp.status_code == 200
     assert len(resp.json()["data"]) == 1
 
@@ -173,7 +173,7 @@ async def test_get_client(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "get-client@example.com")
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Get Test", "pib": "300000003"},
+        json={"name": "Get Test", "pib": "500000040"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -188,7 +188,7 @@ async def test_update_client(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "update-client@example.com")
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Old Name", "pib": "400000004"},
+        json={"name": "Old Name", "pib": "500000058"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -208,7 +208,7 @@ async def test_soft_delete_client(client: AsyncClient, test_engine):
     headers = await _setup_agency(client, test_engine, "delete-client@example.com")
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "To Delete", "pib": "500000005"},
+        json={"name": "To Delete", "pib": "500000066"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -234,7 +234,7 @@ async def test_cross_org_isolation(client: AsyncClient, test_engine):
     # Org A creates a client
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "A Only", "pib": "600000006"},
+        json={"name": "A Only", "pib": "500000074"},
         headers=headers_a,
     )
     client_id = create_resp.json()["id"]
@@ -245,7 +245,7 @@ async def test_cross_org_isolation(client: AsyncClient, test_engine):
 
     # Org B's list doesn't include it
     list_resp = await client.get("/api/v1/clients/", headers=headers_b)
-    assert all(c["pib"] != "600000006" for c in list_resp.json()["data"])
+    assert all(c["pib"] != "500000074" for c in list_resp.json()["data"])
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ async def test_invoice_client_id_filter(client: AsyncClient, test_engine):
     # Create a client
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Filter Client", "pib": "700000007"},
+        json={"name": "Filter Client", "pib": "500000082"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -313,7 +313,7 @@ async def test_invoice_response_includes_client(client: AsyncClient, test_engine
     # Create a client
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Summary Client", "pib": "800000008"},
+        json={"name": "Summary Client", "pib": "500000099"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -340,7 +340,7 @@ async def test_invoice_response_includes_client(client: AsyncClient, test_engine
     data = resp.json()
     assert data["client_id"] == client_id
     assert data["client"]["name"] == "Summary Client"
-    assert data["client"]["pib"] == "800000008"
+    assert data["client"]["pib"] == "500000099"
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +356,7 @@ async def test_assign_client_to_invoice(client: AsyncClient, test_engine):
     # Create client
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Assign Client", "pib": "900000009"},
+        json={"name": "Assign Client", "pib": "500000103"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]
@@ -463,12 +463,12 @@ async def test_list_clients_filter_by_is_active(client: AsyncClient, test_engine
     # Create two clients
     await client.post(
         "/api/v1/clients/",
-        json={"name": "Active One", "pib": "111000111"},
+        json={"name": "Active One", "pib": "500000111"},
         headers=headers,
     )
     r2 = await client.post(
         "/api/v1/clients/",
-        json={"name": "Inactive Two", "pib": "222000222"},
+        json={"name": "Inactive Two", "pib": "500000120"},
         headers=headers,
     )
     client_id_2 = r2.json()["id"]
@@ -480,15 +480,15 @@ async def test_list_clients_filter_by_is_active(client: AsyncClient, test_engine
     resp_active = await client.get("/api/v1/clients/?is_active=true", headers=headers)
     assert resp_active.status_code == 200
     active_pibs = {c["pib"] for c in resp_active.json()["data"]}
-    assert "111000111" in active_pibs
-    assert "222000222" not in active_pibs
+    assert "500000111" in active_pibs
+    assert "500000120" not in active_pibs
 
     # Filter: only inactive clients
     resp_inactive = await client.get("/api/v1/clients/?is_active=false", headers=headers)
     assert resp_inactive.status_code == 200
     inactive_pibs = {c["pib"] for c in resp_inactive.json()["data"]}
-    assert "222000222" in inactive_pibs
-    assert "111000111" not in inactive_pibs
+    assert "500000120" in inactive_pibs
+    assert "500000111" not in inactive_pibs
 
 
 # ---------------------------------------------------------------------------
@@ -508,10 +508,12 @@ async def test_list_clients_pagination(client: AsyncClient, test_engine):
     """
     headers = await _setup_agency(client, test_engine, "cl-paginate@example.com")
 
-    for i in range(3):
+    # Use 3 distinct, checksum-valid Serbian PIBs (router enforces mod-11).
+    pibs = ["500000200", "500000218", "500000226"]
+    for i, pib in enumerate(pibs):
         await client.post(
             "/api/v1/clients/",
-            json={"name": f"Page Client {i}", "pib": f"33300000{i}"},
+            json={"name": f"Page Client {i}", "pib": pib},
             headers=headers,
         )
 
@@ -551,12 +553,12 @@ async def test_update_client_duplicate_pib_conflict(client: AsyncClient, test_en
     # Create two clients with distinct PIBs
     await client.post(
         "/api/v1/clients/",
-        json={"name": "Company X", "pib": "444000444"},
+        json={"name": "Company X", "pib": "500000138"},
         headers=headers,
     )
     r2 = await client.post(
         "/api/v1/clients/",
-        json={"name": "Company Y", "pib": "555000555"},
+        json={"name": "Company Y", "pib": "500000146"},
         headers=headers,
     )
     client_id_y = r2.json()["id"]
@@ -564,7 +566,7 @@ async def test_update_client_duplicate_pib_conflict(client: AsyncClient, test_en
     # Try to update Y's PIB to X's PIB — should conflict
     resp = await client.patch(
         f"/api/v1/clients/{client_id_y}",
-        json={"pib": "444000444"},
+        json={"pib": "500000138"},
         headers=headers,
     )
     assert resp.status_code == 409
@@ -586,7 +588,7 @@ async def test_create_client_full_details(client: AsyncClient, test_engine):
 
     payload = {
         "name": "Full Detail Corp",
-        "pib": "666000666",
+        "pib": "500000154",
         "mb": "12345678",
         "address": "Knez Mihajlova 10",
         "city": "Beograd",
@@ -624,7 +626,7 @@ async def test_reactivate_soft_deleted_client(client: AsyncClient, test_engine):
 
     create_resp = await client.post(
         "/api/v1/clients/",
-        json={"name": "Reactivate Me", "pib": "777000777"},
+        json={"name": "Reactivate Me", "pib": "500000162"},
         headers=headers,
     )
     client_id = create_resp.json()["id"]

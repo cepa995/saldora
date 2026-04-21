@@ -25,6 +25,30 @@ import type {
 } from '@/lib/types/pausal';
 import type { ClientResponse } from '@/lib/types/client';
 import { Toast } from '@/components/Toast';
+import { validateSerbianPib } from '@/lib/validation/pib';
+
+// Curated, commonly-used countries for paušalci. RS first, then the usual
+// destinations (US, UK, EU), then a long tail users can still type via ISO.
+const COUNTRIES: Array<{ code: string; label: string }> = [
+  { code: 'RS', label: '🇷🇸 Srbija' },
+  { code: 'US', label: '🇺🇸 SAD' },
+  { code: 'GB', label: '🇬🇧 Ujedinjeno Kraljevstvo' },
+  { code: 'DE', label: '🇩🇪 Nemačka' },
+  { code: 'AT', label: '🇦🇹 Austrija' },
+  { code: 'CH', label: '🇨🇭 Švajcarska' },
+  { code: 'IT', label: '🇮🇹 Italija' },
+  { code: 'FR', label: '🇫🇷 Francuska' },
+  { code: 'NL', label: '🇳🇱 Holandija' },
+  { code: 'IE', label: '🇮🇪 Irska' },
+  { code: 'HR', label: '🇭🇷 Hrvatska' },
+  { code: 'SI', label: '🇸🇮 Slovenija' },
+  { code: 'ME', label: '🇲🇪 Crna Gora' },
+  { code: 'BA', label: '🇧🇦 BiH' },
+  { code: 'MK', label: '🇲🇰 S. Makedonija' },
+  { code: 'BG', label: '🇧🇬 Bugarska' },
+  { code: 'HU', label: '🇭🇺 Mađarska' },
+  { code: 'OTHER', label: '🌍 Ostalo' },
+];
 
 interface Props {
   paušalac: ClientResponse;
@@ -48,6 +72,17 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
   const [customerId, setCustomerId] = useState<string>('');
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPib, setNewCustomerPib] = useState('');
+  const [newCustomerCountry, setNewCustomerCountry] = useState<string>('RS');
+  const [newCustomerPibTouched, setNewCustomerPibTouched] = useState(false);
+
+  const isSerbianCustomer = newCustomerCountry === 'RS';
+  const newCustomerPibValidation = isSerbianCustomer
+    ? validateSerbianPib(newCustomerPib)
+    : { valid: true, error: null };
+  const newCustomerPibError =
+    isSerbianCustomer && newCustomerPibTouched && newCustomerPib.length > 0
+      ? newCustomerPibValidation.error
+      : null;
 
   const today = new Date().toISOString().slice(0, 10);
   const [invoiceDate, setInvoiceDate] = useState(today);
@@ -134,6 +169,11 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
       setError(t('formCustomerName'));
       return;
     }
+    if (customerMode === 'new' && !newCustomerPibValidation.valid) {
+      setNewCustomerPibTouched(true);
+      setError(newCustomerPibValidation.error);
+      return;
+    }
     if (items.some((it) => !it.description || !it.unit_price || Number(it.unit_price) <= 0)) {
       setError(t('formItemDescription'));
       return;
@@ -146,9 +186,12 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
       // If using "new customer" mode, create first then issue so the
       // created customer persists even if issuance later fails.
       if (customerMode === 'new') {
+        const resolvedCountry =
+          newCustomerCountry === 'OTHER' ? 'XX' : newCustomerCountry;
         const created = await createCustomer(paušalac.id, {
           name: newCustomerName.trim(),
           pib: newCustomerPib.trim() || undefined,
+          country: resolvedCountry,
         });
         effectiveCustomerId = created.id;
       }
@@ -193,15 +236,15 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start sm:items-center justify-center overflow-y-auto p-4 sm:p-6"
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-stretch sm:items-center justify-center p-0 sm:p-6"
       onClick={handleBackdropClick}
     >
       <div
         ref={dialogRef}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-4"
+        className="bg-white w-full sm:rounded-2xl shadow-2xl sm:max-w-5xl flex flex-col max-h-full sm:max-h-[92vh] overflow-hidden"
       >
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
+        {/* Sticky header */}
+        <div className="flex items-start justify-between px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-100 flex-shrink-0">
           <div>
             <h2 className="text-lg font-bold text-gray-900">{t('issueInvoiceTitle')}</h2>
             <p className="text-sm text-gray-500 mt-0.5">{t('issueInvoiceSubtitle')}</p>
@@ -243,7 +286,11 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+            <div className="overflow-y-auto px-5 sm:px-6 py-5 flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
+            {/* ——— Left column ——— */}
+            <div className="space-y-5">
             {/* Customer */}
             <section>
               <h3 className="text-sm font-semibold text-gray-900 mb-2">
@@ -288,19 +335,67 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
                   ))}
                 </select>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-3">
                   <input
                     value={newCustomerName}
                     onChange={(e) => setNewCustomerName(e.target.value)}
                     placeholder={t('formCustomerName')}
-                    className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
                   />
-                  <input
-                    value={newCustomerPib}
-                    onChange={(e) => setNewCustomerPib(e.target.value)}
-                    placeholder={t('formCustomerPib')}
-                    className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {t('formCustomerCountry')}
+                      </label>
+                      <select
+                        value={newCustomerCountry}
+                        onChange={(e) => {
+                          setNewCustomerCountry(e.target.value);
+                          setNewCustomerPibTouched(false);
+                        }}
+                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 bg-white"
+                      >
+                        {COUNTRIES.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {isSerbianCustomer
+                          ? t('formCustomerPib')
+                          : t('formCustomerForeignTaxId')}
+                      </label>
+                      <input
+                        value={newCustomerPib}
+                        onChange={(e) =>
+                          setNewCustomerPib(
+                            isSerbianCustomer
+                              ? e.target.value.replace(/\D/g, '').slice(0, 9)
+                              : e.target.value.slice(0, 30),
+                          )
+                        }
+                        onBlur={() => setNewCustomerPibTouched(true)}
+                        placeholder={isSerbianCustomer ? '123456789' : 'EIN / VAT ID'}
+                        inputMode={isSerbianCustomer ? 'numeric' : 'text'}
+                        className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:ring-2 tabular-nums ${
+                          newCustomerPibError
+                            ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-400'
+                            : 'border-gray-200 focus:ring-violet-500/20 focus:border-violet-500'
+                        }`}
+                      />
+                      {newCustomerPibError && (
+                        <p className="mt-1 text-xs text-rose-600">{newCustomerPibError}</p>
+                      )}
+                      {!isSerbianCustomer && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {t('formCustomerForeignTaxIdHint')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
@@ -365,6 +460,9 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
                 </div>
               </div>
             </section>
+            </div>
+            {/* ——— Right column ——— */}
+            <div className="space-y-5">
 
             {/* Items */}
             <section>
@@ -466,14 +564,18 @@ export function IssueInvoiceModal({ paušalac, onClose, onIssued }: Props) {
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 resize-none"
               />
             </section>
-
-            {error && (
-              <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                {error}
+            </div>
               </div>
-            )}
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+              {error && (
+                <div className="mt-5 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* Sticky footer */}
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 sm:px-6 py-4 border-t border-gray-100 bg-white flex-shrink-0">
               <button
                 type="button"
                 onClick={onClose}

@@ -98,7 +98,7 @@ async def _create_pausalac(
     client: AsyncClient,
     headers: dict,
     *,
-    pib: str = "123456789",
+    pib: str = "100000008",
     bank: str | None = "160-0000000000000-11",
     activity: str | None = "6201",
 ) -> str:
@@ -133,7 +133,7 @@ async def test_create_and_list_customer(client: AsyncClient, test_engine):
 
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/customers",
-        json={"name": "Kupac DOO", "pib": "100200300"},
+        json={"name": "Kupac DOO", "pib": "100000016"},
         headers=headers,
     )
     assert resp.status_code == 201
@@ -169,7 +169,7 @@ async def test_customer_org_isolation(client: AsyncClient, test_engine):
     """Customers from another org are 404 for a different user."""
     headers_a = await _setup(client, test_engine, "cust-org-a@example.com")
     headers_b = await _setup(client, test_engine, "cust-org-b@example.com")
-    paušalac_a = await _create_pausalac(client, headers_a, pib="300400500")
+    paušalac_a = await _create_pausalac(client, headers_a, pib="100000024")
 
     resp = await client.get(f"/api/v1/pausal/{paušalac_a}/customers", headers=headers_b)
     assert resp.status_code == 404
@@ -186,16 +186,22 @@ async def test_sequential_numbering_three_invoices(client: AsyncClient, test_eng
     paušalac_id = await _create_pausalac(client, headers, pib="400500600")
 
     payload_template = {
-        "new_customer": {"name": "Kupac", "pib": "111222333"},
+        "new_customer": {"name": "Kupac", "pib": "100000032"},
         "invoice_date": "2026-04-20",
         "place_of_issue": "Beograd",
         "items": [{"description": "Usluga", "quantity": "1", "unit_price": "1000.00"}],
     }
 
+    # Use foreign customers so we can use arbitrary distinct tax IDs without
+    # having to derive 3 checksum-valid Serbian PIBs.
     numbers = []
     for i in range(3):
         payload = dict(payload_template)
-        payload["new_customer"] = {"name": f"Kupac {i}", "pib": f"11122233{i}"}
+        payload["new_customer"] = {
+            "name": f"Kupac {i}",
+            "pib": f"EIN-{i:07d}",
+            "country": "US",
+        }
         resp = await client.post(
             f"/api/v1/pausal/{paušalac_id}/invoices", json=payload, headers=headers
         )
@@ -208,10 +214,10 @@ async def test_sequential_numbering_three_invoices(client: AsyncClient, test_eng
 async def test_numbering_resets_across_years(client: AsyncClient, test_engine):
     """Counter is scoped by year; different years start at 001 independently."""
     headers = await _setup(client, test_engine, "seq-year@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="500600700")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000049")
 
     base = {
-        "new_customer": {"name": "Kupac", "pib": "111222333"},
+        "new_customer": {"name": "Kupac", "pib": "100000032"},
         "place_of_issue": "Beograd",
         "items": [{"description": "Usluga", "quantity": "1", "unit_price": "500.00"}],
     }
@@ -221,7 +227,7 @@ async def test_numbering_resets_across_years(client: AsyncClient, test_engine):
         json={
             **base,
             "invoice_date": "2025-12-15",
-            "new_customer": {"name": "A", "pib": "111111111"},
+            "new_customer": {"name": "A", "pib": "100000057"},
         },
         headers=headers,
     )
@@ -230,7 +236,7 @@ async def test_numbering_resets_across_years(client: AsyncClient, test_engine):
         json={
             **base,
             "invoice_date": "2026-01-10",
-            "new_customer": {"name": "B", "pib": "222222222"},
+            "new_customer": {"name": "B", "pib": "100000065"},
         },
         headers=headers,
     )
@@ -246,11 +252,11 @@ async def test_numbering_resets_across_years(client: AsyncClient, test_engine):
 async def test_issue_invoice_with_existing_customer(client: AsyncClient, test_engine):
     """Can issue using an existing customer_id; customer snapshot is embedded."""
     headers = await _setup(client, test_engine, "issue-existing@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="600700800")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000073")
 
     cust_resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/customers",
-        json={"name": "Postojeći Kupac", "pib": "700800900"},
+        json={"name": "Postojeći Kupac", "pib": "100000081"},
         headers=headers,
     )
     customer_id = cust_resp.json()["id"]
@@ -279,12 +285,12 @@ async def test_issue_invoice_with_existing_customer(client: AsyncClient, test_en
 async def test_issue_invoice_with_inline_new_customer(client: AsyncClient, test_engine):
     """Inline new_customer creates a Customer record and issues the invoice."""
     headers = await _setup(client, test_engine, "issue-inline@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="700800900")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000081")
 
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/invoices",
         json={
-            "new_customer": {"name": "Novi Kupac", "pib": "800900100"},
+            "new_customer": {"name": "Novi Kupac", "pib": "100000090"},
             "invoice_date": "2026-04-20",
             "place_of_issue": "Novi Sad",
             "items": [
@@ -303,7 +309,7 @@ async def test_issue_invoice_with_inline_new_customer(client: AsyncClient, test_
 async def test_issue_invoice_writes_pdf_to_storage(client: AsyncClient, test_engine):
     """The issuance flow uploads a PDF via the storage client."""
     headers = await _setup(client, test_engine, "issue-pdf@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="800900100")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000090")
 
     captured: dict = {}
 
@@ -351,7 +357,7 @@ async def test_issue_rejects_missing_bank_account(client: AsyncClient, test_engi
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/invoices",
         json={
-            "new_customer": {"name": "K", "pib": "100200300"},
+            "new_customer": {"name": "K", "pib": "100000016"},
             "invoice_date": "2026-04-20",
             "place_of_issue": "Beograd",
             "items": [{"description": "X", "quantity": "1", "unit_price": "1.00"}],
@@ -366,7 +372,7 @@ async def test_issue_rejects_missing_bank_account(client: AsyncClient, test_engi
 async def test_issue_rejects_missing_activity_code(client: AsyncClient, test_engine):
     """422 when paušalac has no activity_code."""
     headers = await _setup(client, test_engine, "miss-act@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="100200300", activity=None)
+    paušalac_id = await _create_pausalac(client, headers, pib="100000016", activity=None)
 
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/invoices",
@@ -395,7 +401,7 @@ async def test_issue_rejects_non_pausalac_client(client: AsyncClient, test_engin
     resp = await client.post(
         f"/api/v1/pausal/{vat_id}/invoices",
         json={
-            "new_customer": {"name": "K", "pib": "300400500"},
+            "new_customer": {"name": "K", "pib": "100000024"},
             "invoice_date": "2026-04-20",
             "place_of_issue": "Beograd",
             "items": [{"description": "X", "quantity": "1", "unit_price": "1.00"}],
@@ -409,13 +415,13 @@ async def test_issue_rejects_non_pausalac_client(client: AsyncClient, test_engin
 async def test_issue_rejects_both_customer_options(client: AsyncClient, test_engine):
     """Providing both customer_id and new_customer is 422."""
     headers = await _setup(client, test_engine, "both-cust@example.com")
-    paušalac_id = await _create_pausalac(client, headers, pib="300400500")
+    paušalac_id = await _create_pausalac(client, headers, pib="100000024")
 
     resp = await client.post(
         f"/api/v1/pausal/{paušalac_id}/invoices",
         json={
             "customer_id": str(uuid4()),
-            "new_customer": {"name": "K", "pib": "111222333"},
+            "new_customer": {"name": "K", "pib": "100000032"},
             "invoice_date": "2026-04-20",
             "place_of_issue": "Beograd",
             "items": [{"description": "X", "quantity": "1", "unit_price": "1.00"}],
@@ -439,7 +445,7 @@ async def test_invoice_list_defaults_to_incoming(client: AsyncClient, test_engin
     await client.post(
         f"/api/v1/pausal/{paušalac_id}/invoices",
         json={
-            "new_customer": {"name": "K", "pib": "500600700"},
+            "new_customer": {"name": "K", "pib": "100000049"},
             "invoice_date": "2026-04-20",
             "place_of_issue": "Beograd",
             "items": [{"description": "X", "quantity": "1", "unit_price": "1.00"}],

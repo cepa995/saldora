@@ -38,7 +38,26 @@ from app.schemas.revenue import PortfolioResponse, RevenueStatusResponse
 from app.services import storage
 from app.services.kpo_ledger import create_manual_kpo_entry, storno_kpo_entry
 from app.services.pausal_invoice_issuance import issue_pausal_invoice
+from app.services.pib import validate_pib
 from app.services.revenue_tracking import compute_portfolio_status, compute_revenue_status
+
+
+def _validate_customer_pib_if_serbian(pib: str | None, country: str) -> None:
+    """Raise 422 for an invalid Serbian PIB on a Customer; skip for non-RS.
+
+    Foreign customers of a paušalac can carry arbitrary tax identifiers
+    (EIN, VAT ID, ...) — we only enforce the Serbian mod-11 format when
+    ``country`` is ``RS``.
+    """
+    if not pib or country != "RS":
+        return
+    is_valid, error = validate_pib(pib)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_pib", "message": error or "Neispravan PIB"},
+        )
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -127,6 +146,7 @@ async def create_customer(
 ) -> Customer:
     """Create a customer under a paušalac Client."""
     paušalac = await _get_pausalac(db, client_id, user.organization_id)
+    _validate_customer_pib_if_serbian(body.pib, body.country)
     customer = Customer(
         client_id=paušalac.id,
         organization_id=paušalac.organization_id,
@@ -238,6 +258,11 @@ async def update_customer(
     customer = result.scalar_one_or_none()
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Validate PIB only if the effective country stays RS.
+    effective_country = body.country if body.country is not None else customer.country
+    effective_pib = body.pib if body.pib is not None else customer.pib
+    _validate_customer_pib_if_serbian(effective_pib, effective_country)
 
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(customer, key, value)

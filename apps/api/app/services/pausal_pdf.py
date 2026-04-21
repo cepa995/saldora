@@ -47,10 +47,21 @@ def _addr_line(entity: dict) -> str:
 
 
 def _identifier_line(entity: dict) -> str:
-    """Return the ``PIB: X  MB: Y`` line (or JMBG for natural persons)."""
+    """Return the ID line for an entity on the invoice.
+
+    For Serbian legal persons: ``PIB: ...   MB: ...``.
+    For Serbian natural persons: ``JMBG: ...``.
+    For non-Serbian entities (``country`` other than ``RS``): ``Tax ID: ...``
+    with no MB — foreign identifiers rarely come in pairs and the
+    Serbian "MB" label is misleading.
+    """
     parts = []
+    country = entity.get("country") or "RS"
     if entity.get("is_natural_person") and entity.get("jmbg"):
         parts.append(f"JMBG: {entity['jmbg']}")
+    elif country != "RS":
+        if entity.get("pib"):
+            parts.append(f"Tax ID: {entity['pib']}")
     else:
         if entity.get("pib"):
             parts.append(f"PIB: {entity['pib']}")

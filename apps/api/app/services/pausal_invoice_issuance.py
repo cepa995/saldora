@@ -22,6 +22,7 @@ from app.schemas.pausal_invoice import (
 )
 from app.services import storage
 from app.services.pausal_pdf import build_pausal_invoice_pdf
+from app.services.pib import validate_pib
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -155,6 +156,14 @@ async def _resolve_or_create_customer(
         return customer
 
     assert body.new_customer is not None
+    # Validate PIB only for Serbian customers; foreign identifiers are free-form.
+    if body.new_customer.pib and body.new_customer.country == "RS":
+        is_valid, error = validate_pib(body.new_customer.pib)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_pib", "message": error or "Neispravan PIB"},
+            )
     customer = Customer(
         client_id=paušalac.id,
         organization_id=paušalac.organization_id,

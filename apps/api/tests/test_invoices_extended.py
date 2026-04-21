@@ -119,11 +119,11 @@ async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
             due_date=overrides.get("due_date", date(2025, 2, 15)),
             seller=overrides.get(
                 "seller",
-                {"pib": "123456789", "name": "Prodavac DOO", "address": "Beograd"},
+                {"pib": "500000007", "name": "Prodavac DOO", "address": "Beograd"},
             ),
             buyer=overrides.get(
                 "buyer",
-                {"pib": "987654321", "name": "Kupac DOO", "address": "Novi Sad"},
+                {"pib": "500000179", "name": "Kupac DOO", "address": "Novi Sad"},
             ),
             subtotal=overrides.get("subtotal", Decimal("10000.00")),
             tax_rate=overrides.get("tax_rate", Decimal("20.00")),
@@ -173,7 +173,7 @@ async def _insert_invoice(test_engine, org_id: str, **overrides) -> str:
 
 
 async def _insert_client(
-    test_engine, org_id: str, name: str = "Klijent DOO", pib: str = "111222333"
+    test_engine, org_id: str, name: str = "Klijent DOO", pib: str = "500000015"
 ) -> str:
     """Insert a test client and return its id.
 
@@ -740,16 +740,16 @@ async def test_list_invoices_filter_by_seller_pib(client: AsyncClient, test_engi
         test_engine,
         org_id,
         invoice_number="S1",
-        seller={"pib": "111111111", "name": "Alpha"},
+        seller={"pib": "500000187", "name": "Alpha"},
     )
     await _insert_invoice(
         test_engine,
         org_id,
         invoice_number="S2",
-        seller={"pib": "222222222", "name": "Beta"},
+        seller={"pib": "500000195", "name": "Beta"},
     )
 
-    resp = await client.get("/api/v1/invoices?seller_pib=111111111", headers=headers)
+    resp = await client.get("/api/v1/invoices?seller_pib=500000187", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["pagination"]["total"] == 1
@@ -766,16 +766,16 @@ async def test_list_invoices_filter_by_buyer_pib(client: AsyncClient, test_engin
         test_engine,
         org_id,
         invoice_number="B1",
-        buyer={"pib": "333333333", "name": "Gamma"},
+        buyer={"pib": "500000200", "name": "Gamma"},
     )
     await _insert_invoice(
         test_engine,
         org_id,
         invoice_number="B2",
-        buyer={"pib": "444444444", "name": "Delta"},
+        buyer={"pib": "500000218", "name": "Delta"},
     )
 
-    resp = await client.get("/api/v1/invoices?buyer_pib=333333333", headers=headers)
+    resp = await client.get("/api/v1/invoices?buyer_pib=500000200", headers=headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["pagination"]["total"] == 1
@@ -788,7 +788,7 @@ async def test_list_invoices_filter_by_client_id(client: AsyncClient, test_engin
     headers = ctx["headers"]
     org_id = _get_org_id(ctx["token"])
 
-    cid = await _insert_client(test_engine, org_id, name="My Client", pib="555555555")
+    cid = await _insert_client(test_engine, org_id, name="My Client", pib="500000226")
     await _insert_invoice(test_engine, org_id, invoice_number="C1", client_id=cid)
     await _insert_invoice(test_engine, org_id, invoice_number="C2")  # no client
 
@@ -881,7 +881,7 @@ async def test_list_invoices_search_by_seller_name(client: AsyncClient, test_eng
         test_engine,
         org_id,
         invoice_number="SR1",
-        seller={"pib": "111111111", "name": "UniqueSellerXYZ"},
+        seller={"pib": "500000187", "name": "UniqueSellerXYZ"},
     )
     await _insert_invoice(test_engine, org_id, invoice_number="SR2")
 
@@ -900,7 +900,7 @@ async def test_list_invoices_search_by_buyer_name(client: AsyncClient, test_engi
         test_engine,
         org_id,
         invoice_number="SB1",
-        buyer={"pib": "222222222", "name": "UniqueBuyerABC"},
+        buyer={"pib": "500000195", "name": "UniqueBuyerABC"},
     )
     await _insert_invoice(test_engine, org_id, invoice_number="SB2")
 
@@ -915,7 +915,7 @@ async def test_list_invoices_with_client_summary(client: AsyncClient, test_engin
     headers = ctx["headers"]
     org_id = _get_org_id(ctx["token"])
 
-    cid = await _insert_client(test_engine, org_id, name="Klijent ABC", pib="666666666")
+    cid = await _insert_client(test_engine, org_id, name="Klijent ABC", pib="500000234")
     await _insert_invoice(test_engine, org_id, invoice_number="CL1", client_id=cid)
 
     resp = await client.get("/api/v1/invoices", headers=headers)
@@ -1077,7 +1077,7 @@ async def test_assign_client_success(client: AsyncClient, test_engine):
     headers = ctx["headers"]
     org_id = _get_org_id(ctx["token"])
     inv_id = await _insert_invoice(test_engine, org_id)
-    cid = await _insert_client(test_engine, org_id, name="Assigned Client", pib="777777777")
+    cid = await _insert_client(test_engine, org_id, name="Assigned Client", pib="500000242")
 
     with patch("app.routers.invoices.get_presigned_url", return_value=""):
         resp = await client.patch(
@@ -1097,8 +1097,8 @@ async def test_reassign_client_to_different_client(client: AsyncClient, test_eng
     headers = ctx["headers"]
     org_id = _get_org_id(ctx["token"])
 
-    old_cid = await _insert_client(test_engine, org_id, name="Old Client", pib="888888888")
-    new_cid = await _insert_client(test_engine, org_id, name="New Client", pib="888888889")
+    old_cid = await _insert_client(test_engine, org_id, name="Old Client", pib="500000259")
+    new_cid = await _insert_client(test_engine, org_id, name="New Client", pib="500000267")
     inv_id = await _insert_invoice(test_engine, org_id, client_id=old_cid)
 
     with patch("app.routers.invoices.get_presigned_url", return_value=""):
@@ -1135,7 +1135,7 @@ async def test_assign_client_cross_org_rejected(client: AsyncClient, test_engine
     org2_id = _get_org_id(ctx2["token"])
 
     inv_id = await _insert_invoice(test_engine, org1_id)
-    other_cid = await _insert_client(test_engine, org2_id, name="Other Client", pib="999999999")
+    other_cid = await _insert_client(test_engine, org2_id, name="Other Client", pib="500000275")
 
     resp = await client.patch(
         f"/api/v1/invoices/{inv_id}/client?client_id={other_cid}",
@@ -1177,11 +1177,11 @@ async def test_update_invoice_buyer_fields(client: AsyncClient, test_engine):
     resp = await client.patch(
         f"/api/v1/invoices/{inv_id}",
         headers=headers,
-        json={"buyer_pib": "555666777", "buyer_name": "Novi Kupac"},
+        json={"buyer_pib": "500000283", "buyer_name": "Novi Kupac"},
     )
     assert resp.status_code == 200
     buyer = resp.json()["buyer"]
-    assert buyer["pib"] == "555666777"
+    assert buyer["pib"] == "500000283"
     assert buyer["name"] == "Novi Kupac"
     # Original address should be preserved
     assert buyer["address"] == "Novi Sad"
@@ -1433,8 +1433,8 @@ async def test_verify_invoice_with_pib_warning(client: AsyncClient, test_engine)
         test_engine,
         org_id,
         status="review",
-        seller={"pib": "000000000", "name": "Test"},
-        buyer={"pib": "000000001", "name": "BuyTest"},
+        seller={"pib": "500000291", "name": "Test"},
+        buyer={"pib": "500000306", "name": "BuyTest"},
     )
 
     resp = await client.post(f"/api/v1/invoices/{inv_id}/verify", headers=headers)

@@ -8,6 +8,7 @@ import { fetchClients, createClient, updateClient, deleteClient, toggleClientAct
 import { isPlanError } from '@/lib/api-client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
 import type { ClientResponse, ClientCreate, ClientType, ClientUpdate } from '@/lib/types/client';
+import { validateSerbianPib } from '@/lib/validation/pib';
 
 export default function ClientsPage() {
   const t = useTranslations('clients');
@@ -361,9 +362,18 @@ function ClientModal({
   const [notes, setNotes] = useState(client?.notes || '');
   const [bankAccount, setBankAccount] = useState(client?.bank_account || '');
   const [activityCode, setActivityCode] = useState(client?.activity_code || '');
+  const [pibTouched, setPibTouched] = useState(false);
+
+  const pibValidation = validateSerbianPib(pib);
+  const pibError =
+    pibTouched && pib.length > 0 && !pibValidation.valid ? pibValidation.error : null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!pibValidation.valid) {
+      setPibTouched(true);
+      return;
+    }
     const data: ClientCreate | ClientUpdate = {
       name,
       pib,
@@ -431,10 +441,20 @@ function ClientModal({
               <input
                 type="text"
                 value={pib}
-                onChange={(e) => setPib(e.target.value)}
+                onChange={(e) => setPib(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                onBlur={() => setPibTouched(true)}
                 required
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400"
+                inputMode="numeric"
+                maxLength={9}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 tabular-nums ${
+                  pibError
+                    ? 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-400'
+                    : 'border-gray-200 focus:ring-violet-500/20 focus:border-violet-400'
+                }`}
               />
+              {pibError && (
+                <p className="mt-1 text-xs text-rose-600">{pibError}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('mb')}</label>
@@ -555,7 +575,7 @@ function ClientModal({
             </button>
             <button
               type="submit"
-              disabled={saving || !name || !pib}
+              disabled={saving || !name || !pib || !pibValidation.valid}
               className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? tc('saving') : tc('save')}

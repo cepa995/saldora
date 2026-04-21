@@ -21,6 +21,23 @@ from app.schemas.client import (
     ClientResponse,
     ClientUpdate,
 )
+from app.services.pib import validate_pib
+
+
+def _require_valid_serbian_pib(pib: str) -> None:
+    """Raise 422 if ``pib`` is not a valid 9-digit Serbian PIB.
+
+    Clients are agency-managed Serbian entities in our model, so their PIB
+    is always expected to be a domestic one. (Foreign counterparties of a
+    paušalac live in the ``customers`` table, not here.)
+    """
+    is_valid, error = validate_pib(pib)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_pib", "message": error or "Neispravan PIB"},
+        )
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -75,8 +92,10 @@ async def create_client(
         Created client with stats.
 
     Raises:
-        HTTPException: 409 if PIB already exists for this organization.
+        HTTPException: 422 if PIB format/checksum is invalid. 409 if PIB
+        already exists for this organization.
     """
+    _require_valid_serbian_pib(body.pib)
     client = Client(
         organization_id=user.organization_id,
         name=body.name,
@@ -261,6 +280,9 @@ async def update_client(
     client = result.scalar_one_or_none()
     if client is None:
         raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+
+    if body.pib is not None:
+        _require_valid_serbian_pib(body.pib)
 
     update_data = body.model_dump(exclude_unset=True)
     for key, value in update_data.items():
