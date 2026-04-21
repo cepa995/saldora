@@ -43,7 +43,6 @@ def _build_client_response(client: Client, invoice_count: int, total_amount: flo
         "name": client.name,
         "pib": client.pib,
         "mb": client.mb,
-        "client_type": client.client_type,
         "address": client.address,
         "city": client.city,
         "postal_code": client.postal_code,
@@ -51,8 +50,6 @@ def _build_client_response(client: Client, invoice_count: int, total_amount: flo
         "contact_phone": client.contact_phone,
         "is_active": client.is_active,
         "notes": client.notes,
-        "bank_account": client.bank_account,
-        "activity_code": client.activity_code,
         "invoice_count": invoice_count,
         "total_amount": str(total_amount) if total_amount is not None else None,
         "created_at": client.created_at,
@@ -82,15 +79,12 @@ async def create_client(
         name=body.name,
         pib=body.pib,
         mb=body.mb,
-        client_type=body.client_type,
         address=body.address,
         city=body.city,
         postal_code=body.postal_code,
         contact_email=body.contact_email,
         contact_phone=body.contact_phone,
         notes=body.notes,
-        bank_account=body.bank_account,
-        activity_code=body.activity_code,
     )
     db.add(client)
     try:
