@@ -37,15 +37,20 @@ const STORAGE_KEY = 'saldora_selected_client';
  */
 export function ClientProvider({ children }: { children: React.ReactNode }) {
   const [clients, setClients] = useState<ClientResponse[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
   const [isAgency, setIsAgency] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Selection state was previously persisted in localStorage and read by the
+  // sidebar dropdown. The dropdown was retired in favor of URL-based scoping
+  // (/klijenti/{id}); selectedClientId is always null now. Clear any stale
+  // value that a previous version may have left behind.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,15 +61,6 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setClients(result.data);
         setIsAgency(true);
-
-        // Clear selection if the selected client was deactivated
-        setSelectedClientId((prev) => {
-          if (prev && !result.data.some((c: ClientResponse) => c.id === prev)) {
-            try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
-            return null;
-          }
-          return prev;
-        });
       } catch (err: unknown) {
         if (cancelled) return;
         if (isPlanError(err)) {
@@ -81,17 +77,8 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     };
   }, [refreshKey]);
 
-  const selectClient = useCallback((id: string | null) => {
-    setSelectedClientId(id);
-    try {
-      if (id) {
-        localStorage.setItem(STORAGE_KEY, id);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch {
-      // localStorage unavailable
-    }
+  const selectClient = useCallback(() => {
+    /* no-op — selection is URL-driven now */
   }, []);
 
   const refresh = useCallback(() => {
@@ -102,7 +89,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     <ClientContext.Provider
       value={{
         clients,
-        selectedClientId,
+        selectedClientId: null,
         selectClient,
         isAgency,
         refresh,
