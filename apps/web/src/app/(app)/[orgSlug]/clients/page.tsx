@@ -7,7 +7,7 @@ import { useClient } from '@/contexts/ClientContext';
 import { fetchClients, createClient, updateClient, deleteClient, toggleClientActive } from '@/lib/api/clients';
 import { isPlanError } from '@/lib/api-client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
-import type { ClientResponse, ClientCreate, ClientUpdate } from '@/lib/types/client';
+import type { ClientResponse, ClientCreate, ClientType, ClientUpdate } from '@/lib/types/client';
 
 export default function ClientsPage() {
   const t = useTranslations('clients');
@@ -350,12 +350,17 @@ function ClientModal({
   const [name, setName] = useState(client?.name || '');
   const [pib, setPib] = useState(client?.pib || '');
   const [mb, setMb] = useState(client?.mb || '');
+  const [clientType, setClientType] = useState<ClientType>(
+    (client?.client_type as ClientType) || 'vat_payer',
+  );
   const [address, setAddress] = useState(client?.address || '');
   const [city, setCity] = useState(client?.city || '');
   const [postalCode, setPostalCode] = useState(client?.postal_code || '');
   const [email, setEmail] = useState(client?.contact_email || '');
   const [phone, setPhone] = useState(client?.contact_phone || '');
   const [notes, setNotes] = useState(client?.notes || '');
+  const [bankAccount, setBankAccount] = useState(client?.bank_account || '');
+  const [activityCode, setActivityCode] = useState(client?.activity_code || '');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -363,12 +368,15 @@ function ClientModal({
       name,
       pib,
       mb: mb || undefined,
+      client_type: clientType,
       address: address || undefined,
       city: city || undefined,
       postal_code: postalCode || undefined,
       contact_email: email || undefined,
       contact_phone: phone || undefined,
       notes: notes || undefined,
+      bank_account: clientType === 'pausalac' ? bankAccount || undefined : undefined,
+      activity_code: clientType === 'pausalac' ? activityCode || undefined : undefined,
     };
     onSave(data);
   }
@@ -382,6 +390,31 @@ function ClientModal({
           </h2>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Client type segmented picker */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {t('clientType')}
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-gray-100 rounded-xl">
+              {(['vat_payer', 'pausalac', 'foreign_entity', 'non_profit'] as ClientType[]).map(
+                (type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setClientType(type)}
+                    className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all ${
+                      clientType === type
+                        ? 'bg-white text-violet-700 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {t(`clientType_${type}`)}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('name')} *</label>
             <input
@@ -462,6 +495,47 @@ function ClientModal({
               />
             </div>
           </div>
+          {clientType === 'pausalac' && (
+            <div className="rounded-xl bg-violet-50/60 border border-violet-100 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-md bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-bold">
+                  ₽
+                </span>
+                <h3 className="text-sm font-semibold text-violet-900">
+                  {t('pausalSectionTitle')}
+                </h3>
+              </div>
+              <p className="text-xs text-violet-800/80">{t('pausalSectionHint')}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-violet-900 mb-1">
+                    {t('bankAccount')}
+                  </label>
+                  <input
+                    type="text"
+                    value={bankAccount}
+                    onChange={(e) => setBankAccount(e.target.value)}
+                    placeholder="160-0000000000000-11"
+                    className="w-full px-3 py-2 text-sm bg-white border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-violet-900 mb-1">
+                    {t('activityCode')}
+                  </label>
+                  <input
+                    type="text"
+                    value={activityCode}
+                    onChange={(e) => setActivityCode(e.target.value)}
+                    placeholder="6201"
+                    maxLength={10}
+                    className="w-full px-3 py-2 text-sm bg-white border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 tabular-nums"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('notes')}</label>
             <textarea
