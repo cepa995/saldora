@@ -46,7 +46,7 @@ from app.schemas.invoice import (
     ProcessingStatus,
     TaxGroup,
 )
-from app.services import audit
+from app.services import audit, events
 from app.services.accounting_intent import generate_accounting_intent
 from app.services.email import send_invoice_processed_email
 from app.services.invoice_verification import check_duplicates, verify_calculations
@@ -151,6 +151,19 @@ async def upload_invoice(
         entity_type="invoice",
         entity_id=invoice.id,
         new_values={"document_hash": document_hash, "content_type": file.content_type},
+    )
+    await events.emit(
+        db=db,
+        event_type=events.INVOICE_UPLOADED,
+        organization_id=user.organization_id,
+        client_id=None,  # not known at upload; may be assigned later
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_user_id=user.id,
+        payload={
+            "filename": file.filename or "document",
+            "content_type": file.content_type,
+        },
     )
     await db.commit()
     await db.refresh(invoice)
@@ -1460,6 +1473,20 @@ async def verify_invoice(
         old_values={"status": old_status},
         new_values={"status": "verified"},
     )
+    await events.emit(
+        db=db,
+        event_type=events.INVOICE_VERIFIED,
+        organization_id=user.organization_id,
+        client_id=invoice.client_id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_user_id=user.id,
+        payload={
+            "invoice_number": invoice.invoice_number,
+            "total_amount": str(invoice.total_amount) if invoice.total_amount is not None else None,
+            "currency": invoice.currency,
+        },
+    )
 
     await db.commit()
     await db.refresh(invoice)
@@ -1672,6 +1699,23 @@ async def assign_client(
         old_values={"client_id": str(old_client_id) if old_client_id else None},
         new_values={"client_id": str(client_id) if client_id else None},
     )
+    # Emit on the new client's timeline (only when assigning — unassign
+    # noops the timeline since the old client's timeline already has
+    # the assigned event).
+    if client_id is not None:
+        await events.emit(
+            db=db,
+            event_type=events.CLIENT_ASSIGNED,
+            organization_id=user.organization_id,
+            client_id=client_id,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            actor_user_id=user.id,
+            payload={
+                "invoice_number": invoice.invoice_number,
+                "previous_client_id": str(old_client_id) if old_client_id else None,
+            },
+        )
 
     await db.commit()
     await db.refresh(invoice)

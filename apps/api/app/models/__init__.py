@@ -8,6 +8,7 @@ from app.models.audit_log import AuditLog
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.base import Base
 from app.models.client import Client
+from app.models.client_event import ClientEvent
 from app.models.consent_record import ConsentRecord
 from app.models.correction_log import CorrectionLog
 from app.models.data_processing_agreement import DataProcessingAgreement
@@ -31,6 +32,7 @@ __all__ = [
     "AutomationRule",
     "Base",
     "Client",
+    "ClientEvent",
     "ConsentRecord",
     "DataProcessingAgreement",
     "DeletionRequest",

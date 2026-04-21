@@ -2,6 +2,7 @@
 
 import logging
 import math
+from datetime import UTC
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import require_feature, require_role
 from app.models.client import Client
+from app.models.client_event import ClientEvent
 from app.models.invoice import Invoice
 from app.models.user import User
 from app.plans import Feature
@@ -21,6 +23,7 @@ from app.schemas.client import (
     ClientResponse,
     ClientUpdate,
 )
+from app.schemas.client_event import ClientEventListResponse, ClientEventResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -225,6 +228,94 @@ async def get_client(
     )
 
 
+@router.get("/{client_id}/events", response_model=ClientEventListResponse)
+async def list_client_events(
+    client_id: UUID,
+    period: str | None = Query(
+        default=None,
+        description="YYYY-MM — filter events that happened within the calendar month.",
+    ),
+    event_type: str | None = Query(
+        default=None,
+        description="Filter by event_type (see app.services.events constants).",
+    ),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> dict:
+    """Return the client's chronological event stream.
+
+    The Timeline tab of the client workspace (M19) calls this endpoint.
+    Ordered newest-first.
+    """
+    # Verify the client belongs to the user's org
+    client_result = await db.execute(
+        select(Client).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    if client_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Klijent nije pronađen",
+        )
+
+    conditions = [
+        ClientEvent.client_id == client_id,
+        ClientEvent.organization_id == user.organization_id,
+    ]
+    if event_type:
+        conditions.append(ClientEvent.event_type == event_type)
+    if period:
+        # Parse "YYYY-MM". Reject anything else with a 400.
+        try:
+            year_str, month_str = period.split("-", 1)
+            year = int(year_str)
+            month_num = int(month_str)
+            if not 1 <= month_num <= 12:
+                raise ValueError
+        except (ValueError, IndexError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid period format; expected YYYY-MM",
+            ) from None
+        from datetime import datetime as _dt
+
+        start = _dt(year, month_num, 1, tzinfo=UTC)
+        end_year, end_month = (year + 1, 1) if month_num == 12 else (year, month_num + 1)
+        end = _dt(end_year, end_month, 1, tzinfo=UTC)
+        conditions.append(ClientEvent.event_date >= start)
+        conditions.append(ClientEvent.event_date < end)
+
+    count_result = await db.execute(select(func.count(ClientEvent.id)).where(and_(*conditions)))
+    total = count_result.scalar() or 0
+    total_pages = math.ceil(total / per_page) if total else 0
+
+    offset = (page - 1) * per_page
+    result = await db.execute(
+        select(ClientEvent)
+        .where(and_(*conditions))
+        .order_by(ClientEvent.event_date.desc(), ClientEvent.created_at.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+    events_rows = list(result.scalars().all())
+
+    return {
+        "data": [ClientEventResponse.model_validate(e) for e in events_rows],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
+
+
 @router.patch("/{client_id}", response_model=ClientResponse)
 async def update_client(
     client_id: UUID,
@@ -396,12 +487,31 @@ async def _retroactive_client_assignment(
     )
     invoices = result.scalars().all()
 
+    from app.services import events
+
     assigned = 0
     for inv in invoices:
         seller = inv.seller if isinstance(inv.seller, dict) else {}
         if seller.get("pib") == client.pib:
             inv.client_id = client.id
             assigned += 1
+            # One timeline event per auto-assigned invoice. The actor is
+            # None: auto-assignment happens as a side effect of creating a
+            # client, not as a direct user action on the invoice.
+            await events.emit(
+                db=db,
+                event_type=events.CLIENT_ASSIGNED,
+                organization_id=client.organization_id,
+                client_id=client.id,
+                entity_type="invoice",
+                entity_id=inv.id,
+                actor_user_id=None,
+                payload={
+                    "invoice_number": inv.invoice_number,
+                    "auto_assigned": True,
+                    "match_reason": "pib",
+                },
+            )
 
     if assigned:
         # Also update denormalized line items
