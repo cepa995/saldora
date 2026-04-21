@@ -36,8 +36,10 @@ export async function fetchClients(
   if (filters.is_active !== undefined)
     params.set('is_active', String(filters.is_active));
 
+  // Canonical backend URL has a trailing slash; hitting it directly avoids a
+  // 307 redirect that in some browsers drops the Authorization header.
   const query = params.toString();
-  const endpoint = query ? `/api/v1/clients?${query}` : '/api/v1/clients';
+  const endpoint = query ? `/api/v1/clients/?${query}` : '/api/v1/clients/';
 
   return apiClient<ClientListResponse>(endpoint);
 }
@@ -79,8 +81,11 @@ export async function fetchClientWorkspaceStats(
   const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
   const base = `client_id=${encodeURIComponent(clientId)}&date_from=${from}&date_to=${to}`;
+  // Backend caps per_page at 100. Summing total_amount across the first 100 invoices
+  // covers every client we target (a café/bar rarely exceeds that in a single month).
+  // If we ever need exact totals for heavier clients, move this to a backend aggregate.
   const [all, pending, blocked] = await Promise.all([
-    apiClient<CountResp>(`/api/v1/invoices?${base}&per_page=200`),
+    apiClient<CountResp>(`/api/v1/invoices?${base}&per_page=100`),
     apiClient<CountResp>(`/api/v1/invoices?${base}&status=review&per_page=1`),
     apiClient<CountResp>(`/api/v1/invoices?${base}&status=error&per_page=1`),
   ]);
@@ -149,7 +154,7 @@ export async function fetchClientEvents(
 export async function createClient(
   data: ClientCreate,
 ): Promise<ClientResponse> {
-  return apiClient<ClientResponse>('/api/v1/clients', {
+  return apiClient<ClientResponse>('/api/v1/clients/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
