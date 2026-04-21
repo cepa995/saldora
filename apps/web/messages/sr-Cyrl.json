@@ -56,6 +56,7 @@
     "groupDocuments": "Документи",
     "groupTools": "Алати",
     "clients": "Клијенти",
+    "portfolio": "Преглед портфеља",
     "allClients": "Сви клијенти",
     "pdvBooks": "ПДВ књиге",
     "reports": "Извештаји",
@@ -965,7 +966,8 @@
     "saveError": "Грешка при чувању клијента",
     "deleteError": "Грешка при деактивацији клијента",
     "duplicatePib": "Клијент са овим ПИБ-ом већ постоји",
-    "loadError": "Грешка при учитавању клијената"
+    "loadError": "Грешка при учитавању клијената",
+    "openWorkspace": "Отвори радни простор"
   },
   "reports": {
     "title": "Извештаји",
@@ -1123,5 +1125,46 @@
     "selectPeriod": "Изаберите период за тестни извоз",
     "taxExportTitle": "Извоз за пореску инспекцију",
     "taxExportDesc": "Генеришите комплетну архиву за потребе пореске контроле"
+  },
+  "clientWorkspace": {
+    "breadcrumbClients": "Клијенти",
+    "inactive": "Неактиван",
+    "tabTimeline": "Хронологија",
+    "tabFakture": "Фактуре",
+    "tabIzvestaji": "Извештаји",
+    "tabPravila": "Правила",
+    "tabFaktureHint": "Све фактуре везане за овог клијента — примљене и издате.",
+    "tabIzvestajiHint": "Извештаји филтрирани за овог клијента.",
+    "tabPravilaHint": "Правила аутоматизације која се примењују на овог клијента.",
+    "openFeaturePage": "Отвори пуну страницу",
+    "timelineEmpty": "Нема догађаја у изабраном периоду.",
+    "eventType_invoice_uploaded": "Учитавање",
+    "eventType_invoice_verified": "Верификација",
+    "eventType_invoice_exported": "Извоз",
+    "eventType_client_assigned": "Додела клијенту",
+    "descInvoiceUploaded": "Учитана фактура {filename}",
+    "descInvoiceVerified": "Верификована фактура {invoiceNumber}",
+    "descInvoiceExported": "Фактура {invoiceNumber} извезена ({destination})",
+    "descClientAssigned": "Фактура {invoiceNumber} додељена клијенту",
+    "descClientAutoAssigned": "Фактура {invoiceNumber} аутоматски додељена по ПИБ-у"
+  },
+  "portfolio": {
+    "title": "Преглед портфеља",
+    "subtitle": "Све клијенте и њихов статус на једном месту",
+    "empty": "Још нема клијената. Креирајте првог у одељку Клијенти.",
+    "searchPlaceholder": "Претражи по називу или ПИБ-у",
+    "filterAll": "Све",
+    "filterNeedsAttention": "Захтева пажњу",
+    "filterOk": "У реду",
+    "colName": "Назив",
+    "colInvoices": "Фактуре",
+    "colPendingReview": "На прегледу",
+    "colBlocked": "Блокиране",
+    "colLastActivity": "Последња активност",
+    "indicatorPending": "{count} на прегледу",
+    "indicatorBlocked": "{count} блокирано",
+    "indicatorActive": "Активан {when}",
+    "indicatorStale": "Нема активности",
+    "openWorkspace": "Отвори"
   }
 }

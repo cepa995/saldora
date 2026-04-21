@@ -7,6 +7,8 @@ import { useClient } from '@/contexts/ClientContext';
 import { fetchClients, createClient, updateClient, deleteClient, toggleClientActive } from '@/lib/api/clients';
 import { isPlanError } from '@/lib/api-client';
 import { UpgradeModal, type PlanErrorInfo } from '@/components/UpgradeModal';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import type { ClientResponse, ClientCreate, ClientUpdate } from '@/lib/types/client';
 
 export default function ClientsPage() {
@@ -14,6 +16,8 @@ export default function ClientsPage() {
   const tc = useTranslations('common');
   const { hasRole } = useAuth();
   const { refresh: refreshContext } = useClient();
+  const params = useParams<{ orgSlug: string }>();
+  const orgSlug = params?.orgSlug ?? '';
 
   const [clients, setClients] = useState<ClientResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -184,10 +188,16 @@ export default function ClientsPage() {
             {clients.map((client) => (
               <div
                 key={client.id}
-                className={`bg-white border rounded-xl flex flex-col transition-shadow hover:shadow-md ${
+                className={`relative bg-white border rounded-xl flex flex-col transition-shadow hover:shadow-md hover:border-violet-200 ${
                   client.is_active ? 'border-gray-200' : 'border-gray-200 opacity-60'
                 }`}
               >
+                <Link
+                  href={`/${orgSlug}/klijenti/${client.id}`}
+                  aria-label={`${t('openWorkspace')} — ${client.name}`}
+                  className="absolute inset-0 z-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                />
+
                 {/* Header with toggle */}
                 <div className="flex items-start justify-between p-5 pb-0">
                   <div className="min-w-0 flex-1">
@@ -196,14 +206,16 @@ export default function ClientsPage() {
                   </div>
                   {hasRole('manager') && (
                     <button
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         try {
                           await toggleClientActive(client.id);
                           loadClients();
                           refreshContext();
                         } catch { /* ignore */ }
                       }}
-                      className={`relative ml-2 shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      className={`relative z-20 ml-2 shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         client.is_active ? 'bg-violet-600' : 'bg-gray-300'
                       }`}
                       title={client.is_active ? 'Deaktiviraj' : 'Aktiviraj'}
@@ -233,25 +245,36 @@ export default function ClientsPage() {
                 </div>
 
                 {/* Footer — always at bottom */}
-                {hasRole('manager') && (
-                  <div className="flex items-center gap-2 px-5 py-3 border-t border-gray-100 mt-auto">
-                    <button
-                      onClick={() => {
-                        setEditingClient(client);
-                        setModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
-                    >
-                      {tc('edit')}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(client.id)}
-                      className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      {tc('delete')}
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-gray-100 mt-auto">
+                  <span className="text-sm font-medium text-violet-700">
+                    {t('openWorkspace')} →
+                  </span>
+                  {hasRole('manager') && (
+                    <div className="relative z-20 flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingClient(client);
+                          setModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 text-xs text-violet-600 hover:bg-violet-50 rounded-lg transition-colors"
+                      >
+                        {tc('edit')}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDeleteConfirm(client.id);
+                        }}
+                        className="px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        {tc('delete')}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

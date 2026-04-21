@@ -56,6 +56,7 @@
     "groupDocuments": "Documents",
     "groupTools": "Tools",
     "clients": "Clients",
+    "portfolio": "Portfolio",
     "allClients": "All clients",
     "pdvBooks": "PDV Books",
     "reports": "Reports",
@@ -965,7 +966,8 @@
     "saveError": "Error saving client",
     "deleteError": "Error deactivating client",
     "duplicatePib": "A client with this PIB already exists",
-    "loadError": "Error loading clients"
+    "loadError": "Error loading clients",
+    "openWorkspace": "Open workspace"
   },
   "reports": {
     "title": "Reports",
@@ -1123,5 +1125,46 @@
     "selectPeriod": "Select period for test export",
     "taxExportTitle": "Tax Inspection Export",
     "taxExportDesc": "Generate a complete archive for tax audit purposes"
+  },
+  "clientWorkspace": {
+    "breadcrumbClients": "Clients",
+    "inactive": "Inactive",
+    "tabTimeline": "Timeline",
+    "tabFakture": "Invoices",
+    "tabIzvestaji": "Reports",
+    "tabPravila": "Rules",
+    "tabFaktureHint": "All invoices linked to this client — incoming and outgoing.",
+    "tabIzvestajiHint": "Reports filtered to this client.",
+    "tabPravilaHint": "Automation rules that apply to this client.",
+    "openFeaturePage": "Open full page",
+    "timelineEmpty": "No events in the selected period.",
+    "eventType_invoice_uploaded": "Upload",
+    "eventType_invoice_verified": "Verification",
+    "eventType_invoice_exported": "Export",
+    "eventType_client_assigned": "Client assignment",
+    "descInvoiceUploaded": "Uploaded invoice {filename}",
+    "descInvoiceVerified": "Verified invoice {invoiceNumber}",
+    "descInvoiceExported": "Invoice {invoiceNumber} exported ({destination})",
+    "descClientAssigned": "Invoice {invoiceNumber} assigned to client",
+    "descClientAutoAssigned": "Invoice {invoiceNumber} auto-assigned by PIB"
+  },
+  "portfolio": {
+    "title": "Portfolio overview",
+    "subtitle": "Every client and their status at a glance",
+    "empty": "No clients yet. Create your first one in the Clients section.",
+    "searchPlaceholder": "Search by name or PIB",
+    "filterAll": "All",
+    "filterNeedsAttention": "Needs attention",
+    "filterOk": "OK",
+    "colName": "Name",
+    "colInvoices": "Invoices",
+    "colPendingReview": "Pending review",
+    "colBlocked": "Blocked",
+    "colLastActivity": "Last activity",
+    "indicatorPending": "{count} pending review",
+    "indicatorBlocked": "{count} blocked",
+    "indicatorActive": "Active {when}",
+    "indicatorStale": "No recent activity",
+    "openWorkspace": "Open"
   }
 }

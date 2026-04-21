@@ -43,6 +43,53 @@ export async function fetchClients(
 }
 
 /**
+ * Fetch a single client by id.
+ */
+export async function fetchClient(id: string): Promise<ClientResponse> {
+  return apiClient<ClientResponse>(`/api/v1/clients/${id}`);
+}
+
+export interface ClientEventResponse {
+  id: string;
+  organization_id: string;
+  client_id: string | null;
+  event_type: string;
+  event_date: string;
+  payload: Record<string, unknown>;
+  entity_type: string | null;
+  entity_id: string | null;
+  actor_user_id: string | null;
+  created_at: string;
+}
+
+export interface ClientEventListResponse {
+  data: ClientEventResponse[];
+  pagination: {
+    page: number;
+    per_page: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+/**
+ * Fetch the client's event stream (Timeline data).
+ */
+export async function fetchClientEvents(
+  clientId: string,
+  params: { period?: string; event_type?: string; page?: number; per_page?: number } = {},
+): Promise<ClientEventListResponse> {
+  const qs = new URLSearchParams();
+  if (params.period) qs.set('period', params.period);
+  if (params.event_type) qs.set('event_type', params.event_type);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.per_page) qs.set('per_page', String(params.per_page));
+  const query = qs.toString();
+  const url = `/api/v1/clients/${clientId}/events${query ? `?${query}` : ''}`;
+  return apiClient<ClientEventListResponse>(url);
+}
+
+/**
  * Create a new client.
  *
  * Args:

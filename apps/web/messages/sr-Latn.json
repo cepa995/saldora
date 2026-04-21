@@ -68,6 +68,7 @@
     "groupDocuments": "Dokumenti",
     "groupTools": "Alati",
     "clients": "Klijenti",
+    "portfolio": "Pregled portfelja",
     "allClients": "Svi klijenti",
     "pdvBooks": "PDV knjige",
     "reports": "Izveštaji",
@@ -997,7 +998,8 @@
     "saveError": "Greška pri čuvanju klijenta",
     "deleteError": "Greška pri deaktivaciji klijenta",
     "duplicatePib": "Klijent sa ovim PIB-om već postoji",
-    "loadError": "Greška pri učitavanju klijenata"
+    "loadError": "Greška pri učitavanju klijenata",
+    "openWorkspace": "Otvori radni prostor"
   },
   "reports": {
     "title": "Izveštaji",
@@ -1155,5 +1157,46 @@
     "selectPeriod": "Izaberite period za testni izvoz",
     "taxExportTitle": "Izvoz za poresku inspekciju",
     "taxExportDesc": "Generišite kompletnu arhivu za potrebe poreske kontrole"
+  },
+  "clientWorkspace": {
+    "breadcrumbClients": "Klijenti",
+    "inactive": "Neaktivan",
+    "tabTimeline": "Hronologija",
+    "tabFakture": "Fakture",
+    "tabIzvestaji": "Izveštaji",
+    "tabPravila": "Pravila",
+    "tabFaktureHint": "Sve fakture vezane za ovog klijenta — primljene i izdate.",
+    "tabIzvestajiHint": "Izveštaji filtrirani za ovog klijenta.",
+    "tabPravilaHint": "Pravila automatizacije koja se primenjuju na ovog klijenta.",
+    "openFeaturePage": "Otvori punu stranicu",
+    "timelineEmpty": "Nema događaja u izabranom periodu.",
+    "eventType_invoice_uploaded": "Učitavanje",
+    "eventType_invoice_verified": "Verifikacija",
+    "eventType_invoice_exported": "Izvoz",
+    "eventType_client_assigned": "Dodela klijentu",
+    "descInvoiceUploaded": "Učitana faktura {filename}",
+    "descInvoiceVerified": "Verifikovana faktura {invoiceNumber}",
+    "descInvoiceExported": "Faktura {invoiceNumber} izvezena ({destination})",
+    "descClientAssigned": "Faktura {invoiceNumber} dodeljena klijentu",
+    "descClientAutoAssigned": "Faktura {invoiceNumber} automatski dodeljena po PIB-u"
+  },
+  "portfolio": {
+    "title": "Pregled portfelja",
+    "subtitle": "Sve klijente i njihov status na jednom mestu",
+    "empty": "Još nema klijenata. Kreirajte prvog u odeljku Klijenti.",
+    "searchPlaceholder": "Pretraži po nazivu ili PIB-u",
+    "filterAll": "Sve",
+    "filterNeedsAttention": "Zahteva pažnju",
+    "filterOk": "U redu",
+    "colName": "Naziv",
+    "colInvoices": "Fakture",
+    "colPendingReview": "Na pregledu",
+    "colBlocked": "Blokirane",
+    "colLastActivity": "Poslednja aktivnost",
+    "indicatorPending": "{count} na pregledu",
+    "indicatorBlocked": "{count} blokirano",
+    "indicatorActive": "Aktivan {when}",
+    "indicatorStale": "Nema aktivnosti",
+    "openWorkspace": "Otvori"
   }
 }
