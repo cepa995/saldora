@@ -57,9 +57,11 @@ class TestSaveExtractionResult:
         result = _make_extraction_result()
         _save_extraction_result(INVOICE_ID, result)
 
-        mock_session.execute.assert_called_once()
-        call_args = mock_session.execute.call_args
-        params = call_args[0][1]
+        # _save_extraction_result runs several execute calls — the UPDATE
+        # invoices statement plus follow-up line-item persistence. Target
+        # the first call (the one we're asserting on).
+        assert mock_session.execute.call_args_list, "execute was never called"
+        params = mock_session.execute.call_args_list[0][0][1]
 
         assert params["invoice_id"] == INVOICE_ID
         assert params["invoice_number"] == "F-2025/001"
@@ -154,7 +156,7 @@ class TestSaveExtractionResult:
 
         _save_extraction_result(INVOICE_ID, result)
 
-        params = mock_session.execute.call_args[0][1]
+        params = mock_session.execute.call_args_list[0][0][1]
         assert params["invoice_number"] is None
         assert params["seller"] is None
         assert params["buyer"] is None
