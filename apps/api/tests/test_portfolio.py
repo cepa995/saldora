@@ -94,6 +94,59 @@ async def test_portfolio_returns_rows_for_created_clients(client: AsyncClient, t
     assert row["invoice_count"] == 0
     assert row["pending_review_count"] == 0
     assert row["blocked_count"] == 0
+    # total_amount is present and coalesces to "0" for a client with no invoices.
+    # The /klijenti grid renders this on the card metric band.
+    assert row["total_amount"] == "0"
+
+
+async def test_portfolio_sums_total_amount_across_client_invoices(client: AsyncClient, test_engine):
+    """total_amount on a portfolio row equals the sum of the client's invoice totals."""
+    from datetime import date
+    from decimal import Decimal
+    from uuid import UUID, uuid4
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.invoice import Invoice
+
+    headers = await _register_and_login(client, "total-amount-portfolio@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        headers=headers,
+        json={"name": "Aroma", "pib": "987654321"},
+    )
+    assert create_resp.status_code == 201
+    client_id = create_resp.json()["id"]
+
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        for amount in (Decimal("1200.50"), Decimal("800.25"), Decimal("50.00")):
+            session.add(
+                Invoice(
+                    id=uuid4(),
+                    organization_id=UUID(org_id),
+                    client_id=UUID(client_id),
+                    status="verified",
+                    invoice_number=f"INV-{amount}",
+                    invoice_date=date(2026, 4, 1),
+                    seller={"name": "S", "pib": "100000001"},
+                    buyer={"name": "B", "pib": "100000002"},
+                    subtotal=amount,
+                    tax_rate=Decimal("0"),
+                    tax_amount=Decimal("0"),
+                    total_amount=amount,
+                    currency="RSD",
+                )
+            )
+        await session.commit()
+
+    resp = await client.get("/api/v1/portfolio", headers=headers)
+    row = next(r for r in resp.json()["data"] if r["client_id"] == client_id)
+    assert row["invoice_count"] == 3
+    assert Decimal(row["total_amount"]) == Decimal("2050.75")
 
 
 async def test_portfolio_invalid_period_rejected(client: AsyncClient, test_engine):
