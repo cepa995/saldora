@@ -5,6 +5,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
+import { useClient } from '@/contexts/ClientContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -13,8 +14,14 @@ import { DocumentViewer } from '@/components/DocumentViewer';
 import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { ExportDialog } from '@/components/ExportDialog';
+import { AssignClientBanner } from '@/components/invoices/AssignClientBanner';
 import { formatAmountSr } from '@/lib/formatters';
-import { fetchAccountingIntent, reviewAccountingIntent, updateAccountingIntent } from '@/lib/api/invoices';
+import {
+  assignClientToInvoice,
+  fetchAccountingIntent,
+  reviewAccountingIntent,
+  updateAccountingIntent,
+} from '@/lib/api/invoices';
 import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse, KontoEntry } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
@@ -26,6 +33,7 @@ export default function InvoiceDetailPage({
 }) {
   const { id } = use(params);
   const { hasRole } = useAuth();
+  const { clients } = useClient();
   const orgPath = useOrgPath();
   const t = useTranslations('detail');
   const tCommon = useTranslations('common');
@@ -45,6 +53,7 @@ export default function InvoiceDetailPage({
     verify,
     remove,
     discardChanges,
+    refresh,
   } = useInvoiceDetail(id);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -52,6 +61,7 @@ export default function InvoiceDetailPage({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [isAssigningClient, setIsAssigningClient] = useState(false);
   const [accountingIntent, setAccountingIntent] = useState<AccountingIntentResponse | null>(null);
   const [isReviewingIntent, setIsReviewingIntent] = useState(false);
   const [editingKonta, setEditingKonta] = useState(false);
@@ -175,6 +185,22 @@ export default function InvoiceDetailPage({
     // remove() redirects, so no toast needed
   }, [remove]);
 
+  const handleAssignClient = useCallback(
+    async (clientId: string) => {
+      setIsAssigningClient(true);
+      try {
+        await assignClientToInvoice(id, clientId);
+        refresh();
+        setToast({ message: 'Klijent dodeljen', type: 'success' });
+      } catch {
+        setToast({ message: 'Greška pri dodeli klijenta', type: 'error' });
+      } finally {
+        setIsAssigningClient(false);
+      }
+    },
+    [id, refresh],
+  );
+
   // Computed total check
   const computedTotal = (() => {
     if (!invoice) return null;
@@ -292,6 +318,16 @@ export default function InvoiceDetailPage({
           </svg>
           {backLabel}
         </Link>
+
+        {/* Unassigned banner — shown only when the invoice has no client yet */}
+        {canWrite && !invoice.client_id && clients.length > 0 && (
+          <AssignClientBanner
+            clients={clients}
+            knownPibs={[invoice.seller?.pib, invoice.buyer?.pib]}
+            onAssign={handleAssignClient}
+            isAssigning={isAssigningClient}
+          />
+        )}
 
         {/* Title row: invoice number + status + confidence + actions */}
         <div className="flex items-center justify-center sm:justify-between gap-3">
