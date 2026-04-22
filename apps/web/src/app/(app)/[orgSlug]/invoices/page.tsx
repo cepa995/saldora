@@ -40,6 +40,11 @@ export default function InvoicesPage() {
   const tDetail = useTranslations('detail');
   const canWrite = hasRole('operator');
   const canDelete = hasRole('manager');
+  // Default this surface to the "inbox" view — invoices not yet attached to
+  // a client. User can switch to "Sve fakture" via the segmented toggle.
+  // Passing the initial filter to the hook makes the *first* fetch use the
+  // right scope; setting it via useEffect later caused a flash of the wrong
+  // count on the "Nesortirano" pill while the out-of-scope request was in flight.
   const {
     invoices,
     pagination,
@@ -61,14 +66,7 @@ export default function InvoicesPage() {
     batchVerify,
     batchDelete,
     refresh,
-  } = useInvoiceList();
-
-  // Default this surface to the "inbox" view — invoices not yet attached to
-  // a client. User can switch to "Sve fakture" for cross-client search.
-  useEffect(() => {
-    setUnassigned(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  } = useInvoiceList({ unassigned: true });
 
   const [searchValue, setSearchValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -238,74 +236,70 @@ export default function InvoicesPage() {
           />
         </div>
 
-        {/* Filter chips + Date range */}
-        <div className="space-y-3">
-          {/* All filter chips in one wrapping row */}
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_OPTIONS.map((status) => {
-              const isActive = filters.status === status;
-              const label = status ? tStatus(status) : tCommon('all');
-              return (
-                <button
-                  key={status ?? 'all'}
-                  onClick={() => setStatus(status)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+        {/* Filter chips + date range — single wrapping row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {STATUS_OPTIONS.map((status) => {
+            const isActive = filters.status === status;
+            const label = status ? tStatus(status) : tCommon('all');
+            return (
+              <button
+                key={status ?? 'all'}
+                onClick={() => setStatus(status)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
 
-            {/* Separator dot on larger screens */}
-            <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
+          {/* Separator dot on larger screens */}
+          <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
 
-            {/* Accounting review filter */}
-            <button
-              onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
-                filters.accounting_review === true
-                  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {t('needsAccountingReview')}
-            </button>
+          {/* Accounting review filter */}
+          <button
+            onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+              filters.accounting_review === true
+                ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {t('needsAccountingReview')}
+          </button>
 
-            {/* PDV book type filters */}
-            <button
-              onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
-              title={tDetail('bookTypeKPR')}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                filters.book_type === 'KPR'
-                  ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              KPR
-            </button>
-            <button
-              onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
-              title={tDetail('bookTypeKIR')}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                filters.book_type === 'KIR'
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              KIR
-            </button>
+          {/* PDV book type filters */}
+          <button
+            onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
+            title={tDetail('bookTypeKPR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KPR'
+                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KPR
+          </button>
+          <button
+            onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
+            title={tDetail('bookTypeKIR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KIR'
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KIR
+          </button>
 
-          </div>
-
-          {/* Date range */}
-          <div className="flex items-center justify-center gap-2">
+          {/* Date range — inline with the chips, pushed to the right on wide screens */}
+          <div className="flex items-center gap-2 sm:ml-auto">
             <input
               type="date"
               value={dateFrom}
