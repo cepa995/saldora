@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
+import { AttentionClients } from '@/components/dashboard/AttentionClients';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
 import dynamic from 'next/dynamic';
@@ -61,14 +62,6 @@ function ListIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-    </svg>
-  );
-}
-
-function DownloadIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
     </svg>
   );
 }
@@ -203,7 +196,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           {t('welcome', { name: user?.firstName ?? 'korisniče' })}
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{t('overview')}</p>
+        <p className="text-sm text-gray-500 mt-1">Agencijski pregled — zbir stanja preko svih klijenata.</p>
       </div>
 
       {/* Error banner */}
@@ -261,6 +254,11 @@ export default function DashboardPage() {
             />
           </>
         ) : null}
+      </div>
+
+      {/* Clients needing attention — agency rollup */}
+      <div className="mt-6">
+        <AttentionClients />
       </div>
 
       {/* Charts */}
@@ -341,27 +339,27 @@ export default function DashboardPage() {
 
           <div className="space-y-3">
             <Link
-              href={orgPath("/upload")}
+              href={orgPath("/klijenti")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-violet-500/25 hover:scale-[1.02] transition-all duration-200"
             >
-              <UploadIcon className="w-5 h-5" />
+              <ListIcon className="w-5 h-5" />
+              Pregled klijenata
+            </Link>
+
+            <Link
+              href={orgPath("/upload")}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <UploadIcon className="w-5 h-5 text-gray-500" />
               {t('uploadInvoice')}
             </Link>
 
             <Link
-              href={orgPath("/invoices")}
+              href={orgPath("/rules")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             >
-              <ListIcon className="w-5 h-5 text-gray-500" />
-              {t('viewAllInvoices')}
-            </Link>
-
-            <Link
-              href={orgPath("/invoices")}
-              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <DownloadIcon className="w-5 h-5 text-gray-500" />
-              {t('exportReport')}
+              <BoltIcon className="w-5 h-5 text-gray-500" />
+              Pravila automatizacije
             </Link>
           </div>
 
