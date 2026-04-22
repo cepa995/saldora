@@ -7,6 +7,8 @@ import { useTranslations } from 'next-intl';
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
 import { FilterPill } from '@/components/clients/FilterPill';
+import { Sparkline } from '@/components/clients/Sparkline';
+import { MonthPicker } from '@/components/client-workspace/MonthPicker';
 import { useAuth } from '@/contexts/AuthContext';
 import { useClient } from '@/contexts/ClientContext';
 import { isPlanError } from '@/lib/api-client';
@@ -57,7 +59,7 @@ export default function KlijentiPage({ params }: PageProps) {
   const { hasRole } = useAuth();
   const { refresh: refreshContext } = useClient();
 
-  const [period] = useState<string>(currentYYYYMM());
+  const [period, setPeriod] = useState<string>(currentYYYYMM());
   const [rows, setRows] = useState<PortfolioRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -215,21 +217,24 @@ export default function KlijentiPage({ params }: PageProps) {
             )}
           </p>
         </div>
-        {hasRole('manager') && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditingClient(null);
-              setModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
-            </svg>
-            {t('addClient')}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <MonthPicker value={period} onChange={setPeriod} />
+          {hasRole('manager') && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingClient(null);
+                setModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
+              </svg>
+              {t('addClient')}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Agency summary strip */}
@@ -557,23 +562,38 @@ function ClientCard({
         </span>
       </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-2 gap-4 px-5 py-4 border-t border-stone-200/40 bg-white/50">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
-            {tPortfolio('colInvoices')}
-          </p>
-          <p className="mt-1 text-xl font-bold tabular-nums text-stone-900">
-            {row.invoice_count.toLocaleString('sr-Latn')}
-          </p>
+      {/* Metrics + sparkline */}
+      <div className="px-5 py-4 border-t border-stone-200/40 bg-white/50 space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+              {tPortfolio('colInvoices')}
+            </p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-stone-900">
+              {row.invoice_count.toLocaleString('sr-Latn')}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+              {t('totalAmount')}
+            </p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-stone-900 truncate">
+              {totalAmountNum > 0 ? formatAmountSr(String(totalAmountNum), 'RSD') : '—'}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-500">
-            {t('totalAmount')}
-          </p>
-          <p className="mt-1 text-xl font-bold tabular-nums text-stone-900 truncate">
-            {totalAmountNum > 0 ? formatAmountSr(String(totalAmountNum), 'RSD') : '—'}
-          </p>
+
+        {/* Sparkline — trailing 6 months of invoice counts, current month highlighted */}
+        <div className="flex items-end justify-between gap-3">
+          <span className="text-[10px] font-medium text-stone-400 uppercase tracking-[0.08em]">
+            Trend · 6m
+          </span>
+          <Sparkline
+            values={row.monthly_series.map((p) => p.invoice_count)}
+            width={112}
+            height={24}
+            ariaLabel={`Broj faktura po mesecima, poslednjih 6 meseci`}
+          />
         </div>
       </div>
 

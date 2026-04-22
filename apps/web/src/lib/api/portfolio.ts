@@ -4,6 +4,12 @@
 
 import { apiClient } from '@/lib/api-client';
 
+export interface PortfolioMonthlyPoint {
+  period: string; // YYYY-MM
+  invoice_count: number;
+  total_amount: string;
+}
+
 export interface PortfolioRow {
   client_id: string;
   name: string;
@@ -14,6 +20,7 @@ export interface PortfolioRow {
   blocked_count: number;
   total_amount: string | null;
   last_activity_at: string | null;
+  monthly_series: PortfolioMonthlyPoint[];
 }
 
 export interface PortfolioResponse {
