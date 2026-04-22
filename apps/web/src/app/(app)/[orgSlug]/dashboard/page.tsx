@@ -141,7 +141,7 @@ function RecentInvoiceRowSkeleton() {
   return (
     <div className="px-5 sm:px-6 py-3.5 border-b border-gray-50">
       {/* Desktop */}
-      <div className="hidden sm:grid grid-cols-[minmax(80px,120px)_1fr_100px_110px_80px] items-center gap-4">
+      <div className="hidden sm:grid grid-cols-[minmax(140px,180px)_1fr_minmax(150px,auto)_120px_80px] items-center gap-4">
         <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
         <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
         <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse" />
@@ -176,7 +176,7 @@ function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; bas
       }`}
     >
       {/* Desktop row */}
-      <div className="hidden sm:grid grid-cols-[minmax(80px,120px)_1fr_100px_110px_80px] items-center gap-4">
+      <div className="hidden sm:grid grid-cols-[minmax(140px,180px)_1fr_minmax(150px,auto)_120px_80px] items-center gap-4">
         <span className="text-sm font-medium text-gray-900 truncate">
           {invoice.invoice_number ?? '—'}
         </span>
