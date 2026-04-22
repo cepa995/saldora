@@ -10,7 +10,19 @@ import { useOrgPath } from '@/lib/navigation';
 const LIMIT = 6;
 
 function severity(row: PortfolioRow): number {
-  return row.blocked_count * 10 + row.pending_review_count;
+  return (
+    row.blocked_count * 10 +
+    row.past_due_count * 5 +
+    row.pending_review_count
+  );
+}
+
+function needsAttention(row: PortfolioRow): boolean {
+  return (
+    row.blocked_count > 0 ||
+    row.past_due_count > 0 ||
+    row.pending_review_count > 0
+  );
 }
 
 export function AttentionClients() {
@@ -37,7 +49,7 @@ export function AttentionClients() {
   const attention = useMemo(() => {
     if (!rows) return null;
     return [...rows]
-      .filter((r) => r.blocked_count > 0 || r.pending_review_count > 0)
+      .filter(needsAttention)
       .sort((a, b) => {
         const sev = severity(b) - severity(a);
         if (sev !== 0) return sev;
@@ -74,7 +86,7 @@ export function AttentionClients() {
           <h2 className="font-semibold text-gray-900">Klijenti koji zahtevaju pažnju</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             {attentionList.length > 0
-              ? `${attentionList.length} od ${rows.length} klijenata ima fakture na pregledu ili blokirane.`
+              ? `${attentionList.length} od ${rows.length} klijenata ima fakture koje kasne, čekaju pregled ili su blokirane.`
               : 'Trenutno nema klijenata kojima je potrebna pažnja.'}
           </p>
         </div>
@@ -95,7 +107,7 @@ export function AttentionClients() {
           </div>
           <p className="text-sm font-semibold text-emerald-900">Sve je u redu</p>
           <p className="text-xs text-emerald-700/80 mt-1">
-            Nijedan klijent trenutno nema fakture koje čekaju pregled ili su blokirane.
+            Nijedan klijent trenutno nema fakture koje kasne, čekaju pregled ili su blokirane.
           </p>
         </div>
       ) : (
@@ -116,6 +128,12 @@ export function AttentionClients() {
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-50 ring-1 ring-inset ring-rose-200">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                       {row.blocked_count} blokirano
+                    </span>
+                  )}
+                  {row.past_due_count > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-50 ring-1 ring-inset ring-rose-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                      {row.past_due_count} kasni
                     </span>
                   )}
                   {row.pending_review_count > 0 && (

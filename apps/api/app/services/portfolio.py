@@ -8,7 +8,7 @@ rendering on the /klijenti grid.
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, case, func, select
@@ -88,6 +88,26 @@ async def compute_portfolio(
         .subquery()
     )
 
+    # Past-due count — period-agnostic. "Late RIGHT NOW, regardless of which
+    # month you're browsing" is the useful semantic; scoping this to period
+    # would hide old-and-still-late invoices when viewing a newer month.
+    today = datetime.now(UTC).date()
+    past_due_stats = (
+        select(
+            Invoice.client_id.label("client_id"),
+            func.count(Invoice.id).label("past_due_count"),
+        )
+        .where(
+            and_(
+                Invoice.organization_id == organization_id,
+                Invoice.status != "exported",
+                func.coalesce(Invoice.due_date, Invoice.invoice_date) < today,
+            )
+        )
+        .group_by(Invoice.client_id)
+        .subquery()
+    )
+
     # Last-activity is period-agnostic — it's a freshness cue.
     activity_stats = (
         select(
@@ -109,9 +129,11 @@ async def compute_portfolio(
             func.coalesce(invoice_stats.c.pending_review_count, 0).label("pending_review_count"),
             func.coalesce(invoice_stats.c.blocked_count, 0).label("blocked_count"),
             func.coalesce(invoice_stats.c.total_amount, 0).label("total_amount"),
+            func.coalesce(past_due_stats.c.past_due_count, 0).label("past_due_count"),
             activity_stats.c.last_activity_at,
         )
         .outerjoin(invoice_stats, invoice_stats.c.client_id == Client.id)
+        .outerjoin(past_due_stats, past_due_stats.c.client_id == Client.id)
         .outerjoin(activity_stats, activity_stats.c.client_id == Client.id)
         .where(
             Client.organization_id == organization_id,
@@ -184,6 +206,7 @@ async def compute_portfolio(
                 invoice_count=int(row.invoice_count or 0),
                 pending_review_count=int(row.pending_review_count or 0),
                 blocked_count=int(row.blocked_count or 0),
+                past_due_count=int(row.past_due_count or 0),
                 total_amount=str(total_amount_raw) if total_amount_raw is not None else None,
                 last_activity_at=last_activity,
                 monthly_series=_build_series(row.id),

@@ -31,6 +31,9 @@ class PortfolioRow(BaseModel):
     invoice_count: int
     pending_review_count: int
     blocked_count: int
+    # past_due_count is period-agnostic on purpose — "overdue right now,
+    # regardless of which month you're viewing." See portfolio service.
+    past_due_count: int = 0
     total_amount: str | None = None
     last_activity_at: datetime | None = None
     monthly_series: list[PortfolioMonthlyPoint] = []

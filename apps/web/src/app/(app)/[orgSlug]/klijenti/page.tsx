@@ -48,7 +48,19 @@ function timeAgo(iso: string | null): string {
 }
 
 function severity(row: PortfolioRow): number {
-  return row.blocked_count * 10 + row.pending_review_count;
+  return (
+    row.blocked_count * 10 +
+    row.past_due_count * 5 +
+    row.pending_review_count
+  );
+}
+
+function needsAttention(row: PortfolioRow): boolean {
+  return (
+    row.blocked_count > 0 ||
+    row.past_due_count > 0 ||
+    row.pending_review_count > 0
+  );
 }
 
 export default function KlijentiPage({ params }: PageProps) {
@@ -103,28 +115,38 @@ export default function KlijentiPage({ params }: PageProps) {
   }, [toast]);
 
   const counts = useMemo(() => {
-    let needsAttention = 0;
+    let needsAttentionCount = 0;
     let ok = 0;
     let pending = 0;
     let blocked = 0;
+    let pastDue = 0;
     let totalInvoices = 0;
     for (const r of rows) {
       totalInvoices += r.invoice_count;
       pending += r.pending_review_count;
       blocked += r.blocked_count;
-      if (r.blocked_count > 0 || r.pending_review_count > 0) needsAttention += 1;
+      pastDue += r.past_due_count;
+      if (needsAttention(r)) needsAttentionCount += 1;
       else ok += 1;
     }
-    return { all: rows.length, needsAttention, ok, pending, blocked, totalInvoices };
+    return {
+      all: rows.length,
+      needsAttention: needsAttentionCount,
+      ok,
+      pending,
+      blocked,
+      pastDue,
+      totalInvoices,
+    };
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let out = rows;
     if (filter === 'needs_attention') {
-      out = out.filter((r) => r.blocked_count > 0 || r.pending_review_count > 0);
+      out = out.filter(needsAttention);
     } else if (filter === 'ok') {
-      out = out.filter((r) => r.blocked_count === 0 && r.pending_review_count === 0);
+      out = out.filter((r) => !needsAttention(r));
     }
     if (q) {
       out = out.filter((r) => r.name.toLowerCase().includes(q) || r.pib.includes(q));
@@ -513,11 +535,20 @@ function ClientCard({
   const t = useTranslations('clients');
   const tPortfolio = useTranslations('portfolio');
 
-  const severity = row.blocked_count > 0 ? 'blocked' : row.pending_review_count > 0 ? 'pending' : 'ok';
+  // Highest severity wins for the visual tone. blocked > past_due > pending.
+  // Past-due and blocked both use rose; pending uses amber; ok is neutral.
+  const primary: 'blocked' | 'past_due' | 'pending' | 'ok' =
+    row.blocked_count > 0
+      ? 'blocked'
+      : row.past_due_count > 0
+        ? 'past_due'
+        : row.pending_review_count > 0
+          ? 'pending'
+          : 'ok';
   const toneCls =
-    severity === 'blocked'
+    primary === 'blocked' || primary === 'past_due'
       ? 'bg-rose-50/40 ring-1 ring-rose-200 hover:ring-rose-300'
-      : severity === 'pending'
+      : primary === 'pending'
         ? 'bg-amber-50/30 ring-1 ring-amber-200 hover:ring-amber-300'
         : 'bg-white ring-1 ring-stone-200/80 hover:ring-stone-300';
 
@@ -543,13 +574,19 @@ function ClientCard({
           <p className="text-[12px] text-stone-500 tabular-nums mt-1 tracking-wide">PIB {row.pib}</p>
           {/* Chip slot — fixed height so dividers align across cards with and without a chip */}
           <div className="mt-2.5 h-[1.375rem] flex items-center">
-            {severity === 'blocked' && (
+            {primary === 'blocked' && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-100/70 ring-1 ring-rose-200/70">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                 {tPortfolio('indicatorBlocked', { count: String(row.blocked_count) })}
               </span>
             )}
-            {severity === 'pending' && (
+            {primary === 'past_due' && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-rose-700 bg-rose-100/70 ring-1 ring-rose-200/70">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                {row.past_due_count} kasni
+              </span>
+            )}
+            {primary === 'pending' && (
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium text-amber-700 bg-amber-100/70 ring-1 ring-amber-200/70">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                 {tPortfolio('indicatorPending', { count: String(row.pending_review_count) })}

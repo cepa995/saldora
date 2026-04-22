@@ -282,6 +282,105 @@ async def test_portfolio_monthly_series_is_six_zero_padded_points(client: AsyncC
     assert Decimal(by_period["2026-04"]["total_amount"]) == Decimal("300")
 
 
+async def test_portfolio_past_due_count_is_period_agnostic(client: AsyncClient, test_engine):
+    """past_due_count counts overdue invoices regardless of requested period.
+
+    "Overdue right now" is what the card surfaces — scoping it to the viewed
+    month would hide an old-and-still-late invoice when browsing a newer
+    month. The count drops only when the invoice is exported (settled).
+    """
+    from datetime import date, timedelta
+    from decimal import Decimal
+    from uuid import UUID, uuid4
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.invoice import Invoice
+
+    headers = await _register_and_login(client, "past-due-portfolio@example.com")
+    org_id = _get_org_id(headers)
+    await _set_org_plan(test_engine, org_id, "agency")
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        headers=headers,
+        json={"name": "Past Due Client", "pib": "909090909"},
+    )
+    client_id = create_resp.json()["id"]
+
+    today = date.today()
+    past = today - timedelta(days=15)
+    future = today + timedelta(days=20)
+
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        # Two past-due invoices — one review, one verified (both still late)
+        for status in ("review", "verified"):
+            session.add(
+                Invoice(
+                    id=uuid4(),
+                    organization_id=UUID(org_id),
+                    client_id=UUID(client_id),
+                    status=status,
+                    invoice_number=f"LATE-{status}",
+                    invoice_date=past,
+                    due_date=past,
+                    seller={"name": "S", "pib": "100000001"},
+                    buyer={"name": "B", "pib": "100000002"},
+                    subtotal=Decimal("100"),
+                    tax_rate=Decimal("0"),
+                    tax_amount=Decimal("0"),
+                    total_amount=Decimal("100"),
+                    currency="RSD",
+                )
+            )
+        # One exported-late invoice — NOT counted, it's settled
+        session.add(
+            Invoice(
+                id=uuid4(),
+                organization_id=UUID(org_id),
+                client_id=UUID(client_id),
+                status="exported",
+                invoice_number="LATE-exported",
+                invoice_date=past,
+                due_date=past,
+                seller={"name": "S", "pib": "100000001"},
+                buyer={"name": "B", "pib": "100000002"},
+                subtotal=Decimal("50"),
+                tax_rate=Decimal("0"),
+                tax_amount=Decimal("0"),
+                total_amount=Decimal("50"),
+                currency="RSD",
+            )
+        )
+        # One future-dated invoice — NOT counted
+        session.add(
+            Invoice(
+                id=uuid4(),
+                organization_id=UUID(org_id),
+                client_id=UUID(client_id),
+                status="review",
+                invoice_number="FUTURE",
+                invoice_date=future,
+                due_date=future,
+                seller={"name": "S", "pib": "100000001"},
+                buyer={"name": "B", "pib": "100000002"},
+                subtotal=Decimal("200"),
+                tax_rate=Decimal("0"),
+                tax_amount=Decimal("0"),
+                total_amount=Decimal("200"),
+                currency="RSD",
+            )
+        )
+        await session.commit()
+
+    # Query a period where none of the invoices fall — past_due_count should
+    # still be 2 because it's agnostic of the requested window.
+    resp = await client.get("/api/v1/portfolio?period=2030-06", headers=headers)
+    row = next(r for r in resp.json()["data"] if r["client_id"] == client_id)
+    assert row["past_due_count"] == 2
+
+
 async def test_portfolio_invalid_period_rejected(client: AsyncClient, test_engine):
     """Malformed period strings return 400."""
     headers = await _register_and_login(client, "badperiod-portfolio@example.com")
