@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
 import { AttentionClients } from '@/components/dashboard/AttentionClients';
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
 import dynamic from 'next/dynamic';
@@ -179,7 +180,10 @@ function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; bas
         <span className="text-sm text-gray-600 truncate min-w-0">
           {invoice.seller?.name ?? '—'}
         </span>
-        <StatusBadge status={invoice.status} />
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={invoice.status} />
+          <PastDueBadge invoice={invoice} variant="dot" />
+        </div>
         <span className="text-sm font-semibold text-gray-900 tabular-nums text-right whitespace-nowrap">
           {formatAmountSr(invoice.total_amount, invoice.currency)}
         </span>
@@ -193,7 +197,10 @@ function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; bas
           <span className="text-sm font-medium text-gray-900 truncate">
             {invoice.invoice_number ?? '—'}
           </span>
-          <StatusBadge status={invoice.status} />
+          <div className="flex items-center gap-1.5">
+            <StatusBadge status={invoice.status} />
+            <PastDueBadge invoice={invoice} variant="dot" />
+          </div>
         </div>
         <p className="text-sm text-gray-500 truncate">{invoice.seller?.name ?? '—'}</p>
         <div className="flex items-center justify-between gap-2">

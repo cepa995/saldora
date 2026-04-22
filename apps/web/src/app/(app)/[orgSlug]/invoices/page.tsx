@@ -10,6 +10,7 @@ import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
 import { ExportDialog } from '@/components/ExportDialog';
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { fetchQueueInfo } from '@/lib/api/invoices';
 import { formatDateSr, formatAmountSr } from '@/lib/formatters';
 import type { InvoiceStatus, SortColumn } from '@/lib/types/invoice';
@@ -487,6 +488,7 @@ export default function InvoicesPage() {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={invoice.status} />
+                          <PastDueBadge invoice={invoice} variant="dot" />
                           {invoice.pdv_book_type && (
                             <span
                               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${
@@ -565,6 +567,7 @@ export default function InvoicesPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={invoice.status} />
+                        <PastDueBadge invoice={invoice} variant="dot" />
                         {invoice.pdv_book_type && (
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${

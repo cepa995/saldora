@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterPill, type PillTone } from '@/components/clients/FilterPill';
 import { deleteInvoice, fetchInvoices, verifyInvoice } from '@/lib/api/invoices';
@@ -270,7 +271,10 @@ export function ClientInvoices({ clientId }: Props) {
                       {inv.seller?.name || '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={inv.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={inv.status} />
+                        <PastDueBadge invoice={inv} variant="dot" />
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900 tabular-nums whitespace-nowrap">
                       {inv.total_amount
