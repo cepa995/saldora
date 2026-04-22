@@ -150,7 +150,7 @@ export function ClientInvoices({ clientId }: Props) {
       {selectedIds.size > 0 && (
         <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-stone-900 text-white">
           <span className="text-sm font-medium tabular-nums">
-            {selectedIds.size} {tCommon('selected', { count: String(selectedIds.size) })}
+            {tCommon('selected', { count: String(selectedIds.size) })}
           </span>
           <div className="flex items-center gap-1.5">
             <button
