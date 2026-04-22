@@ -13,6 +13,8 @@ interface DashboardData {
   reviewCount: number;
   verifiedCount: number;
   exportedCount: number;
+  unassignedCount: number;
+  pastDueCount: number;
   recentInvoices: InvoiceResponse[];
   monthlyVolume: MonthlyVolume[];
   statusDistribution: StatusCount[];
@@ -66,6 +68,8 @@ export function useDashboard(): UseDashboardReturn {
           reviewResult,
           verifiedResult,
           exportedResult,
+          unassignedResult,
+          pastDueResult,
           statsResult,
         ] = await Promise.all([
           fetchInvoices({ ...base, per_page: 5, sort: 'created_at', order: 'desc' }),
@@ -73,6 +77,11 @@ export function useDashboard(): UseDashboardReturn {
           fetchInvoices({ ...base, status: 'review', per_page: 1 }),
           fetchInvoices({ ...base, status: 'verified', per_page: 1 }),
           fetchInvoices({ ...base, status: 'exported', per_page: 1 }),
+          // Only meaningful when not already scoped to one client
+          selectedClientId
+            ? Promise.resolve({ pagination: { total: 0, page: 1, per_page: 1, total_pages: 0 }, data: [] })
+            : fetchInvoices({ unassigned: true, per_page: 1 }),
+          fetchInvoices({ ...base, past_due: true, per_page: 1 }),
           fetchDashboardStats(selectedClientId || undefined),
         ]);
 
@@ -84,6 +93,8 @@ export function useDashboard(): UseDashboardReturn {
           reviewCount: reviewResult.pagination.total,
           verifiedCount: verifiedResult.pagination.total,
           exportedCount: exportedResult.pagination.total,
+          unassignedCount: unassignedResult.pagination.total,
+          pastDueCount: pastDueResult.pagination.total,
           recentInvoices: recentResult.data,
           monthlyVolume: statsResult.monthly_volume,
           statusDistribution: statsResult.status_distribution,

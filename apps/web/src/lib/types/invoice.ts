@@ -191,4 +191,9 @@ export interface InvoiceFilters {
   client_id?: string;
   /** Inbox view — only invoices with no client_id yet. */
   unassigned?: boolean;
+  /**
+   * Past-due view — invoices past their effective due_date
+   * (COALESCE(due_date, invoice_date)) and not yet exported.
+   */
+  past_due?: boolean;
 }

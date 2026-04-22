@@ -809,6 +809,14 @@ async def list_invoices(
         default=None,
         description="When true, only invoices whose client_id IS NULL are returned.",
     ),
+    past_due: bool | None = Query(
+        default=None,
+        description=(
+            "When true, only invoices past their due_date and not yet exported. "
+            "Invoices with a null due_date are treated as due on invoice_date, "
+            "matching the OCR finalization default."
+        ),
+    ),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -914,6 +922,15 @@ async def list_invoices(
     # client_id param takes precedence (specific filter beats unassigned).
     if unassigned and not client_id:
         conditions.append(Invoice.client_id.is_(None))
+
+    # Past-due filter — effective_due_date = COALESCE(due_date, invoice_date).
+    # The OCR worker already coalesces these at finalization so due_date is
+    # almost never null, but the coalesce here keeps the rule correct even
+    # for legacy rows or rows created outside the pipeline.
+    if past_due:
+        today = datetime.now(UTC).date()
+        conditions.append(func.coalesce(Invoice.due_date, Invoice.invoice_date) < today)
+        conditions.append(Invoice.status != "exported")
 
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)

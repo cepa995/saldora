@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
@@ -40,11 +40,15 @@ export default function InvoicesPage() {
   const tDetail = useTranslations('detail');
   const canWrite = hasRole('operator');
   const canDelete = hasRole('manager');
-  // Default this surface to the "inbox" view — invoices not yet attached to
-  // a client. User can switch to "Sve fakture" via the segmented toggle.
+  // URL-driven initial scope:
+  //   ?past_due=true  → start in the past-due filter (linked to from the dashboard)
+  //   default         → start in the inbox ("Nesortirano")
   // Passing the initial filter to the hook makes the *first* fetch use the
   // right scope; setting it via useEffect later caused a flash of the wrong
-  // count on the "Nesortirano" pill while the out-of-scope request was in flight.
+  // count on the Nesortirano pill while the out-of-scope request was in flight.
+  const searchParams = useSearchParams();
+  const urlPastDue = searchParams?.get('past_due') === 'true';
+
   const {
     invoices,
     pagination,
@@ -60,13 +64,16 @@ export default function InvoicesPage() {
     setSort,
     setPage,
     setUnassigned,
+    setPastDue,
     toggleSelect,
     toggleSelectAll,
     clearSelection,
     batchVerify,
     batchDelete,
     refresh,
-  } = useInvoiceList({ unassigned: true });
+  } = useInvoiceList(
+    urlPastDue ? { past_due: true } : { unassigned: true },
+  );
 
   const [searchValue, setSearchValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -144,12 +151,18 @@ export default function InvoicesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="text-center sm:text-left">
           <h1 className="text-2xl font-bold text-gray-900">
-            {filters.unassigned ? 'Prijemno sanduče' : t('title')}
+            {filters.past_due
+              ? 'Kasne fakture'
+              : filters.unassigned
+                ? 'Prijemno sanduče'
+                : t('title')}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {filters.unassigned
-              ? 'Fakture koje još nisu dodeljene klijentu. Dodelite ih da se pojave u radnom prostoru.'
-              : 'Sve fakture u organizaciji, kroz sve klijente.'}
+            {filters.past_due
+              ? 'Fakture čiji je rok plaćanja prošao i još nisu izvezene.'
+              : filters.unassigned
+                ? 'Fakture koje još nisu dodeljene klijentu. Dodelite ih da se pojave u radnom prostoru.'
+                : 'Sve fakture u organizaciji, kroz sve klijente.'}
           </p>
         </div>
         {canWrite && (
@@ -258,6 +271,22 @@ export default function InvoicesPage() {
 
           {/* Separator dot on larger screens */}
           <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
+
+          {/* Past-due filter */}
+          <button
+            onClick={() => setPastDue(filters.past_due === true ? false : true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+              filters.past_due === true
+                ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+            title="Fakture čiji je rok plaćanja prošao i nisu izvezene"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Kasne
+          </button>
 
           {/* Accounting review filter */}
           <button

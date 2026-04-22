@@ -288,6 +288,21 @@ export default function InvoiceDetailPage({
 
   if (!invoice) return null;
 
+  // Past-due computation — effective due_date is due_date or, if missing,
+  // invoice_date (same rule the OCR worker uses at finalization).
+  const effectiveDueStr = invoice.due_date ?? invoice.invoice_date;
+  const pastDueDays = (() => {
+    if (!effectiveDueStr) return 0;
+    if (invoice.status === 'exported') return 0;
+    const due = new Date(effectiveDueStr);
+    if (Number.isNaN(due.getTime())) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  })();
+
   const backHref = invoice.client_id
     ? orgPath(`/klijenti/${invoice.client_id}?tab=fakture`)
     : orgPath('/invoices');
@@ -336,6 +351,15 @@ export default function InvoiceDetailPage({
               {invoice.invoice_number || '#\u2014'}
             </h1>
             <StatusBadge status={invoice.status} />
+            {pastDueDays > 0 && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-600/20"
+                title={`Rok plaćanja prošao pre ${pastDueDays} ${pastDueDays === 1 ? 'dan' : 'dana'}.`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                Kasni {pastDueDays} {pastDueDays === 1 ? 'dan' : 'dana'}
+              </span>
+            )}
             {invoice.confidence_score !== null && (
               <>
                 <div className="hidden sm:block w-px h-5 bg-gray-200" />

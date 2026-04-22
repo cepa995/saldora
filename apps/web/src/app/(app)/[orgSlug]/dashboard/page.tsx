@@ -66,6 +66,22 @@ function ListIcon({ className = 'w-5 h-5' }: { className?: string }) {
   );
 }
 
+function InboxIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h4l2 3h6l2-3h4m-4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+function ClockWarnIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 function ArrowRightIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -81,11 +97,23 @@ interface StatCardProps {
   iconBg: string;
   count: number;
   label: string;
+  href?: string;
+  accent?: 'neutral' | 'amber' | 'rose';
 }
 
-function StatCard({ icon, iconBg, count, label }: StatCardProps) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover-lift cursor-default transition-all duration-200">
+const ACCENT_CLASS: Record<NonNullable<StatCardProps['accent']>, string> = {
+  neutral: 'border-gray-100',
+  amber: 'border-amber-200 ring-1 ring-amber-200/50',
+  rose: 'border-rose-200 ring-1 ring-rose-200/50',
+};
+
+function StatCard({ icon, iconBg, count, label, href, accent = 'neutral' }: StatCardProps) {
+  const body = (
+    <div
+      className={`bg-white rounded-2xl border p-5 shadow-sm hover-lift transition-all duration-200 ${
+        ACCENT_CLASS[accent]
+      } ${href ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
+    >
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
         {icon}
       </div>
@@ -93,6 +121,7 @@ function StatCard({ icon, iconBg, count, label }: StatCardProps) {
       <p className="text-sm text-gray-500 mt-0.5">{label}</p>
     </div>
   );
+  return href ? <Link href={href}>{body}</Link> : body;
 }
 
 /* -- Skeleton Components ------------------------------------------------ */
@@ -217,10 +246,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Attention tiles — inbox + past-due, shown first because they're actionable */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {isLoading ? (
           <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
@@ -228,6 +259,22 @@ export default function DashboardPage() {
           </>
         ) : data ? (
           <>
+            <StatCard
+              icon={<InboxIcon className="w-5 h-5 text-amber-700" />}
+              iconBg="bg-amber-100"
+              count={data.unassignedCount}
+              label="Nesortirano"
+              href={orgPath('/invoices')}
+              accent={data.unassignedCount > 0 ? 'amber' : 'neutral'}
+            />
+            <StatCard
+              icon={<ClockWarnIcon className="w-5 h-5 text-rose-700" />}
+              iconBg="bg-rose-100"
+              count={data.pastDueCount}
+              label="Kasne fakture"
+              href={orgPath('/invoices?past_due=true')}
+              accent={data.pastDueCount > 0 ? 'rose' : 'neutral'}
+            />
             <StatCard
               icon={<DocumentStackIcon className="w-5 h-5 text-violet-600" />}
               iconBg="bg-violet-100"

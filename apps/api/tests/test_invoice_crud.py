@@ -369,6 +369,83 @@ async def test_list_invoices_filter_unassigned(client: AsyncClient, test_engine)
     assert resp_all.json()["pagination"]["total"] == 3
 
 
+async def test_list_invoices_filter_past_due(client: AsyncClient, test_engine):
+    """?past_due=true returns invoices past their effective due date and not exported.
+
+    Covers the three rules:
+    - due_date in the future → excluded
+    - due_date in the past, status='review' → included
+    - due_date in the past, status='exported' → excluded (already settled)
+    """
+    from datetime import date, timedelta
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    today = date.today()
+    future = today + timedelta(days=10)
+    past = today - timedelta(days=10)
+
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="FUTURE", due_date=future, status="review"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="LATE-REVIEW", due_date=past, status="review"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="LATE-VERIFIED", due_date=past, status="verified"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="PAID-LATE", due_date=past, status="exported"
+    )
+
+    resp = await client.get("/api/v1/invoices?past_due=true", headers=headers)
+    assert resp.status_code == 200
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert numbers == {"LATE-REVIEW", "LATE-VERIFIED"}
+
+
+async def test_list_invoices_past_due_uses_invoice_date_when_due_date_null(
+    client: AsyncClient, test_engine
+):
+    """When due_date is null, invoice_date is used as the effective due date.
+
+    Legacy rows with null due_date should still be caught by the past-due
+    filter when their invoice_date falls in the past. New rows already get
+    due_date auto-populated by the OCR worker.
+    """
+    from datetime import date, timedelta
+    from uuid import UUID
+
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.invoice import Invoice
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    past = date.today() - timedelta(days=20)
+    inv_id = await _insert_invoice(
+        test_engine,
+        org_id,
+        invoice_number="LEGACY-LATE",
+        invoice_date=past,
+        status="review",
+    )
+    # Simulate a legacy row by nulling due_date post-insert
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        await session.execute(
+            update(Invoice).where(Invoice.id == UUID(inv_id)).values(due_date=None)
+        )
+        await session.commit()
+
+    resp = await client.get("/api/v1/invoices?past_due=true", headers=headers)
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert "LEGACY-LATE" in numbers
+
+
 async def test_list_invoices_org_isolation(client: AsyncClient, test_engine):
     """User cannot see invoices from another organization."""
     headers = await _auth_headers(client)
