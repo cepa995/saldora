@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
 import { AttentionClients } from '@/components/dashboard/AttentionClients';
+import { PastDueRollup } from '@/components/dashboard/PastDueRollup';
 import { PastDueBadge } from '@/components/PastDueBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
@@ -312,6 +313,17 @@ export default function DashboardPage() {
           </>
         ) : null}
       </div>
+
+      {/* Past-due rollup — only when there's past-due work to surface */}
+      {!isLoading && data && data.pastDueCount > 0 && (
+        <div className="mt-6">
+          <PastDueRollup
+            count={data.pastDueCount}
+            totalRsd={data.pastDueTotalRsd}
+            oldestDays={data.pastDueOldestDays}
+          />
+        </div>
+      )}
 
       {/* Clients needing attention — agency rollup */}
       <div className="mt-6">
