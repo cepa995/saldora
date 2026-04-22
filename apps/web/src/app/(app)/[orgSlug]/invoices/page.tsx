@@ -475,7 +475,9 @@ export default function InvoicesPage() {
                     <tr
                       key={invoice.id}
                       onClick={() => router.push(orgPath(`/invoices/${invoice.id}`))}
-                      className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer"
+                      className={`border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer ${
+                        invoice.status === 'exported' ? 'opacity-60 hover:opacity-100' : ''
+                      }`}
                     >
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -551,7 +553,9 @@ export default function InvoicesPage() {
                 <Link
                   key={invoice.id}
                   href={orgPath(`/invoices/${invoice.id}`)}
-                  className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  className={`flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors ${
+                    invoice.status === 'exported' ? 'opacity-60' : ''
+                  }`}
                 >
                   <input
                     type="checkbox"

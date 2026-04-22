@@ -240,12 +240,15 @@ export function ClientInvoices({ clientId }: Props) {
             <tbody>
               {invoices.map((inv) => {
                 const isSelected = selectedIds.has(inv.id);
+                const isExported = inv.status === 'exported';
                 return (
                   <tr
                     key={inv.id}
                     className={`border-t border-gray-100 transition-colors ${
-                      isSelected ? 'bg-violet-50/40 hover:bg-violet-50/60' : 'hover:bg-gray-50/80'
-                    }`}
+                      isSelected
+                        ? 'bg-violet-50/40 hover:bg-violet-50/60'
+                        : 'hover:bg-gray-50/80'
+                    } ${isExported ? 'opacity-60 hover:opacity-100' : ''}`}
                   >
                     <td className="px-3 py-3">
                       <input

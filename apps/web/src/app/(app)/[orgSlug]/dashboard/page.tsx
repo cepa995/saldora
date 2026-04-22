@@ -167,10 +167,13 @@ function RecentInvoiceRowSkeleton() {
 /* -- Recent Invoice Row ------------------------------------------------- */
 
 function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; basePath: string }) {
+  const isExported = invoice.status === 'exported';
   return (
     <Link
       href={`${basePath}/invoices/${invoice.id}`}
-      className="block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group"
+      className={`block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group ${
+        isExported ? 'opacity-60 hover:opacity-100' : ''
+      }`}
     >
       {/* Desktop row */}
       <div className="hidden sm:grid grid-cols-[minmax(80px,120px)_1fr_100px_110px_80px] items-center gap-4">
