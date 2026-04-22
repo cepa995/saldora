@@ -319,6 +319,56 @@ async def test_list_invoices_sort_by_total(client: AsyncClient, test_engine):
     assert amounts == sorted(amounts, key=lambda x: Decimal(x))
 
 
+async def test_list_invoices_filter_unassigned(client: AsyncClient, test_engine):
+    """?unassigned=true returns only invoices with no client_id (inbox view)."""
+    from uuid import UUID, uuid4
+
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.client import Client
+    from app.models.invoice import Invoice
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    # Create a client so we can attach one invoice to it
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        c = Client(
+            id=uuid4(),
+            organization_id=UUID(org_id),
+            name="Aroma",
+            pib="123456789",
+            is_active=True,
+        )
+        session.add(c)
+        await session.commit()
+        attached_client_id = c.id
+
+    await _insert_invoice(test_engine, org_id, invoice_number="ORPHAN-1")
+    await _insert_invoice(test_engine, org_id, invoice_number="ORPHAN-2")
+    attached_id = await _insert_invoice(test_engine, org_id, invoice_number="ASSIGNED-1")
+    # The helper doesn't accept client_id; attach it directly after creation.
+    async with factory() as session:
+        await session.execute(
+            update(Invoice)
+            .where(Invoice.id == UUID(attached_id))
+            .values(client_id=attached_client_id)
+        )
+        await session.commit()
+
+    resp = await client.get("/api/v1/invoices?unassigned=true", headers=headers)
+    assert resp.status_code == 200
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert numbers == {"ORPHAN-1", "ORPHAN-2"}
+    assert resp.json()["pagination"]["total"] == 2
+
+    # Without the filter, all three come back
+    resp_all = await client.get("/api/v1/invoices", headers=headers)
+    assert resp_all.json()["pagination"]["total"] == 3
+
+
 async def test_list_invoices_org_isolation(client: AsyncClient, test_engine):
     """User cannot see invoices from another organization."""
     headers = await _auth_headers(client)

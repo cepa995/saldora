@@ -15,6 +15,7 @@ interface NavItem {
   href: string;
   labelKey:
     | "dashboard"
+    | "inbox"
     | "upload"
     | "clients"
     | "rules"
@@ -78,6 +79,26 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "groupDocuments",
     items: [
+      {
+        href: "/invoices",
+        labelKey: "inbox",
+        minRole: "operator",
+        icon: (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M3 10h4l2 3h6l2-3h4m-4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2z"
+            />
+          </svg>
+        ),
+      },
       {
         href: "/upload",
         labelKey: "upload",

@@ -33,6 +33,7 @@ interface UseInvoiceListReturn {
   setDateRange: (from?: string, to?: string) => void;
   setSort: (column: SortColumn) => void;
   setPage: (page: number) => void;
+  setUnassigned: (value: boolean) => void;
   toggleSelect: (id: string) => void;
   toggleSelectAll: () => void;
   clearSelection: () => void;
@@ -137,6 +138,15 @@ export function useInvoiceList(): UseInvoiceListReturn {
     setSelectedIds(new Set());
   }, []);
 
+  const setUnassigned = useCallback((value: boolean) => {
+    setFilters((prev) => ({
+      ...prev,
+      unassigned: value ? true : undefined,
+      page: 1,
+    }));
+    setSelectedIds(new Set());
+  }, []);
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -204,6 +214,7 @@ export function useInvoiceList(): UseInvoiceListReturn {
     setDateRange,
     setSort,
     setPage,
+    setUnassigned,
     toggleSelect,
     toggleSelectAll,
     clearSelection,

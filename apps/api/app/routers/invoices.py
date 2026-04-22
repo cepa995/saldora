@@ -805,6 +805,10 @@ async def list_invoices(
     accounting_review: bool | None = Query(default=None),
     book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
     client_id: UUID | None = Query(default=None, description="Filter by client ID"),
+    unassigned: bool | None = Query(
+        default=None,
+        description="When true, only invoices whose client_id IS NULL are returned.",
+    ),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -905,6 +909,11 @@ async def list_invoices(
     # Client filter (Agency feature)
     if client_id:
         conditions.append(Invoice.client_id == client_id)
+
+    # Inbox filter — "unsorted" invoices are those not yet attached to any client.
+    # client_id param takes precedence (specific filter beats unassigned).
+    if unassigned and not client_id:
+        conditions.append(Invoice.client_id.is_(None))
 
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)

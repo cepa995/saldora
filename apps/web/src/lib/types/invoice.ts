@@ -189,4 +189,6 @@ export interface InvoiceFilters {
   accounting_review?: boolean;
   book_type?: 'KPR' | 'KIR';
   client_id?: string;
+  /** Inbox view — only invoices with no client_id yet. */
+  unassigned?: boolean;
 }

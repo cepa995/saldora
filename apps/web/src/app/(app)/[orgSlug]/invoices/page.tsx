@@ -54,6 +54,7 @@ export default function InvoicesPage() {
     setDateRange,
     setSort,
     setPage,
+    setUnassigned,
     toggleSelect,
     toggleSelectAll,
     clearSelection,
@@ -61,6 +62,13 @@ export default function InvoicesPage() {
     batchDelete,
     refresh,
   } = useInvoiceList();
+
+  // Default this surface to the "inbox" view — invoices not yet attached to
+  // a client. User can switch to "Sve fakture" for cross-client search.
+  useEffect(() => {
+    setUnassigned(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [searchValue, setSearchValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -137,7 +145,14 @@ export default function InvoicesPage() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="text-center sm:text-left">
-          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {filters.unassigned ? 'Prijemno sanduče' : t('title')}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {filters.unassigned
+              ? 'Fakture koje još nisu dodeljene klijentu. Dodelite ih da se pojave u radnom prostoru.'
+              : 'Sve fakture u organizaciji, kroz sve klijente.'}
+          </p>
         </div>
         {canWrite && (
           <Link
@@ -150,6 +165,37 @@ export default function InvoicesPage() {
             {t('uploadInvoice')}
           </Link>
         )}
+      </div>
+
+      {/* Scope toggle — Prijemno sanduče vs. Sve fakture */}
+      <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+        <button
+          type="button"
+          onClick={() => setUnassigned(true)}
+          className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            filters.unassigned
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Nesortirano
+          {filters.unassigned && pagination.total > 0 && (
+            <span className="ml-1.5 tabular-nums text-xs text-gray-500">
+              ({pagination.total})
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setUnassigned(false)}
+          className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            !filters.unassigned
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Sve fakture
+        </button>
       </div>
 
       {/* Queue info banner */}
