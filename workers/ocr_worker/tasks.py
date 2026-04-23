@@ -365,6 +365,12 @@ def _save_extraction_result(invoice_id: str, result: dict[str, Any]) -> None:
             except (ValueError, TypeError):
                 pass
 
+    # If OCR didn't detect a payment due date, default it to the invoice date.
+    # In Serbian hospitality most invoices without explicit terms are POS /
+    # cash receipts due the same day; the user can adjust during verification.
+    if not invoice.get("due_date") and invoice.get("invoice_date"):
+        invoice["due_date"] = invoice["invoice_date"]
+
     session = get_session()
     try:
         session.execute(

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
@@ -10,6 +10,7 @@ import { useInvoiceList } from '@/hooks/useInvoiceList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
 import { ExportDialog } from '@/components/ExportDialog';
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { fetchQueueInfo } from '@/lib/api/invoices';
 import { formatDateSr, formatAmountSr } from '@/lib/formatters';
 import type { InvoiceStatus, SortColumn } from '@/lib/types/invoice';
@@ -40,6 +41,15 @@ export default function InvoicesPage() {
   const tDetail = useTranslations('detail');
   const canWrite = hasRole('operator');
   const canDelete = hasRole('manager');
+  // URL-driven initial scope:
+  //   ?past_due=true  → start in the past-due filter (linked to from the dashboard)
+  //   default         → start in the inbox ("Nesortirano")
+  // Passing the initial filter to the hook makes the *first* fetch use the
+  // right scope; setting it via useEffect later caused a flash of the wrong
+  // count on the Nesortirano pill while the out-of-scope request was in flight.
+  const searchParams = useSearchParams();
+  const urlPastDue = searchParams?.get('past_due') === 'true';
+
   const {
     invoices,
     pagination,
@@ -54,13 +64,17 @@ export default function InvoicesPage() {
     setDateRange,
     setSort,
     setPage,
+    setUnassigned,
+    setPastDue,
     toggleSelect,
     toggleSelectAll,
     clearSelection,
     batchVerify,
     batchDelete,
     refresh,
-  } = useInvoiceList();
+  } = useInvoiceList(
+    urlPastDue ? { past_due: true } : { unassigned: true },
+  );
 
   const [searchValue, setSearchValue] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -137,7 +151,20 @@ export default function InvoicesPage() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="text-center sm:text-left">
-          <h1 className="text-2xl font-bold text-gray-900">{t('title')}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {filters.past_due
+              ? 'Kasne fakture'
+              : filters.unassigned
+                ? 'Prijemno sanduče'
+                : t('title')}
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {filters.past_due
+              ? 'Fakture čiji je rok plaćanja prošao i još nisu izvezene.'
+              : filters.unassigned
+                ? 'Fakture koje još nisu dodeljene klijentu. Dodelite ih da se pojave u radnom prostoru.'
+                : 'Sve fakture u organizaciji, kroz sve klijente.'}
+          </p>
         </div>
         {canWrite && (
           <Link
@@ -150,6 +177,37 @@ export default function InvoicesPage() {
             {t('uploadInvoice')}
           </Link>
         )}
+      </div>
+
+      {/* Scope toggle — Prijemno sanduče vs. Sve fakture */}
+      <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+        <button
+          type="button"
+          onClick={() => setUnassigned(true)}
+          className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            filters.unassigned
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Nesortirano
+          {filters.unassigned && pagination.total > 0 && (
+            <span className="ml-1.5 tabular-nums text-xs text-gray-500">
+              ({pagination.total})
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setUnassigned(false)}
+          className={`px-3.5 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+            !filters.unassigned
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Sve fakture
+        </button>
       </div>
 
       {/* Queue info banner */}
@@ -192,74 +250,86 @@ export default function InvoicesPage() {
           />
         </div>
 
-        {/* Filter chips + Date range */}
-        <div className="space-y-3">
-          {/* All filter chips in one wrapping row */}
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_OPTIONS.map((status) => {
-              const isActive = filters.status === status;
-              const label = status ? tStatus(status) : tCommon('all');
-              return (
-                <button
-                  key={status ?? 'all'}
-                  onClick={() => setStatus(status)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+        {/* Filter chips + date range — single wrapping row */}
+        <div className="flex flex-wrap items-center gap-2">
+          {STATUS_OPTIONS.map((status) => {
+            const isActive = filters.status === status;
+            const label = status ? tStatus(status) : tCommon('all');
+            return (
+              <button
+                key={status ?? 'all'}
+                onClick={() => setStatus(status)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  isActive
+                    ? 'bg-violet-50 text-violet-700 ring-1 ring-violet-600/20'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
 
-            {/* Separator dot on larger screens */}
-            <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
+          {/* Separator dot on larger screens */}
+          <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
 
-            {/* Accounting review filter */}
-            <button
-              onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
-                filters.accounting_review === true
-                  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {t('needsAccountingReview')}
-            </button>
+          {/* Past-due filter */}
+          <button
+            onClick={() => setPastDue(filters.past_due === true ? false : true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+              filters.past_due === true
+                ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+            title="Fakture čiji je rok plaćanja prošao i nisu izvezene"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Kasne
+          </button>
 
-            {/* PDV book type filters */}
-            <button
-              onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
-              title={tDetail('bookTypeKPR')}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                filters.book_type === 'KPR'
-                  ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              KPR
-            </button>
-            <button
-              onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
-              title={tDetail('bookTypeKIR')}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                filters.book_type === 'KIR'
-                  ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              KIR
-            </button>
+          {/* Accounting review filter */}
+          <button
+            onClick={() => setAccountingReview(filters.accounting_review === true ? undefined : true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all inline-flex items-center gap-1.5 ${
+              filters.accounting_review === true
+                ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {t('needsAccountingReview')}
+          </button>
 
-          </div>
+          {/* PDV book type filters */}
+          <button
+            onClick={() => setBookType(filters.book_type === 'KPR' ? undefined : 'KPR')}
+            title={tDetail('bookTypeKPR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KPR'
+                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KPR
+          </button>
+          <button
+            onClick={() => setBookType(filters.book_type === 'KIR' ? undefined : 'KIR')}
+            title={tDetail('bookTypeKIR')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              filters.book_type === 'KIR'
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            KIR
+          </button>
 
-          {/* Date range */}
-          <div className="flex items-center justify-center gap-2">
+          {/* Date range — inline with the chips, pushed to the right on wide screens */}
+          <div className="flex items-center gap-2 sm:ml-auto">
             <input
               type="date"
               value={dateFrom}
@@ -405,7 +475,9 @@ export default function InvoicesPage() {
                     <tr
                       key={invoice.id}
                       onClick={() => router.push(orgPath(`/invoices/${invoice.id}`))}
-                      className="border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer"
+                      className={`border-b border-gray-50 hover:bg-violet-50/30 transition-colors cursor-pointer ${
+                        invoice.status === 'exported' ? 'opacity-60 hover:opacity-100' : ''
+                      }`}
                     >
                       <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -418,6 +490,7 @@ export default function InvoicesPage() {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={invoice.status} />
+                          <PastDueBadge invoice={invoice} variant="dot" />
                           {invoice.pdv_book_type && (
                             <span
                               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${
@@ -480,7 +553,9 @@ export default function InvoicesPage() {
                 <Link
                   key={invoice.id}
                   href={orgPath(`/invoices/${invoice.id}`)}
-                  className="flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  className={`flex items-start gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors ${
+                    invoice.status === 'exported' ? 'opacity-60' : ''
+                  }`}
                 >
                   <input
                     type="checkbox"
@@ -496,6 +571,7 @@ export default function InvoicesPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <StatusBadge status={invoice.status} />
+                        <PastDueBadge invoice={invoice} variant="dot" />
                         {invoice.pdv_book_type && (
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none ${

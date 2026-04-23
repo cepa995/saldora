@@ -8,6 +8,7 @@ from app.models.audit_log import AuditLog
 from app.models.automation_rule import AutomationRule, RuleExecution
 from app.models.base import Base
 from app.models.client import Client
+from app.models.client_event import ClientEvent
 from app.models.consent_record import ConsentRecord
 from app.models.correction_log import CorrectionLog
 from app.models.data_processing_agreement import DataProcessingAgreement
@@ -20,6 +21,7 @@ from app.models.join_request import JoinRequest
 from app.models.line_item import InvoiceLineItem
 from app.models.minimax_config import MiniMaxConfig
 from app.models.organization import Organization
+from app.models.rule_client_association import RuleClientAssociation
 from app.models.scheduled_export_log import ScheduledExportLog
 from app.models.usage_record import UsageRecord
 from app.models.user import User
@@ -31,6 +33,7 @@ __all__ = [
     "AutomationRule",
     "Base",
     "Client",
+    "ClientEvent",
     "ConsentRecord",
     "DataProcessingAgreement",
     "DeletionRequest",
@@ -44,6 +47,7 @@ __all__ = [
     "MiniMaxConfig",
     "Organization",
     "ProductCatalog",
+    "RuleClientAssociation",
     "RuleExecution",
     "ScheduledExportLog",
     "UsageRecord",

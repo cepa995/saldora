@@ -87,6 +87,8 @@ export interface AutomationRuleResponse {
   updated_by: string | null;
   execution_count: number;
   last_executed_at: string | null;
+  /** Client IDs this rule is scoped to. Empty = global (applies to every invoice). */
+  client_ids: string[];
   created_at: string;
   updated_at: string;
 }

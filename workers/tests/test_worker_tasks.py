@@ -57,9 +57,11 @@ class TestSaveExtractionResult:
         result = _make_extraction_result()
         _save_extraction_result(INVOICE_ID, result)
 
-        mock_session.execute.assert_called_once()
-        call_args = mock_session.execute.call_args
-        params = call_args[0][1]
+        # _save_extraction_result runs several execute calls — the UPDATE
+        # invoices statement plus follow-up line-item persistence. Target
+        # the first call (the one we're asserting on).
+        assert mock_session.execute.call_args_list, "execute was never called"
+        params = mock_session.execute.call_args_list[0][0][1]
 
         assert params["invoice_id"] == INVOICE_ID
         assert params["invoice_number"] == "F-2025/001"
@@ -154,11 +156,77 @@ class TestSaveExtractionResult:
 
         _save_extraction_result(INVOICE_ID, result)
 
-        params = mock_session.execute.call_args[0][1]
+        params = mock_session.execute.call_args_list[0][0][1]
         assert params["invoice_number"] is None
         assert params["seller"] is None
         assert params["buyer"] is None
         assert params["line_items"] is None
+
+    @staticmethod
+    def _update_params(mock_session: MagicMock) -> dict:
+        """Return the params dict passed to the first session.execute call.
+
+        The worker makes several execute calls downstream (line-item
+        persistence), so the default call_args (last call) is the wrong one.
+        The UPDATE invoices ... statement is always the first execute.
+        """
+        return mock_session.execute.call_args_list[0][0][1]
+
+    @patch("ocr_worker.database.get_session")
+    def test_due_date_defaults_to_invoice_date_when_missing(self, mock_get_session):
+        """When OCR doesn't extract a due_date, default it to invoice_date.
+
+        Serbian hospitality invoices without explicit payment terms are almost
+        always POS / cash receipts due the same day. Auto-fill keeps the
+        past-due rule (due_date < today) meaningful across the dataset without
+        requiring every user to manually set the field.
+        """
+        from ocr_worker.tasks import _save_extraction_result
+
+        mock_session = MagicMock()
+        mock_get_session.return_value = mock_session
+
+        result = _make_extraction_result()
+        result["invoice"]["due_date"] = None  # OCR missed it
+
+        _save_extraction_result(INVOICE_ID, result)
+
+        params = self._update_params(mock_session)
+        assert params["invoice_date"] == "2025-03-15"
+        assert params["due_date"] == "2025-03-15"
+
+    @patch("ocr_worker.database.get_session")
+    def test_due_date_not_overwritten_when_present(self, mock_get_session):
+        """A due_date extracted by OCR is preserved, not replaced by invoice_date."""
+        from ocr_worker.tasks import _save_extraction_result
+
+        mock_session = MagicMock()
+        mock_get_session.return_value = mock_session
+
+        result = _make_extraction_result()
+        # Standard result has due_date=2025-04-15, invoice_date=2025-03-15
+        _save_extraction_result(INVOICE_ID, result)
+
+        params = self._update_params(mock_session)
+        assert params["due_date"] == "2025-04-15"
+
+    @patch("ocr_worker.database.get_session")
+    def test_due_date_stays_null_when_invoice_date_also_missing(self, mock_get_session):
+        """If invoice_date is also missing, we have nothing to default to — leave null."""
+        from ocr_worker.tasks import _save_extraction_result
+
+        mock_session = MagicMock()
+        mock_get_session.return_value = mock_session
+
+        result = _make_extraction_result()
+        result["invoice"]["invoice_date"] = None
+        result["invoice"]["due_date"] = None
+
+        _save_extraction_result(INVOICE_ID, result)
+
+        params = self._update_params(mock_session)
+        assert params["invoice_date"] is None
+        assert params["due_date"] is None
 
 
 class TestUpdateInvoiceStatus:

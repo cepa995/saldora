@@ -46,7 +46,7 @@ from app.schemas.invoice import (
     ProcessingStatus,
     TaxGroup,
 )
-from app.services import audit
+from app.services import audit, events
 from app.services.accounting_intent import generate_accounting_intent
 from app.services.email import send_invoice_processed_email
 from app.services.invoice_verification import check_duplicates, verify_calculations
@@ -151,6 +151,19 @@ async def upload_invoice(
         entity_type="invoice",
         entity_id=invoice.id,
         new_values={"document_hash": document_hash, "content_type": file.content_type},
+    )
+    await events.emit(
+        db=db,
+        event_type=events.INVOICE_UPLOADED,
+        organization_id=user.organization_id,
+        client_id=None,  # not known at upload; may be assigned later
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_user_id=user.id,
+        payload={
+            "filename": file.filename or "document",
+            "content_type": file.content_type,
+        },
     )
     await db.commit()
     await db.refresh(invoice)
@@ -792,6 +805,18 @@ async def list_invoices(
     accounting_review: bool | None = Query(default=None),
     book_type: str | None = Query(default=None, pattern="^(KPR|KIR)$"),
     client_id: UUID | None = Query(default=None, description="Filter by client ID"),
+    unassigned: bool | None = Query(
+        default=None,
+        description="When true, only invoices whose client_id IS NULL are returned.",
+    ),
+    past_due: bool | None = Query(
+        default=None,
+        description=(
+            "When true, only invoices past their due_date and not yet exported. "
+            "Invoices with a null due_date are treated as due on invoice_date, "
+            "matching the OCR finalization default."
+        ),
+    ),
 ) -> InvoiceListResponse:
     """List invoices with filtering, sorting, and pagination.
 
@@ -892,6 +917,20 @@ async def list_invoices(
     # Client filter (Agency feature)
     if client_id:
         conditions.append(Invoice.client_id == client_id)
+
+    # Inbox filter — "unsorted" invoices are those not yet attached to any client.
+    # client_id param takes precedence (specific filter beats unassigned).
+    if unassigned and not client_id:
+        conditions.append(Invoice.client_id.is_(None))
+
+    # Past-due filter — effective_due_date = COALESCE(due_date, invoice_date).
+    # The OCR worker already coalesces these at finalization so due_date is
+    # almost never null, but the coalesce here keeps the rule correct even
+    # for legacy rows or rows created outside the pipeline.
+    if past_due:
+        today = datetime.now(UTC).date()
+        conditions.append(func.coalesce(Invoice.due_date, Invoice.invoice_date) < today)
+        conditions.append(Invoice.status != "exported")
 
     # Build base query with all filters
     where_clause = select(Invoice).where(*conditions)
@@ -1460,6 +1499,20 @@ async def verify_invoice(
         old_values={"status": old_status},
         new_values={"status": "verified"},
     )
+    await events.emit(
+        db=db,
+        event_type=events.INVOICE_VERIFIED,
+        organization_id=user.organization_id,
+        client_id=invoice.client_id,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        actor_user_id=user.id,
+        payload={
+            "invoice_number": invoice.invoice_number,
+            "total_amount": str(invoice.total_amount) if invoice.total_amount is not None else None,
+            "currency": invoice.currency,
+        },
+    )
 
     await db.commit()
     await db.refresh(invoice)
@@ -1672,6 +1725,23 @@ async def assign_client(
         old_values={"client_id": str(old_client_id) if old_client_id else None},
         new_values={"client_id": str(client_id) if client_id else None},
     )
+    # Emit on the new client's timeline (only when assigning — unassign
+    # noops the timeline since the old client's timeline already has
+    # the assigned event).
+    if client_id is not None:
+        await events.emit(
+            db=db,
+            event_type=events.CLIENT_ASSIGNED,
+            organization_id=user.organization_id,
+            client_id=client_id,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            actor_user_id=user.id,
+            payload={
+                "invoice_number": invoice.invoice_number,
+                "previous_client_id": str(old_client_id) if old_client_id else None,
+            },
+        )
 
     await db.commit()
     await db.refresh(invoice)

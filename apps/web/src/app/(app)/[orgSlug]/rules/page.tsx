@@ -563,6 +563,23 @@ function RuleCard({
           <span className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-600">
             {t('priority')} {rule.priority}
           </span>
+          {rule.client_ids.length === 0 ? (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20"
+              title="Pravilo se primenjuje na sve klijente (nema ograničenja)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Svi klijenti
+            </span>
+          ) : (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 ring-1 ring-violet-600/20"
+              title={`Pravilo je dodeljeno ${rule.client_ids.length} klijenata — primenjuje se samo na njihove fakture.`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+              {rule.client_ids.length} {rule.client_ids.length === 1 ? 'klijent' : 'klijenata'}
+            </span>
+          )}
         </div>
         <button
           onClick={() => onToggleActive(!rule.is_active)}

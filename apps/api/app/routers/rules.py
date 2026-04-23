@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_feature, require_role
@@ -65,7 +66,13 @@ async def create_rule(
     db.add(rule)
     await db.commit()
     await db.refresh(rule)
-    return rule
+    # Eager-load associations for the response (newly created rule has none).
+    result = await db.execute(
+        select(AutomationRule)
+        .where(AutomationRule.id == rule.id)
+        .options(selectinload(AutomationRule.client_associations))
+    )
+    return result.scalar_one()
 
 
 @router.get("/", response_model=AutomationRuleListResponse)
@@ -93,6 +100,7 @@ async def list_rules(
     query = (
         select(AutomationRule)
         .where(and_(*conditions))
+        .options(selectinload(AutomationRule.client_associations))
         .order_by(AutomationRule.priority.asc(), AutomationRule.created_at.asc())
     )
     result = await db.execute(query)
@@ -123,12 +131,14 @@ async def get_rule(
         HTTPException: 404 if rule not found or not in user's org.
     """
     result = await db.execute(
-        select(AutomationRule).where(
+        select(AutomationRule)
+        .where(
             and_(
                 AutomationRule.id == rule_id,
                 AutomationRule.organization_id == user.organization_id,
             )
         )
+        .options(selectinload(AutomationRule.client_associations))
     )
     rule = result.scalar_one_or_none()
     if rule is None:
@@ -170,8 +180,13 @@ async def update_rule(
     rule.updated_by = user.id
 
     await db.commit()
-    await db.refresh(rule)
-    return rule
+    # Re-load with associations so the response includes client_ids.
+    result = await db.execute(
+        select(AutomationRule)
+        .where(AutomationRule.id == rule.id)
+        .options(selectinload(AutomationRule.client_associations))
+    )
+    return result.scalar_one()
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)

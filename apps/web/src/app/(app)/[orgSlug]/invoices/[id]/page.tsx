@@ -10,12 +10,19 @@ import { useOrgPath } from '@/lib/navigation';
 import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 import { StatusBadge } from '@/components/StatusBadge';
 import { ConfidenceBadge } from '@/components/ConfidenceBadge';
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { EditableField } from '@/components/EditableField';
 import { Toast, type ToastType } from '@/components/Toast';
 import { ExportDialog } from '@/components/ExportDialog';
+import { AssignClientBanner } from '@/components/invoices/AssignClientBanner';
 import { formatAmountSr } from '@/lib/formatters';
-import { assignClientToInvoice, fetchAccountingIntent, reviewAccountingIntent, updateAccountingIntent } from '@/lib/api/invoices';
+import {
+  assignClientToInvoice,
+  fetchAccountingIntent,
+  reviewAccountingIntent,
+  updateAccountingIntent,
+} from '@/lib/api/invoices';
 import type { InvoiceUpdate, FieldConfidence, LineItem, TaxGroup, AccountingIntentResponse, KontoEntry } from '@/lib/types/invoice';
 
 const CURRENCIES = ['RSD', 'EUR', 'USD', 'BAM', 'HRK', 'CHF', 'GBP'];
@@ -27,7 +34,7 @@ export default function InvoiceDetailPage({
 }) {
   const { id } = use(params);
   const { hasRole } = useAuth();
-  const { isAgency, clients } = useClient();
+  const { clients } = useClient();
   const orgPath = useOrgPath();
   const t = useTranslations('detail');
   const tCommon = useTranslations('common');
@@ -49,13 +56,13 @@ export default function InvoiceDetailPage({
     discardChanges,
     refresh,
   } = useInvoiceDetail(id);
-  const [isAssigningClient, setIsAssigningClient] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [isAssigningClient, setIsAssigningClient] = useState(false);
   const [accountingIntent, setAccountingIntent] = useState<AccountingIntentResponse | null>(null);
   const [isReviewingIntent, setIsReviewingIntent] = useState(false);
   const [editingKonta, setEditingKonta] = useState(false);
@@ -173,27 +180,27 @@ export default function InvoiceDetailPage({
     }
   }, [id, t]);
 
-  const handleClientAssign = useCallback(async (clientId: string | null) => {
-    setIsAssigningClient(true);
-    try {
-      await assignClientToInvoice(id, clientId);
-      refresh();
-      setToast({
-        message: clientId ? t('clientAssigned') : t('clientUnassigned'),
-        type: 'success',
-      });
-    } catch {
-      setToast({ message: t('clientAssignError'), type: 'error' });
-    } finally {
-      setIsAssigningClient(false);
-    }
-  }, [id, refresh, t]);
-
   const handleDelete = useCallback(async () => {
     setShowDeleteConfirm(false);
     await remove();
     // remove() redirects, so no toast needed
   }, [remove]);
+
+  const handleAssignClient = useCallback(
+    async (clientId: string) => {
+      setIsAssigningClient(true);
+      try {
+        await assignClientToInvoice(id, clientId);
+        refresh();
+        setToast({ message: 'Klijent dodeljen', type: 'success' });
+      } catch {
+        setToast({ message: 'Greška pri dodeli klijenta', type: 'error' });
+      } finally {
+        setIsAssigningClient(false);
+      }
+    },
+    [id, refresh],
+  );
 
   // Computed total check
   const computedTotal = (() => {
@@ -282,6 +289,13 @@ export default function InvoiceDetailPage({
 
   if (!invoice) return null;
 
+  const backHref = invoice.client_id
+    ? orgPath(`/klijenti/${invoice.client_id}?tab=fakture`)
+    : orgPath('/invoices');
+  const backLabel = invoice.client?.name
+    ? `${t('backToList')} — ${invoice.client.name}`
+    : t('backToList');
+
   return (
     <div className="space-y-4">
       {/* Toast */}
@@ -297,14 +311,24 @@ export default function InvoiceDetailPage({
       <div className="space-y-3">
         {/* Back link */}
         <Link
-          href={orgPath("/invoices")}
+          href={backHref}
           className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors w-full justify-center sm:justify-start sm:w-auto"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          {t('backToList')}
+          {backLabel}
         </Link>
+
+        {/* Unassigned banner — shown only when the invoice has no client yet */}
+        {canWrite && !invoice.client_id && clients.length > 0 && (
+          <AssignClientBanner
+            clients={clients}
+            knownPibs={[invoice.seller?.pib, invoice.buyer?.pib]}
+            onAssign={handleAssignClient}
+            isAssigning={isAssigningClient}
+          />
+        )}
 
         {/* Title row: invoice number + status + confidence + actions */}
         <div className="flex items-center justify-center sm:justify-between gap-3">
@@ -313,6 +337,7 @@ export default function InvoiceDetailPage({
               {invoice.invoice_number || '#\u2014'}
             </h1>
             <StatusBadge status={invoice.status} />
+            <PastDueBadge invoice={invoice} />
             {invoice.confidence_score !== null && (
               <>
                 <div className="hidden sm:block w-px h-5 bg-gray-200" />
@@ -323,23 +348,6 @@ export default function InvoiceDetailPage({
               </>
             )}
           </div>
-
-          {/* Client selector — desktop (Agency only) */}
-          {isAgency && canWrite && (
-            <select
-              value={invoice.client_id ?? ''}
-              onChange={(e) => handleClientAssign(e.target.value || null)}
-              disabled={isAssigningClient || isProcessing}
-              className="hidden sm:block text-sm border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50 max-w-[200px] truncate"
-            >
-              <option value="">{t('noClient')}</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.pib})
-                </option>
-              ))}
-            </select>
-          )}
 
           <div className="flex items-center gap-2 shrink-0">
             {canWrite && canVerify && (
@@ -408,22 +416,6 @@ export default function InvoiceDetailPage({
           </div>
         )}
 
-        {/* Client selector — mobile (Agency only) */}
-        {isAgency && canWrite && (
-          <select
-            value={invoice.client_id ?? ''}
-            onChange={(e) => handleClientAssign(e.target.value || null)}
-            disabled={isAssigningClient || isProcessing}
-            className="sm:hidden w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-50"
-          >
-            <option value="">{t('noClient')}</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.pib})
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Warnings */}

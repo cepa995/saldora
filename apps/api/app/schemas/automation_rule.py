@@ -120,6 +120,9 @@ class AutomationRuleResponse(BaseModel):
     updated_by: UUID | None
     execution_count: int
     last_executed_at: datetime | None
+    # Client scoping: empty list = global (fires for all invoices). Non-empty =
+    # scoped — fires only for invoices whose client_id is in this list.
+    client_ids: list[UUID] = []
     created_at: datetime
     updated_at: datetime
 

@@ -33,6 +33,8 @@ interface UseInvoiceListReturn {
   setDateRange: (from?: string, to?: string) => void;
   setSort: (column: SortColumn) => void;
   setPage: (page: number) => void;
+  setUnassigned: (value: boolean) => void;
+  setPastDue: (value: boolean) => void;
   toggleSelect: (id: string) => void;
   toggleSelectAll: () => void;
   clearSelection: () => void;
@@ -43,8 +45,14 @@ interface UseInvoiceListReturn {
 
 /**
  * Manages invoice list state including filters, sorting, pagination, and selection.
+ *
+ * Accepts an optional initial-filter override so the first fetch on mount
+ * runs with the intended scope — avoids a flash of stale counts that
+ * happens if callers try to call setXyz() from a useEffect after mount.
  */
-export function useInvoiceList(): UseInvoiceListReturn {
+export function useInvoiceList(
+  initial: Partial<InvoiceFilters> = {},
+): UseInvoiceListReturn {
   const { selectedClientId } = useClient();
   const [invoices, setInvoices] = useState<InvoiceResponse[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -53,7 +61,10 @@ export function useInvoiceList(): UseInvoiceListReturn {
     total: 0,
     total_pages: 0,
   });
-  const [filters, setFilters] = useState<InvoiceFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<InvoiceFilters>({
+    ...DEFAULT_FILTERS,
+    ...initial,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -137,6 +148,24 @@ export function useInvoiceList(): UseInvoiceListReturn {
     setSelectedIds(new Set());
   }, []);
 
+  const setUnassigned = useCallback((value: boolean) => {
+    setFilters((prev) => ({
+      ...prev,
+      unassigned: value ? true : undefined,
+      page: 1,
+    }));
+    setSelectedIds(new Set());
+  }, []);
+
+  const setPastDue = useCallback((value: boolean) => {
+    setFilters((prev) => ({
+      ...prev,
+      past_due: value ? true : undefined,
+      page: 1,
+    }));
+    setSelectedIds(new Set());
+  }, []);
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -204,6 +233,8 @@ export function useInvoiceList(): UseInvoiceListReturn {
     setDateRange,
     setSort,
     setPage,
+    setUnassigned,
+    setPastDue,
     toggleSelect,
     toggleSelectAll,
     clearSelection,

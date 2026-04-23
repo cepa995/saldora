@@ -319,6 +319,133 @@ async def test_list_invoices_sort_by_total(client: AsyncClient, test_engine):
     assert amounts == sorted(amounts, key=lambda x: Decimal(x))
 
 
+async def test_list_invoices_filter_unassigned(client: AsyncClient, test_engine):
+    """?unassigned=true returns only invoices with no client_id (inbox view)."""
+    from uuid import UUID, uuid4
+
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.client import Client
+    from app.models.invoice import Invoice
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    # Create a client so we can attach one invoice to it
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        c = Client(
+            id=uuid4(),
+            organization_id=UUID(org_id),
+            name="Aroma",
+            pib="123456789",
+            is_active=True,
+        )
+        session.add(c)
+        await session.commit()
+        attached_client_id = c.id
+
+    await _insert_invoice(test_engine, org_id, invoice_number="ORPHAN-1")
+    await _insert_invoice(test_engine, org_id, invoice_number="ORPHAN-2")
+    attached_id = await _insert_invoice(test_engine, org_id, invoice_number="ASSIGNED-1")
+    # The helper doesn't accept client_id; attach it directly after creation.
+    async with factory() as session:
+        await session.execute(
+            update(Invoice)
+            .where(Invoice.id == UUID(attached_id))
+            .values(client_id=attached_client_id)
+        )
+        await session.commit()
+
+    resp = await client.get("/api/v1/invoices?unassigned=true", headers=headers)
+    assert resp.status_code == 200
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert numbers == {"ORPHAN-1", "ORPHAN-2"}
+    assert resp.json()["pagination"]["total"] == 2
+
+    # Without the filter, all three come back
+    resp_all = await client.get("/api/v1/invoices", headers=headers)
+    assert resp_all.json()["pagination"]["total"] == 3
+
+
+async def test_list_invoices_filter_past_due(client: AsyncClient, test_engine):
+    """?past_due=true returns invoices past their effective due date and not exported.
+
+    Covers the three rules:
+    - due_date in the future → excluded
+    - due_date in the past, status='review' → included
+    - due_date in the past, status='exported' → excluded (already settled)
+    """
+    from datetime import date, timedelta
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    today = date.today()
+    future = today + timedelta(days=10)
+    past = today - timedelta(days=10)
+
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="FUTURE", due_date=future, status="review"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="LATE-REVIEW", due_date=past, status="review"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="LATE-VERIFIED", due_date=past, status="verified"
+    )
+    await _insert_invoice(
+        test_engine, org_id, invoice_number="PAID-LATE", due_date=past, status="exported"
+    )
+
+    resp = await client.get("/api/v1/invoices?past_due=true", headers=headers)
+    assert resp.status_code == 200
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert numbers == {"LATE-REVIEW", "LATE-VERIFIED"}
+
+
+async def test_list_invoices_past_due_uses_invoice_date_when_due_date_null(
+    client: AsyncClient, test_engine
+):
+    """When due_date is null, invoice_date is used as the effective due date.
+
+    Legacy rows with null due_date should still be caught by the past-due
+    filter when their invoice_date falls in the past. New rows already get
+    due_date auto-populated by the OCR worker.
+    """
+    from datetime import date, timedelta
+    from uuid import UUID
+
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.invoice import Invoice
+
+    headers = await _auth_headers(client)
+    org_id = _get_org_id(headers)
+
+    past = date.today() - timedelta(days=20)
+    inv_id = await _insert_invoice(
+        test_engine,
+        org_id,
+        invoice_number="LEGACY-LATE",
+        invoice_date=past,
+        status="review",
+    )
+    # Simulate a legacy row by nulling due_date post-insert
+    factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        await session.execute(
+            update(Invoice).where(Invoice.id == UUID(inv_id)).values(due_date=None)
+        )
+        await session.commit()
+
+    resp = await client.get("/api/v1/invoices?past_due=true", headers=headers)
+    numbers = {d["invoice_number"] for d in resp.json()["data"]}
+    assert "LEGACY-LATE" in numbers
+
+
 async def test_list_invoices_org_isolation(client: AsyncClient, test_engine):
     """User cannot see invoices from another organization."""
     headers = await _auth_headers(client)

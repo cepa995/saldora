@@ -38,6 +38,7 @@ from app.schemas.minimax import (
     MiniMaxPushResult,
 )
 from app.schemas.pdv_books import PdvBookPreviewResponse, PdvBookRequest
+from app.services import events
 from app.services.export.audit import AUDIT_URL_EXPIRY, generate_audit_export
 from app.services.export.core import (
     VALID_FIELD_KEYS,
@@ -987,6 +988,19 @@ async def push_to_minimax(
         for inv in invoices:
             if inv.id in success_ids:
                 inv.status = "exported"
+                await events.emit(
+                    db=db,
+                    event_type=events.INVOICE_EXPORTED,
+                    organization_id=current_user.organization_id,
+                    client_id=inv.client_id,
+                    entity_type="invoice",
+                    entity_id=inv.id,
+                    actor_user_id=current_user.id,
+                    payload={
+                        "invoice_number": inv.invoice_number,
+                        "destination": "minimax",
+                    },
+                )
         await db.commit()
 
     success_count = sum(1 for r in results if r.status == "success")

@@ -142,3 +142,37 @@ export async function toggleRuleActive(
     body: JSON.stringify({ is_active: isActive }),
   });
 }
+
+/**
+ * List rules explicitly attached to a client (excludes global rules).
+ */
+export async function fetchClientRules(
+  clientId: string,
+): Promise<AutomationRuleResponse[]> {
+  return apiClient<AutomationRuleResponse[]>(`/api/v1/clients/${clientId}/rules`);
+}
+
+/**
+ * Attach an existing rule to a client (idempotent).
+ */
+export async function attachRuleToClient(
+  clientId: string,
+  ruleId: string,
+): Promise<AutomationRuleResponse> {
+  return apiClient<AutomationRuleResponse>(
+    `/api/v1/clients/${clientId}/rules/${ruleId}`,
+    { method: 'POST' },
+  );
+}
+
+/**
+ * Detach a rule from a client (idempotent).
+ */
+export async function detachRuleFromClient(
+  clientId: string,
+  ruleId: string,
+): Promise<void> {
+  await apiClient<void>(`/api/v1/clients/${clientId}/rules/${ruleId}`, {
+    method: 'DELETE',
+  });
+}

@@ -8,7 +8,6 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/contexts/SidebarContext";
 import { useNotifications } from "@/contexts/NotificationContext";
-import { useClient } from "@/contexts/ClientContext";
 import { useOrgPath } from "@/lib/navigation";
 import { ScriptToggle } from "./ScriptToggle";
 
@@ -16,17 +15,15 @@ interface NavItem {
   href: string;
   labelKey:
     | "dashboard"
-    | "invoices"
+    | "inbox"
     | "upload"
     | "clients"
     | "rules"
     | "templates"
     | "archive"
-    | "reports"
     | "billing";
   icon: React.ReactNode;
   minRole?: string;
-  planBadge?: "PRO" | "AGENCY";
 }
 
 interface NavGroup {
@@ -38,6 +35,26 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: "groupOverview",
     items: [
+      {
+        href: "/klijenti",
+        labelKey: "clients",
+        minRole: "operator",
+        icon: (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+            />
+          </svg>
+        ),
+      },
       {
         href: "/dashboard",
         labelKey: "dashboard",
@@ -64,7 +81,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         href: "/invoices",
-        labelKey: "invoices",
+        labelKey: "inbox",
+        minRole: "operator",
         icon: (
           <svg
             className="w-5 h-5"
@@ -76,7 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={1.75}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              d="M3 10h4l2 3h6l2-3h4m-4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2z"
             />
           </svg>
         ),
@@ -107,6 +125,26 @@ const NAV_GROUPS: NavGroup[] = [
     labelKey: "groupTools",
     items: [
       {
+        href: "/rules",
+        labelKey: "rules",
+        minRole: "manager",
+        icon: (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.75}
+              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+            />
+          </svg>
+        ),
+      },
+      {
         href: "/templates",
         labelKey: "templates",
         minRole: "manager",
@@ -130,7 +168,6 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/arhiviranje",
         labelKey: "archive",
         minRole: "admin",
-        planBadge: "PRO",
         icon: (
           <svg
             className="w-5 h-5"
@@ -143,69 +180,6 @@ const NAV_GROUPS: NavGroup[] = [
               strokeLinejoin="round"
               strokeWidth={1.75}
               d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/izvestaji",
-        labelKey: "reports",
-        minRole: "operator",
-        planBadge: "PRO",
-        icon: (
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.75}
-              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/clients",
-        labelKey: "clients",
-        minRole: "operator",
-        planBadge: "AGENCY",
-        icon: (
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.75}
-              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-            />
-          </svg>
-        ),
-      },
-      {
-        href: "/rules",
-        labelKey: "rules",
-        minRole: "manager",
-        planBadge: "AGENCY",
-        icon: (
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.75}
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
             />
           </svg>
         ),
@@ -266,7 +240,6 @@ export function AppSidebar() {
     useSidebar();
   const t = useTranslations("nav");
   const { pendingJoinRequests } = useNotifications();
-  const { clients, selectedClientId, selectClient, isAgency } = useClient();
   const orgPath = useOrgPath();
 
   // Close mobile menu on route change
@@ -290,7 +263,6 @@ export function AppSidebar() {
     collapsed: boolean,
     mobile: boolean,
     badge?: number,
-    planBadge?: "PRO" | "AGENCY",
   ) {
     const active = isActive(href);
     return (
@@ -323,12 +295,7 @@ export function AppSidebar() {
           ) : null}
         </span>
         {!collapsed && label}
-        {!collapsed && planBadge && (
-          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-600">
-            {planBadge}
-          </span>
-        )}
-        {!collapsed && !planBadge && badge ? (
+        {!collapsed && badge ? (
           <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[11px] font-bold rounded-full">
             {badge}
           </span>
@@ -360,24 +327,6 @@ export function AppSidebar() {
           </div>
         )}
 
-        {/* Client selector (Agency only) */}
-        {isAgency && !collapsed && !mobile && clients.length > 0 && (
-          <div className="px-3 py-2 border-b border-gray-100">
-            <select
-              value={selectedClientId || ""}
-              onChange={(e) => selectClient(e.target.value || null)}
-              className="w-full px-2.5 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 truncate"
-            >
-              <option value="">{t("allClients")}</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Main nav links */}
         <nav className={`flex-1 overflow-y-auto ${mobile ? "py-2" : "px-2 py-4"}`}>
           {NAV_GROUPS.map((group, gi) => {
@@ -400,8 +349,6 @@ export function AppSidebar() {
                     t(item.labelKey),
                     collapsed,
                     mobile,
-                    undefined,
-                    item.planBadge,
                   ),
                 )}
               </div>

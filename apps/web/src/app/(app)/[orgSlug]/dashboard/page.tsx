@@ -5,6 +5,9 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrgPath } from '@/lib/navigation';
 import { useDashboard } from '@/hooks/useDashboard';
+import { AttentionClients } from '@/components/dashboard/AttentionClients';
+import { PastDueRollup } from '@/components/dashboard/PastDueRollup';
+import { PastDueBadge } from '@/components/PastDueBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAmountSr, formatRelativeTime } from '@/lib/formatters';
 import dynamic from 'next/dynamic';
@@ -65,10 +68,18 @@ function ListIcon({ className = 'w-5 h-5' }: { className?: string }) {
   );
 }
 
-function DownloadIcon({ className = 'w-5 h-5' }: { className?: string }) {
+function InboxIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h4l2 3h6l2-3h4m-4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2z" />
+    </svg>
+  );
+}
+
+function ClockWarnIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }
@@ -88,11 +99,23 @@ interface StatCardProps {
   iconBg: string;
   count: number;
   label: string;
+  href?: string;
+  accent?: 'neutral' | 'amber' | 'rose';
 }
 
-function StatCard({ icon, iconBg, count, label }: StatCardProps) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover-lift cursor-default transition-all duration-200">
+const ACCENT_CLASS: Record<NonNullable<StatCardProps['accent']>, string> = {
+  neutral: 'border-gray-100',
+  amber: 'border-amber-200 ring-1 ring-amber-200/50',
+  rose: 'border-rose-200 ring-1 ring-rose-200/50',
+};
+
+function StatCard({ icon, iconBg, count, label, href, accent = 'neutral' }: StatCardProps) {
+  const body = (
+    <div
+      className={`bg-white rounded-2xl border p-5 shadow-sm hover-lift transition-all duration-200 ${
+        ACCENT_CLASS[accent]
+      } ${href ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
+    >
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
         {icon}
       </div>
@@ -100,6 +123,7 @@ function StatCard({ icon, iconBg, count, label }: StatCardProps) {
       <p className="text-sm text-gray-500 mt-0.5">{label}</p>
     </div>
   );
+  return href ? <Link href={href}>{body}</Link> : body;
 }
 
 /* -- Skeleton Components ------------------------------------------------ */
@@ -118,7 +142,7 @@ function RecentInvoiceRowSkeleton() {
   return (
     <div className="px-5 sm:px-6 py-3.5 border-b border-gray-50">
       {/* Desktop */}
-      <div className="hidden sm:grid grid-cols-[minmax(80px,120px)_1fr_100px_110px_80px] items-center gap-4">
+      <div className="hidden sm:grid grid-cols-[minmax(140px,180px)_1fr_minmax(150px,auto)_120px_80px] items-center gap-4">
         <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
         <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
         <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse" />
@@ -144,20 +168,26 @@ function RecentInvoiceRowSkeleton() {
 /* -- Recent Invoice Row ------------------------------------------------- */
 
 function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; basePath: string }) {
+  const isExported = invoice.status === 'exported';
   return (
     <Link
       href={`${basePath}/invoices/${invoice.id}`}
-      className="block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group"
+      className={`block px-5 sm:px-6 py-3.5 border-b border-gray-100 sm:border-gray-50 hover:bg-violet-50/30 transition-colors group ${
+        isExported ? 'opacity-60 hover:opacity-100' : ''
+      }`}
     >
       {/* Desktop row */}
-      <div className="hidden sm:grid grid-cols-[minmax(80px,120px)_1fr_100px_110px_80px] items-center gap-4">
+      <div className="hidden sm:grid grid-cols-[minmax(140px,180px)_1fr_minmax(150px,auto)_120px_80px] items-center gap-4">
         <span className="text-sm font-medium text-gray-900 truncate">
           {invoice.invoice_number ?? '—'}
         </span>
         <span className="text-sm text-gray-600 truncate min-w-0">
           {invoice.seller?.name ?? '—'}
         </span>
-        <StatusBadge status={invoice.status} />
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={invoice.status} />
+          <PastDueBadge invoice={invoice} variant="dot" />
+        </div>
         <span className="text-sm font-semibold text-gray-900 tabular-nums text-right whitespace-nowrap">
           {formatAmountSr(invoice.total_amount, invoice.currency)}
         </span>
@@ -171,7 +201,10 @@ function RecentInvoiceRow({ invoice, basePath }: { invoice: InvoiceResponse; bas
           <span className="text-sm font-medium text-gray-900 truncate">
             {invoice.invoice_number ?? '—'}
           </span>
-          <StatusBadge status={invoice.status} />
+          <div className="flex items-center gap-1.5">
+            <StatusBadge status={invoice.status} />
+            <PastDueBadge invoice={invoice} variant="dot" />
+          </div>
         </div>
         <p className="text-sm text-gray-500 truncate">{invoice.seller?.name ?? '—'}</p>
         <div className="flex items-center justify-between gap-2">
@@ -203,7 +236,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           {t('welcome', { name: user?.firstName ?? 'korisniče' })}
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{t('overview')}</p>
+        <p className="text-sm text-gray-500 mt-1">Agencijski pregled — zbir stanja preko svih klijenata.</p>
       </div>
 
       {/* Error banner */}
@@ -224,10 +257,12 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Attention tiles — inbox + past-due, shown first because they're actionable */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {isLoading ? (
           <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
             <StatCardSkeleton />
@@ -235,6 +270,22 @@ export default function DashboardPage() {
           </>
         ) : data ? (
           <>
+            <StatCard
+              icon={<InboxIcon className="w-5 h-5 text-amber-700" />}
+              iconBg="bg-amber-100"
+              count={data.unassignedCount}
+              label="Nesortirano"
+              href={orgPath('/invoices')}
+              accent={data.unassignedCount > 0 ? 'amber' : 'neutral'}
+            />
+            <StatCard
+              icon={<ClockWarnIcon className="w-5 h-5 text-rose-700" />}
+              iconBg="bg-rose-100"
+              count={data.pastDueCount}
+              label="Kasne fakture"
+              href={orgPath('/invoices?past_due=true')}
+              accent={data.pastDueCount > 0 ? 'rose' : 'neutral'}
+            />
             <StatCard
               icon={<DocumentStackIcon className="w-5 h-5 text-violet-600" />}
               iconBg="bg-violet-100"
@@ -261,6 +312,22 @@ export default function DashboardPage() {
             />
           </>
         ) : null}
+      </div>
+
+      {/* Past-due rollup — only when there's past-due work to surface */}
+      {!isLoading && data && data.pastDueCount > 0 && (
+        <div className="mt-6">
+          <PastDueRollup
+            count={data.pastDueCount}
+            totalRsd={data.pastDueTotalRsd}
+            oldestDays={data.pastDueOldestDays}
+          />
+        </div>
+      )}
+
+      {/* Clients needing attention — agency rollup */}
+      <div className="mt-6">
+        <AttentionClients />
       </div>
 
       {/* Charts */}
@@ -341,27 +408,27 @@ export default function DashboardPage() {
 
           <div className="space-y-3">
             <Link
-              href={orgPath("/upload")}
+              href={orgPath("/klijenti")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-violet-500/25 hover:scale-[1.02] transition-all duration-200"
             >
-              <UploadIcon className="w-5 h-5" />
+              <ListIcon className="w-5 h-5" />
+              Pregled klijenata
+            </Link>
+
+            <Link
+              href={orgPath("/upload")}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <UploadIcon className="w-5 h-5 text-gray-500" />
               {t('uploadInvoice')}
             </Link>
 
             <Link
-              href={orgPath("/invoices")}
+              href={orgPath("/rules")}
               className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             >
-              <ListIcon className="w-5 h-5 text-gray-500" />
-              {t('viewAllInvoices')}
-            </Link>
-
-            <Link
-              href={orgPath("/invoices")}
-              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl font-medium text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <DownloadIcon className="w-5 h-5 text-gray-500" />
-              {t('exportReport')}
+              <BoltIcon className="w-5 h-5 text-gray-500" />
+              Pravila automatizacije
             </Link>
           </div>
 

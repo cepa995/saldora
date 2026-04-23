@@ -2,25 +2,32 @@
 
 import logging
 import math
+from datetime import UTC
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import require_feature, require_role
+from app.models.automation_rule import AutomationRule
 from app.models.client import Client
+from app.models.client_event import ClientEvent
 from app.models.invoice import Invoice
+from app.models.rule_client_association import RuleClientAssociation
 from app.models.user import User
 from app.plans import Feature
+from app.schemas.automation_rule import AutomationRuleResponse
 from app.schemas.client import (
     ClientCreate,
     ClientListResponse,
     ClientResponse,
     ClientUpdate,
 )
+from app.schemas.client_event import ClientEventListResponse, ClientEventResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -225,6 +232,94 @@ async def get_client(
     )
 
 
+@router.get("/{client_id}/events", response_model=ClientEventListResponse)
+async def list_client_events(
+    client_id: UUID,
+    period: str | None = Query(
+        default=None,
+        description="YYYY-MM — filter events that happened within the calendar month.",
+    ),
+    event_type: str | None = Query(
+        default=None,
+        description="Filter by event_type (see app.services.events constants).",
+    ),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> dict:
+    """Return the client's chronological event stream.
+
+    The Timeline tab of the client workspace (M19) calls this endpoint.
+    Ordered newest-first.
+    """
+    # Verify the client belongs to the user's org
+    client_result = await db.execute(
+        select(Client).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    if client_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Klijent nije pronađen",
+        )
+
+    conditions = [
+        ClientEvent.client_id == client_id,
+        ClientEvent.organization_id == user.organization_id,
+    ]
+    if event_type:
+        conditions.append(ClientEvent.event_type == event_type)
+    if period:
+        # Parse "YYYY-MM". Reject anything else with a 400.
+        try:
+            year_str, month_str = period.split("-", 1)
+            year = int(year_str)
+            month_num = int(month_str)
+            if not 1 <= month_num <= 12:
+                raise ValueError
+        except (ValueError, IndexError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid period format; expected YYYY-MM",
+            ) from None
+        from datetime import datetime as _dt
+
+        start = _dt(year, month_num, 1, tzinfo=UTC)
+        end_year, end_month = (year + 1, 1) if month_num == 12 else (year, month_num + 1)
+        end = _dt(end_year, end_month, 1, tzinfo=UTC)
+        conditions.append(ClientEvent.event_date >= start)
+        conditions.append(ClientEvent.event_date < end)
+
+    count_result = await db.execute(select(func.count(ClientEvent.id)).where(and_(*conditions)))
+    total = count_result.scalar() or 0
+    total_pages = math.ceil(total / per_page) if total else 0
+
+    offset = (page - 1) * per_page
+    result = await db.execute(
+        select(ClientEvent)
+        .where(and_(*conditions))
+        .order_by(ClientEvent.event_date.desc(), ClientEvent.created_at.desc())
+        .offset(offset)
+        .limit(per_page)
+    )
+    events_rows = list(result.scalars().all())
+
+    return {
+        "data": [ClientEventResponse.model_validate(e) for e in events_rows],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
+
+
 @router.patch("/{client_id}", response_model=ClientResponse)
 async def update_client(
     client_id: UUID,
@@ -396,12 +491,31 @@ async def _retroactive_client_assignment(
     )
     invoices = result.scalars().all()
 
+    from app.services import events
+
     assigned = 0
     for inv in invoices:
         seller = inv.seller if isinstance(inv.seller, dict) else {}
         if seller.get("pib") == client.pib:
             inv.client_id = client.id
             assigned += 1
+            # One timeline event per auto-assigned invoice. The actor is
+            # None: auto-assignment happens as a side effect of creating a
+            # client, not as a direct user action on the invoice.
+            await events.emit(
+                db=db,
+                event_type=events.CLIENT_ASSIGNED,
+                organization_id=client.organization_id,
+                client_id=client.id,
+                entity_type="invoice",
+                entity_id=inv.id,
+                actor_user_id=None,
+                payload={
+                    "invoice_number": inv.invoice_number,
+                    "auto_assigned": True,
+                    "match_reason": "pib",
+                },
+            )
 
     if assigned:
         # Also update denormalized line items
@@ -417,3 +531,142 @@ async def _retroactive_client_assignment(
         await db.commit()
 
     return assigned
+
+
+# ---------------------------------------------------------------------------
+# Per-client rule attachments
+# ---------------------------------------------------------------------------
+
+
+async def _ensure_client_in_org(db: AsyncSession, client_id: UUID, organization_id: UUID) -> Client:
+    """Load a client and verify it belongs to the given org, or raise 404."""
+    result = await db.execute(
+        select(Client).where(
+            and_(Client.id == client_id, Client.organization_id == organization_id)
+        )
+    )
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+    return client
+
+
+async def _ensure_rule_in_org(
+    db: AsyncSession, rule_id: UUID, organization_id: UUID
+) -> AutomationRule:
+    """Load a rule (with associations) and verify it belongs to the given org."""
+    result = await db.execute(
+        select(AutomationRule)
+        .where(
+            and_(
+                AutomationRule.id == rule_id,
+                AutomationRule.organization_id == organization_id,
+            )
+        )
+        .options(selectinload(AutomationRule.client_associations))
+    )
+    rule = result.scalar_one_or_none()
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Pravilo nije pronađeno")
+    return rule
+
+
+@router.get("/{client_id}/rules", response_model=list[AutomationRuleResponse])
+async def list_client_rules(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> list[AutomationRule]:
+    """Return the rules explicitly scoped to this client.
+
+    Global rules (rules with zero client associations) are NOT returned here;
+    they apply to every invoice in the org and belong to the agency-wide
+    /api/v1/rules surface.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+
+    result = await db.execute(
+        select(AutomationRule)
+        .join(
+            RuleClientAssociation,
+            RuleClientAssociation.rule_id == AutomationRule.id,
+        )
+        .where(
+            and_(
+                AutomationRule.organization_id == user.organization_id,
+                RuleClientAssociation.client_id == client_id,
+            )
+        )
+        .options(selectinload(AutomationRule.client_associations))
+        .order_by(AutomationRule.priority.asc(), AutomationRule.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/{client_id}/rules/{rule_id}",
+    response_model=AutomationRuleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def attach_rule_to_client(
+    client_id: UUID,
+    rule_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("manager")),
+) -> AutomationRule:
+    """Attach a rule to this client.
+
+    Idempotent — attaching a rule that's already attached is a no-op and
+    still returns the current rule state.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+    rule = await _ensure_rule_in_org(db, rule_id, user.organization_id)
+
+    already_attached = any(assoc.client_id == client_id for assoc in rule.client_associations)
+    if not already_attached:
+        rule.client_associations.append(RuleClientAssociation(rule_id=rule_id, client_id=client_id))
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Race: another request attached at the same time. Recover gracefully.
+            await db.rollback()
+        # Re-load with fresh associations so the response includes the new attach.
+        db.expire(rule, ["client_associations"])
+        result = await db.execute(
+            select(AutomationRule)
+            .where(AutomationRule.id == rule_id)
+            .options(selectinload(AutomationRule.client_associations))
+        )
+        rule = result.scalar_one()
+    return rule
+
+
+@router.delete(
+    "/{client_id}/rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def detach_rule_from_client(
+    client_id: UUID,
+    rule_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("manager")),
+) -> None:
+    """Detach a rule from this client.
+
+    Idempotent — if the rule wasn't attached, the response is still 204.
+    """
+    await _ensure_client_in_org(db, client_id, user.organization_id)
+    await _ensure_rule_in_org(db, rule_id, user.organization_id)
+
+    result = await db.execute(
+        select(RuleClientAssociation).where(
+            and_(
+                RuleClientAssociation.rule_id == rule_id,
+                RuleClientAssociation.client_id == client_id,
+            )
+        )
+    )
+    assoc = result.scalar_one_or_none()
+    if assoc is not None:
+        await db.delete(assoc)
+        await db.commit()
