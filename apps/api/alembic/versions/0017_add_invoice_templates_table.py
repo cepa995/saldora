@@ -4,17 +4,17 @@ Stores learned invoice layouts for template-based extraction
 (LLM bypass). Each template maps a seller PIB + layout fingerprint
 to field extraction rules.
 
-Revision ID: 0014
-Revises: 0013
-Create Date: 2026-04-16
+Revision ID: 0017
+Revises: 0016
+Create Date: 2026-04-23
 """
 
 import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0014"
-down_revision = "0013"
+revision = "0017"
+down_revision = "0016"
 branch_labels = None
 depends_on = None
 
