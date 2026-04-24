@@ -213,11 +213,11 @@ export default function KlijentiPage({ params }: PageProps) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[110rem] space-y-7">
+    <div className="mx-auto w-full max-w-[110rem] space-y-5 sm:space-y-7">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-[32px] sm:text-[36px] font-bold text-stone-900 tracking-tight leading-[1.1]">
+          <h1 className="text-2xl sm:text-[32px] lg:text-[36px] font-bold text-stone-900 tracking-tight leading-[1.1]">
             {t('title')}
           </h1>
           <p className="text-sm text-stone-500 mt-2">
@@ -239,7 +239,7 @@ export default function KlijentiPage({ params }: PageProps) {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:shrink-0">
           <MonthPicker value={period} onChange={setPeriod} />
           {hasRole('manager') && (
             <button
@@ -382,12 +382,12 @@ function AgencySummary({
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-stone-200/70 rounded-2xl bg-white ring-1 ring-stone-200/70 overflow-hidden">
       {stats.map((s) => (
-        <div key={s.label} className="px-5 py-4 min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
+        <div key={s.label} className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
+          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.08em] text-stone-500">
             {s.label}
           </p>
           <p
-            className={`mt-1 text-[28px] font-bold tabular-nums leading-none ${
+            className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums leading-none ${
               s.tone === 'amber'
                 ? 'text-amber-700'
                 : s.tone === 'rose'
@@ -640,7 +640,8 @@ function ClientCard({
           {tPortfolio('openWorkspace')} →
         </span>
         {canEdit && (
-          <div className="relative z-20 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          // Always visible on touch (no hover event); lg+ hides until hover.
+          <div className="relative z-20 flex items-center gap-0.5 lg:opacity-0 lg:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               type="button"
               onClick={(e) => {
@@ -650,7 +651,7 @@ function ClientCard({
               }}
               disabled={isEditLoading}
               aria-label={t('editClient')}
-              className="p-1.5 text-stone-400 hover:text-violet-700 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50"
+              className="p-2 text-stone-400 hover:text-violet-700 hover:bg-violet-50 rounded-md transition-colors disabled:opacity-50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -664,7 +665,7 @@ function ClientCard({
                 onDelete();
               }}
               aria-label={t('deleteConfirmTitle')}
-              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+              className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 3h4a2 2 0 012 2v2H8V5a2 2 0 012-2z" />
