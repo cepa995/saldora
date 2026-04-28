@@ -16,13 +16,14 @@ import {
 } from "@/lib/api-client";
 import {
   type AuthTokens,
-  type AuthUser,
   clearTokens,
   extractUserFromToken,
   getAccessToken,
   hasRefreshToken,
+  postAuthRoute,
   refreshAccessToken,
   setTokens,
+  type AuthUser,
 } from "@/lib/auth";
 
 interface RegisterData {
@@ -108,13 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokens(tokens);
       const loggedInUser = extractUserFromToken(tokens.access_token);
       setUser(loggedInUser);
-
-      // Redirect based on whether user has an organization
-      if (loggedInUser?.organizationId && loggedInUser?.orgSlug) {
-        router.push(`/${loggedInUser.orgSlug}/dashboard`);
-      } else {
-        router.push("/register/organization");
-      }
+      router.push(postAuthRoute(loggedInUser));
     },
     [router],
   );
@@ -149,10 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokens(tokens);
       const createdUser = extractUserFromToken(tokens.access_token);
       setUser(createdUser);
-      const slug = createdUser?.orgSlug;
-      if (slug) {
-        router.push(`/${slug}/dashboard`);
-      }
+      // Fresh orgs land in subscription_status="pending" — postAuthRoute
+      // will send them to /awaiting-approval rather than /dashboard.
+      router.push(postAuthRoute(createdUser));
     },
     [router],
   );

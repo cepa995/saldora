@@ -1171,5 +1171,16 @@
     "indicatorActive": "Active {when}",
     "indicatorStale": "No recent activity",
     "openWorkspace": "Open"
+  },
+  "awaitingApproval": {
+    "title": "Your account is awaiting approval",
+    "subtitle": "Thanks for signing up. An administrator reviews new accounts manually; you'll receive an email once yours is activated.",
+    "orgLabel": "Organization",
+    "emailNotVerifiedTitle": "Verify your email",
+    "emailNotVerifiedBody": "We sent a verification link to your inbox. Open the message and click the confirmation button.",
+    "checkStatus": "Check status",
+    "checking": "Checking…",
+    "stillPending": "Your account is still awaiting approval. Try again in a few minutes.",
+    "logout": "Log out"
   }
 }

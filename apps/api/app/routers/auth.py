@@ -249,6 +249,7 @@ async def create_organization(
         role="admin",
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org.subscription_status,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -321,11 +322,17 @@ async def login(
     # 4. Generate tokens
     org_id = str(user.organization_id) if user.organization_id else None
     org_slug = None
+    org_subscription_status: str | None = None
     if user.organization_id:
-        slug_result = await db.execute(
-            select(Organization.slug).where(Organization.id == user.organization_id)
+        org_row = await db.execute(
+            select(Organization.slug, Organization.subscription_status).where(
+                Organization.id == user.organization_id
+            )
         )
-        org_slug = slug_result.scalar_one_or_none()
+        row = org_row.first()
+        if row is not None:
+            org_slug = row[0]
+            org_subscription_status = row[1]
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -335,6 +342,7 @@ async def login(
         role=user.role,
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org_subscription_status,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -395,14 +403,22 @@ async def refresh(
     )
     await db.commit()
 
-    # 5. Issue new token pair (rotation)
+    # 5. Issue new token pair (rotation). Re-read the org's subscription
+    # status so a freshly approved customer picks up the new claim on
+    # their next refresh — this is what the /awaiting-approval page polls.
     org_id = str(user.organization_id) if user.organization_id else None
     org_slug = None
+    org_subscription_status: str | None = None
     if user.organization_id:
-        slug_result = await db.execute(
-            select(Organization.slug).where(Organization.id == user.organization_id)
+        org_row = await db.execute(
+            select(Organization.slug, Organization.subscription_status).where(
+                Organization.id == user.organization_id
+            )
         )
-        org_slug = slug_result.scalar_one_or_none()
+        row = org_row.first()
+        if row is not None:
+            org_slug = row[0]
+            org_subscription_status = row[1]
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -412,6 +428,7 @@ async def refresh(
         role=user.role,
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org_subscription_status,
     )
     new_refresh_token = create_refresh_token(str(user.id))
 

@@ -15,7 +15,16 @@ class UserProfileResponse(BaseModel):
     last_name: str | None = Field(default=None, description="Last name")
     role: str = Field(description="Role within the organization")
     email_verified: bool = Field(description="Whether email has been verified")
-    organization_id: UUID = Field(description="Organization UUID")
+    organization_id: UUID | None = Field(
+        default=None, description="Organization UUID (null until org is created)"
+    )
+    subscription_status: str | None = Field(
+        default=None,
+        description=(
+            "Subscription status of the user's organization "
+            '("active"/"trial"/"pending"/"canceled"). Null if user has no org yet.'
+        ),
+    )
     created_at: datetime = Field(description="Account creation timestamp")
 
     model_config = {"from_attributes": True}

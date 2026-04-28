@@ -16,6 +16,43 @@ export interface AuthUser {
   orgSlug: string | null;
   role: string;
   emailVerified: boolean;
+  /**
+   * Subscription status of the user's org. New customers are "pending"
+   * until an admin activates them. The (app) layout uses this to route
+   * unactivated users to /awaiting-approval. Null while the user has no
+   * org yet (between /auth/register and /auth/create-organization).
+   */
+  subscriptionStatus: string | null;
+}
+
+/** States that grant access to mutational app routes. Mirrors
+ * APPROVED_SUBSCRIPTION_STATUSES on the backend. */
+export const APPROVED_SUBSCRIPTION_STATUSES = ["active", "trial"] as const;
+
+export function isSubscriptionApproved(status: string | null): boolean {
+  return (
+    status !== null &&
+    (APPROVED_SUBSCRIPTION_STATUSES as readonly string[]).includes(status)
+  );
+}
+
+/**
+ * Decide where a freshly authenticated user should land. Centralised so
+ * login, register, createOrganization, the /app redirect, and silent
+ * refresh all route the same way.
+ *
+ * - No user → /login
+ * - User but no org yet → /register/organization
+ * - Org exists but subscription not approved → /awaiting-approval
+ * - Otherwise → /{orgSlug}/dashboard
+ */
+export function postAuthRoute(user: AuthUser | null): string {
+  if (!user) return "/login";
+  if (!user.organizationId || !user.orgSlug) return "/register/organization";
+  if (!isSubscriptionApproved(user.subscriptionStatus)) {
+    return "/awaiting-approval";
+  }
+  return `/${user.orgSlug}/dashboard`;
 }
 
 // In-memory access token — never persisted to localStorage
@@ -97,6 +134,7 @@ export function extractUserFromToken(token: string): AuthUser | null {
       orgSlug: (payload.org_slug as string) || null,
       role: (payload.role as string) || "member",
       emailVerified: (payload.email_verified as boolean) ?? false,
+      subscriptionStatus: (payload.subscription_status as string) || null,
     };
   } catch {
     return null;

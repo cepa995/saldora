@@ -47,6 +47,7 @@ def create_access_token(
     role: str = "viewer",
     org_slug: str | None = None,
     email_verified: bool = False,
+    subscription_status: str | None = None,
 ) -> str:
     """Create a JWT access token.
 
@@ -59,6 +60,9 @@ def create_access_token(
         role: User role in organization.
         org_slug: Organization URL slug.
         email_verified: Whether the user's email is verified.
+        subscription_status: Org's subscription status ("active"/"trial"/
+            "pending"/"canceled"/None). Lets the frontend route to the
+            "awaiting approval" page without an extra round-trip.
 
     Returns:
         Encoded JWT token.
@@ -75,6 +79,7 @@ def create_access_token(
         "last_name": last_name or "",
         "role": role,
         "email_verified": email_verified,
+        "subscription_status": subscription_status or "",
         "exp": expires,  # Expiration time
         "type": "access",
     }

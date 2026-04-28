@@ -1203,5 +1203,16 @@
     "indicatorActive": "Aktivan {when}",
     "indicatorStale": "Nema aktivnosti",
     "openWorkspace": "Otvori"
+  },
+  "awaitingApproval": {
+    "title": "Vaš nalog čeka odobrenje",
+    "subtitle": "Hvala na registraciji. Administrator pregleda nove naloge ručno; bićete obavešteni email-om kada vaš nalog bude aktiviran.",
+    "orgLabel": "Organizacija",
+    "emailNotVerifiedTitle": "Potvrdite email adresu",
+    "emailNotVerifiedBody": "Poslali smo link za potvrdu na vaš email. Otvorite poruku i kliknite na dugme za potvrdu.",
+    "checkStatus": "Proveri status",
+    "checking": "Proveravam…",
+    "stillPending": "Vaš nalog i dalje čeka odobrenje. Pokušajte ponovo za nekoliko minuta.",
+    "logout": "Odjavi se"
   }
 }
