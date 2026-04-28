@@ -1,5 +1,6 @@
 """Authentication router - login, register, token refresh."""
 
+import os
 import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -41,10 +42,23 @@ from app.security import (
 )
 from app.services import audit
 from app.services.email import (
+    send_admin_new_org_email,
     send_password_reset_email,
     send_verification_email,
     send_welcome_email,
 )
+
+
+def _initial_subscription_status() -> str:
+    """Return the subscription status to assign to a freshly created org.
+
+    Production registrations land in "pending" so an admin must explicitly
+    activate the account before usage. Test runs auto-approve to avoid
+    re-wiring every fixture; the test fixture sets TESTING=1 before app
+    import.
+    """
+    return "active" if os.environ.get("TESTING") == "1" else "pending"
+
 
 router = APIRouter()
 settings = get_settings()
@@ -170,9 +184,18 @@ async def create_organization(
     if body.pib:
         _validate_pib(body.pib)
 
-    # Create organization
+    # Create organization. New orgs land in subscription_status="pending"
+    # so they cannot use mutational app routes until an admin flips the
+    # status to "active"/"trial" (see require_role in app.dependencies).
+    initial_status = _initial_subscription_status()
     org_slug = await _generate_unique_slug(db, body.name)
-    org = Organization(name=body.name, slug=org_slug, pib=body.pib, billing_email=user.email)
+    org = Organization(
+        name=body.name,
+        slug=org_slug,
+        pib=body.pib,
+        billing_email=user.email,
+        subscription_status=initial_status,
+    )
     db.add(org)
     await db.flush()
 
@@ -203,6 +226,19 @@ async def create_organization(
             send_verification_email, user.email, user.first_name, verification_url
         )
 
+    # Notify the admin mailbox so a human can approve the org. This is the
+    # gate for our manual-payment flow (no card-on-file). No-op if
+    # admin_email is not configured (e.g. local dev without Resend).
+    if initial_status == "pending":
+        background_tasks.add_task(
+            send_admin_new_org_email,
+            org.name,
+            org.pib,
+            user.email,
+            user.first_name,
+            user.last_name,
+        )
+
     # Issue fresh tokens with org claim
     access_token = create_access_token(
         str(user.id),
@@ -213,6 +249,7 @@ async def create_organization(
         role="admin",
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org.subscription_status,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -285,11 +322,17 @@ async def login(
     # 4. Generate tokens
     org_id = str(user.organization_id) if user.organization_id else None
     org_slug = None
+    org_subscription_status: str | None = None
     if user.organization_id:
-        slug_result = await db.execute(
-            select(Organization.slug).where(Organization.id == user.organization_id)
+        org_row = await db.execute(
+            select(Organization.slug, Organization.subscription_status).where(
+                Organization.id == user.organization_id
+            )
         )
-        org_slug = slug_result.scalar_one_or_none()
+        row = org_row.first()
+        if row is not None:
+            org_slug = row[0]
+            org_subscription_status = row[1]
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -299,6 +342,7 @@ async def login(
         role=user.role,
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org_subscription_status,
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -359,14 +403,22 @@ async def refresh(
     )
     await db.commit()
 
-    # 5. Issue new token pair (rotation)
+    # 5. Issue new token pair (rotation). Re-read the org's subscription
+    # status so a freshly approved customer picks up the new claim on
+    # their next refresh — this is what the /awaiting-approval page polls.
     org_id = str(user.organization_id) if user.organization_id else None
     org_slug = None
+    org_subscription_status: str | None = None
     if user.organization_id:
-        slug_result = await db.execute(
-            select(Organization.slug).where(Organization.id == user.organization_id)
+        org_row = await db.execute(
+            select(Organization.slug, Organization.subscription_status).where(
+                Organization.id == user.organization_id
+            )
         )
-        org_slug = slug_result.scalar_one_or_none()
+        row = org_row.first()
+        if row is not None:
+            org_slug = row[0]
+            org_subscription_status = row[1]
     access_token = create_access_token(
         str(user.id),
         org_id,
@@ -376,6 +428,7 @@ async def refresh(
         role=user.role,
         org_slug=org_slug,
         email_verified=user.email_verified,
+        subscription_status=org_subscription_status,
     )
     new_refresh_token = create_refresh_token(str(user.id))
 

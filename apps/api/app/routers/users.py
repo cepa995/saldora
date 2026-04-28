@@ -1,11 +1,13 @@
 """User profile and password management router."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import hash_password, verify_password
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.user import (
     PasswordChangeRequest,
@@ -19,17 +21,38 @@ router = APIRouter()
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_profile(
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> UserProfileResponse:
-    """Get the current user's profile.
+    """Get the current user's profile, including the org's subscription
+    status so the frontend can decide whether to route into the app or to
+    the awaiting-approval page.
 
     Args:
+        db: Database session.
         user: Authenticated user.
 
     Returns:
         User profile details.
     """
-    return UserProfileResponse.model_validate(user)
+    subscription_status: str | None = None
+    if user.organization_id is not None:
+        sub_result = await db.execute(
+            select(Organization.subscription_status).where(Organization.id == user.organization_id)
+        )
+        subscription_status = sub_result.scalar_one_or_none()
+
+    return UserProfileResponse(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+        email_verified=user.email_verified,
+        organization_id=user.organization_id,
+        subscription_status=subscription_status,
+        created_at=user.created_at,
+    )
 
 
 @router.patch("/me", response_model=UserProfileResponse)

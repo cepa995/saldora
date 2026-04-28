@@ -5,12 +5,14 @@ import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
+import { isSubscriptionApproved } from '@/lib/auth';
 
 /**
  * Auth guard and slug validation layout for org-scoped pages.
  *
  * - Redirects unauthenticated users to /login
  * - Redirects users without an org to /register/organization
+ * - Redirects users whose org is not approved to /awaiting-approval
  * - Redirects slug mismatches to the correct org slug URL
  */
 export default function OrgSlugLayout({ children }: { children: React.ReactNode }) {
@@ -19,6 +21,9 @@ export default function OrgSlugLayout({ children }: { children: React.ReactNode 
   const params = useParams();
   const t = useTranslations('common');
   const urlSlug = params.orgSlug as string;
+  const subscriptionApproved = isSubscriptionApproved(
+    user?.subscriptionStatus ?? null,
+  );
 
   useEffect(() => {
     if (isLoading) return;
@@ -33,15 +38,28 @@ export default function OrgSlugLayout({ children }: { children: React.ReactNode 
       return;
     }
 
+    // Subscription gate — pending/canceled/expired orgs cannot reach
+    // role-gated routes (the API would 403 anyway). Send them to the
+    // awaiting-approval page until the admin flips them to active/trial.
+    if (!subscriptionApproved) {
+      router.replace('/awaiting-approval');
+      return;
+    }
+
     // Slug mismatch — redirect to correct slug, preserving the rest of the path
     if (user.orgSlug && urlSlug !== user.orgSlug) {
       const currentPath = window.location.pathname;
       const pathAfterSlug = currentPath.substring(currentPath.indexOf('/', 1));
       router.replace(`/${user.orgSlug}${pathAfterSlug || '/dashboard'}`);
     }
-  }, [isLoading, isAuthenticated, user, urlSlug, router]);
+  }, [isLoading, isAuthenticated, user, urlSlug, router, subscriptionApproved]);
 
-  if (isLoading || !isAuthenticated || !user?.organizationId) {
+  if (
+    isLoading ||
+    !isAuthenticated ||
+    !user?.organizationId ||
+    !subscriptionApproved
+  ) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">

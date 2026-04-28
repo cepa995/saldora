@@ -60,7 +60,7 @@ export function TabBar({ activeTab, orgSlug, clientId }: Props) {
 
   return (
     <div className="border-b border-stone-200 overflow-x-auto scrollbar-hide">
-      <nav className="-mb-px flex gap-7">
+      <nav className="-mb-px flex gap-4 sm:gap-7">
         {TABS.map((tab) => {
           const isActive = tab.key === activeTab;
           const href =
@@ -77,7 +77,8 @@ export function TabBar({ activeTab, orgSlug, clientId }: Props) {
                   : 'border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300'
               }`}
             >
-              {tab.icon}
+              {/* Icons hidden below sm so all 4 labels fit on one row at 375px. */}
+              <span className="hidden sm:inline-flex">{tab.icon}</span>
               {t(tab.labelKey)}
             </Link>
           );

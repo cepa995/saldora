@@ -11,7 +11,6 @@ from uuid import UUID, uuid4
 import celery
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     HTTPException,
@@ -48,7 +47,6 @@ from app.schemas.invoice import (
 )
 from app.services import audit, events
 from app.services.accounting_intent import generate_accounting_intent
-from app.services.email import send_invoice_processed_email
 from app.services.invoice_verification import check_duplicates, verify_calculations
 from app.services.nbs import convert_to_rsd
 from app.services.pib import validate_pib
@@ -1371,7 +1369,6 @@ async def get_processing_status(
 async def verify_invoice(
     invoice_id: UUID,
     request: Request,
-    background_tasks: BackgroundTasks,
     force: bool = Query(default=False, description="Force verify even if duplicate (admin only)"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role("operator")),
@@ -1516,15 +1513,6 @@ async def verify_invoice(
 
     await db.commit()
     await db.refresh(invoice)
-
-    # Notify the user who uploaded the invoice
-    background_tasks.add_task(
-        send_invoice_processed_email,
-        user.email,
-        user.first_name,
-        invoice.invoice_number or str(invoice.id)[:8],
-        str(invoice.id),
-    )
 
     # Generate presigned URL so the document stays visible in the response
     document_url = None

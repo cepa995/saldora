@@ -3,10 +3,13 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { postAuthRoute } from '@/lib/auth';
 
 /**
- * Redirect page for logged-in users.
- * Reads orgSlug from auth context and redirects to /{orgSlug}/dashboard.
+ * Redirect page for logged-in users. Defers the routing decision to
+ * `postAuthRoute` so login, register, createOrganization, and this
+ * fallback all agree on where a given user should land — including
+ * routing pending-approval orgs to /awaiting-approval.
  */
 export default function AppRedirect() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -20,12 +23,7 @@ export default function AppRedirect() {
       return;
     }
 
-    if (!user?.organizationId || !user?.orgSlug) {
-      router.replace('/register/organization');
-      return;
-    }
-
-    router.replace(`/${user.orgSlug}/dashboard`);
+    router.replace(postAuthRoute(user));
   }, [user, isLoading, isAuthenticated, router]);
 
   return (

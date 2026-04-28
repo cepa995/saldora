@@ -148,11 +148,11 @@ export function ClientInvoices({ clientId }: Props) {
 
       {/* Bulk action bar — only visible when 1+ selected */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-stone-900 text-white">
+        <div className="flex items-center justify-between gap-3 flex-wrap px-3 sm:px-4 py-2.5 rounded-xl bg-stone-900 text-white">
           <span className="text-sm font-medium tabular-nums">
             {tCommon('selected', { count: String(selectedIds.size) })}
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={runBulkVerify}
@@ -204,8 +204,11 @@ export function ClientInvoices({ clientId }: Props) {
           <p className="text-sm text-gray-500">{t('emptyState')}</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
-          <table className="w-full text-sm">
+        // overflow-x-auto keeps the 6-col table usable below lg without
+        // clipping the viewport. A dedicated mobile card layout (matching
+        // /invoices) is the longer-term fix and tracked separately.
+        <div className="rounded-2xl border border-gray-100 bg-white overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-gray-50/60">
               <tr>
                 <th className="w-10 px-3 py-2.5">

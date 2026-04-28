@@ -16,13 +16,14 @@ import {
 } from "@/lib/api-client";
 import {
   type AuthTokens,
-  type AuthUser,
   clearTokens,
   extractUserFromToken,
   getAccessToken,
   hasRefreshToken,
+  postAuthRoute,
   refreshAccessToken,
   setTokens,
+  type AuthUser,
 } from "@/lib/auth";
 
 interface RegisterData {
@@ -49,6 +50,13 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<string>;
   confirmPasswordReset: (token: string, newPassword: string) => Promise<string>;
   createOrganization: (name: string, pib?: string) => Promise<void>;
+  /**
+   * Force a token refresh and update the in-memory user state. The
+   * /auth/refresh endpoint re-reads the org's subscription_status from
+   * the DB on every call, so this is the polling primitive used by the
+   * /awaiting-approval page to detect activation without a hard reload.
+   */
+  refreshUser: () => Promise<AuthUser | null>;
   hasRole: (minimumRole: string) => boolean;
 }
 
@@ -108,13 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokens(tokens);
       const loggedInUser = extractUserFromToken(tokens.access_token);
       setUser(loggedInUser);
-
-      // Redirect based on whether user has an organization
-      if (loggedInUser?.organizationId && loggedInUser?.orgSlug) {
-        router.push(`/${loggedInUser.orgSlug}/dashboard`);
-      } else {
-        router.push("/register/organization");
-      }
+      router.push(postAuthRoute(loggedInUser));
     },
     [router],
   );
@@ -149,13 +151,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTokens(tokens);
       const createdUser = extractUserFromToken(tokens.access_token);
       setUser(createdUser);
-      const slug = createdUser?.orgSlug;
-      if (slug) {
-        router.push(`/${slug}/dashboard`);
-      }
+      // Fresh orgs land in subscription_status="pending" — postAuthRoute
+      // will send them to /awaiting-approval rather than /dashboard.
+      router.push(postAuthRoute(createdUser));
     },
     [router],
   );
+
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
+    const token = await refreshAccessToken();
+    if (!token) {
+      setUser(null);
+      return null;
+    }
+    const refreshed = extractUserFromToken(token);
+    setUser(refreshed);
+    return refreshed;
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -216,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requestPasswordReset,
       confirmPasswordReset,
       createOrganization,
+      refreshUser,
       hasRole,
     }),
     [
@@ -227,6 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requestPasswordReset,
       confirmPasswordReset,
       createOrganization,
+      refreshUser,
       hasRole,
     ],
   );

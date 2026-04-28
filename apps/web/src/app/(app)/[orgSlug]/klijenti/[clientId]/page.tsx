@@ -114,7 +114,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[100rem] space-y-8">
+    <div className="mx-auto w-full max-w-[100rem] space-y-5 sm:space-y-7 lg:space-y-8">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-xs text-stone-500">
         <Link href={orgPath('/klijenti')} className="hover:text-violet-700 transition-colors">
@@ -124,17 +124,18 @@ export default function ClientWorkspacePage({ params }: PageProps) {
         <span className="text-stone-700 font-medium">{client?.name ?? tCommon('loading')}</span>
       </nav>
 
-      {/* Hero header */}
-      <header className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-        <div className="flex items-start gap-4 min-w-0 flex-1">
+      {/* Hero header — single row at every breakpoint: avatar+name on the
+          left, edit/kebab pinned to the far right. */}
+      <header className="flex flex-row items-start justify-between gap-3 sm:gap-4 lg:gap-6">
+        <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
           {client ? (
             <ClientAvatar name={client.name} seed={client.id} size="xl" />
           ) : (
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-stone-100 animate-pulse" />
           )}
           <div className="min-w-0 flex-1 pt-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl sm:text-4xl font-bold text-stone-900 tracking-tight leading-tight">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-stone-900 tracking-tight leading-tight break-words min-w-0">
                 {client?.name ?? '…'}
               </h1>
               {client && !client.is_active && (
@@ -160,12 +161,13 @@ export default function ClientWorkspacePage({ params }: PageProps) {
               <button
                 type="button"
                 onClick={() => setEditOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-stone-700 bg-white ring-1 ring-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
+                aria-label={tCommon('edit')}
+                className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-sm font-medium text-stone-700 bg-white ring-1 ring-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-                {tCommon('edit')}
+                <span className="hidden sm:inline">{tCommon('edit')}</span>
               </button>
               <ClientKebab
                 isActive={client.is_active}
@@ -240,9 +242,9 @@ function HealthStrip({
 
   if (isLoading && !stats) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-20 rounded-2xl bg-white ring-1 ring-stone-200/80 animate-pulse" />
+          <div key={i} className="h-16 sm:h-20 rounded-2xl bg-white ring-1 ring-stone-200/80 animate-pulse" />
         ))}
       </div>
     );
@@ -251,8 +253,11 @@ function HealthStrip({
 
   const needsAttention = stats.pending_count > 0 || stats.blocked_count > 0;
 
+  // Always 3 columns: with only 3 tiles a 2+1 split on mobile leaves an
+  // awkward orphan; equal thirds reads cleaner and the tile padding
+  // shrinks below to keep numbers legible at 375px.
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       <StatTile
         label={t('tileInvoices')}
         value={stats.invoice_count}
@@ -296,10 +301,10 @@ function StatTile({
   accent: keyof typeof TILE_ACCENTS;
 }) {
   return (
-    <div className={`rounded-2xl p-4 ${TILE_ACCENTS[accent]}`}>
-      <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-stone-900 tabular-nums">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-stone-500 tabular-nums">{hint}</p>}
+    <div className={`rounded-2xl p-3 sm:p-4 min-w-0 ${TILE_ACCENTS[accent]}`}>
+      <p className="text-[10px] sm:text-[11px] font-semibold text-stone-500 uppercase tracking-wider truncate">{label}</p>
+      <p className="mt-1 text-xl sm:text-2xl font-bold text-stone-900 tabular-nums">{value}</p>
+      {hint && <p className="mt-0.5 text-[11px] sm:text-xs text-stone-500 tabular-nums truncate">{hint}</p>}
     </div>
   );
 }
