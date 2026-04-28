@@ -268,38 +268,6 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
     return await _send_email(to_email, "Resetovanje lozinke — Saldora", html)
 
 
-async def send_invoice_processed_email(
-    to_email: str,
-    first_name: str | None,
-    invoice_number: str,
-    invoice_id: str,
-) -> bool:
-    """Send a notification that an invoice has been verified.
-
-    Args:
-        to_email: Recipient email address.
-        first_name: User's first name.
-        invoice_number: Display number of the invoice.
-        invoice_id: UUID of the invoice (for the detail link).
-
-    Returns:
-        True if email was sent successfully, False otherwise.
-    """
-    greeting = first_name or "korisniče"
-    detail_url = f"{settings.frontend_url}/invoices/{invoice_id}"
-
-    content = f"""<p>Zdravo, <strong>{greeting}</strong>!</p>
-    <p style="color: #6b7280;">
-      Faktura <strong>{invoice_number}</strong> je uspešno
-      obrađena i čeka vaš pregled.
-    </p>
-    {_button_html("Pregledajte fakturu", detail_url)}"""
-
-    html = _build_email_html("Faktura obrađena", content)
-    subject = f"Faktura {invoice_number} je obrađena — Saldora"
-    return await _send_email(to_email, subject, html)
-
-
 async def send_archive_email(
     to_email: str,
     org_name: str,
