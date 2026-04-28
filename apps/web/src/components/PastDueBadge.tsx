@@ -23,7 +23,7 @@ export function PastDueBadge({ invoice, variant = 'full' }: Props) {
   if (variant === 'dot') {
     return (
       <span
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 tabular-nums"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 tabular-nums whitespace-nowrap shrink-0"
         title={title}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
@@ -34,7 +34,7 @@ export function PastDueBadge({ invoice, variant = 'full' }: Props) {
 
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-600/20"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 ring-1 ring-rose-600/20 whitespace-nowrap shrink-0"
       title={title}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
