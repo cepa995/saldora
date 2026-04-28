@@ -15,14 +15,10 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  extractUserFromToken,
-  isSubscriptionApproved,
-  refreshAccessToken,
-} from "@/lib/auth";
+import { isSubscriptionApproved } from "@/lib/auth";
 
 export default function AwaitingApprovalPage() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, refreshUser } = useAuth();
   const t = useTranslations("awaitingApproval");
   const tCommon = useTranslations("common");
   const router = useRouter();
@@ -53,14 +49,15 @@ export default function AwaitingApprovalPage() {
     setChecking(true);
     setFeedback(null);
     try {
-      const token = await refreshAccessToken();
-      if (!token) {
+      // refreshUser updates the AuthContext user state, not just the
+      // tokens — without that, the layout guard at /{slug}/dashboard
+      // would read stale state and bounce us back here.
+      const refreshed = await refreshUser();
+      if (!refreshed) {
         router.replace("/login");
         return;
       }
-      const refreshed = extractUserFromToken(token);
       if (
-        refreshed &&
         isSubscriptionApproved(refreshed.subscriptionStatus) &&
         refreshed.orgSlug
       ) {
