@@ -941,6 +941,7 @@
     "clientSingular": "client",
     "clientPlural": "clients",
     "addClient": "Add client",
+    "addClientShort": "Add",
     "createClient": "Create client",
     "editClient": "Edit client",
     "searchPlaceholder": "Search by name or PIB...",

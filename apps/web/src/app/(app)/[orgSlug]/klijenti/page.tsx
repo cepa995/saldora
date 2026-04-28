@@ -239,7 +239,10 @@ export default function KlijentiPage({ params }: PageProps) {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:shrink-0">
+        {/* Span full row on mobile so MonthPicker and "Dodaj" sit at the
+            edges instead of wrapping into a stacked column above the
+            summary tiles. */}
+        <div className="flex items-center gap-2 w-full justify-between sm:w-auto sm:justify-end sm:shrink-0">
           <MonthPicker value={period} onChange={setPeriod} />
           {hasRole('manager') && (
             <button
@@ -248,12 +251,13 @@ export default function KlijentiPage({ params }: PageProps) {
                 setEditingClient(null);
                 setModalOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors shrink-0 shadow-sm shadow-violet-600/10"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
               </svg>
-              {t('addClient')}
+              <span className="hidden sm:inline">{t('addClient')}</span>
+              <span className="sm:hidden">{t('addClientShort')}</span>
             </button>
           )}
         </div>

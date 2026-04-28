@@ -973,6 +973,7 @@
     "clientSingular": "klijent",
     "clientPlural": "klijenata",
     "addClient": "Dodaj klijenta",
+    "addClientShort": "Dodaj",
     "createClient": "Kreiraj klijenta",
     "editClient": "Izmeni klijenta",
     "searchPlaceholder": "Pretraži po nazivu ili PIB-u...",

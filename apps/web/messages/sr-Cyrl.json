@@ -941,6 +941,7 @@
     "clientSingular": "клијент",
     "clientPlural": "клијената",
     "addClient": "Додај клијента",
+    "addClientShort": "Додај",
     "createClient": "Креирај клијента",
     "editClient": "Измени клијента",
     "searchPlaceholder": "Претражи по називу или ПИБ-у...",
