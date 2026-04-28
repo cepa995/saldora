@@ -160,8 +160,8 @@ export function ClientRules({ clientId }: Props) {
   return (
     <div className="space-y-6">
       {/* Header — "Attach rule" action */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-stone-900">Pravila za ovog klijenta</h2>
           <p className="text-xs text-stone-500 mt-0.5">
             Pravila koja se primenjuju samo na fakture ovog klijenta. Dodajte postojeće pravilo iz biblioteke.
@@ -175,13 +175,16 @@ export function ClientRules({ clientId }: Props) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M12 4v16m8-8H4" />
           </svg>
-          Dodaj pravilo
+          <span className="hidden sm:inline">Dodaj pravilo</span>
+          <span className="sm:hidden">Dodaj</span>
         </button>
       </div>
 
-      {/* Attach picker — inline, not a modal */}
+      {/* Attach picker — inline, not a modal. Cap at ~half the viewport
+          on mobile so a long library doesn't push attached rules below
+          the fold. */}
       {pickerOpen && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 space-y-2">
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 space-y-2 max-h-[60vh] overflow-y-auto">
           <div className="flex items-center justify-between gap-3 mb-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-violet-900">
               Izaberi pravilo iz biblioteke

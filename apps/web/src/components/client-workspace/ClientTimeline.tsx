@@ -197,9 +197,16 @@ export function ClientTimeline({ clientId }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Toolbar: period picker on the left, type filters on the right */}
+      {/* Toolbar: period picker on the left, type filters on the right.
+          Picker stretches full-row on mobile so the chevrons hit the edges
+          and the month label centers naturally; reverts to the compact
+          inline-flex pill at sm+. */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <MonthPicker value={period} onChange={setPeriod} />
+        <MonthPicker
+          value={period}
+          onChange={setPeriod}
+          className="flex w-full sm:inline-flex sm:w-auto"
+        />
         <div className="flex flex-wrap gap-2 sm:ml-auto">
           <FilterPill
             label={tCommon('all')}
@@ -249,7 +256,7 @@ export function ClientTimeline({ clientId }: Props) {
                 {rows.map((e) => (
                   <li
                     key={e.id}
-                    className="flex items-start gap-3 p-3 rounded-xl bg-white border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all"
+                    className="group/event flex items-start gap-3 p-3 rounded-xl bg-white border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all"
                   >
                     <EventIcon type={e.event_type} />
                     <div className="min-w-0 flex-1">
@@ -263,7 +270,8 @@ export function ClientTimeline({ clientId }: Props) {
                     {e.entity_type === 'invoice' && e.entity_id && (
                       <Link
                         href={orgPath(`/invoices/${e.entity_id}`)}
-                        className="self-center text-xs font-medium text-violet-700 hover:text-violet-900 opacity-0 group-hover:opacity-100"
+                        aria-label="Otvori fakturu"
+                        className="self-center p-1.5 -m-1.5 text-violet-700 hover:text-violet-900 lg:opacity-0 lg:group-hover/event:opacity-100 transition-opacity"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

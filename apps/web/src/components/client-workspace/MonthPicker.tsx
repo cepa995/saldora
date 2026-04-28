@@ -12,6 +12,12 @@ import { useTranslations } from 'next-intl';
 interface Props {
   value: string; // "YYYY-MM"
   onChange: (next: string) => void;
+  /**
+   * Override the outer container's display/sizing classes. Defaults to a
+   * compact `inline-flex` pill. Pass `flex w-full sm:inline-flex sm:w-auto`
+   * (or similar) to stretch the picker on narrow viewports.
+   */
+  className?: string;
 }
 
 function parse(value: string): { year: number; month: number } {
@@ -33,7 +39,7 @@ function isFuture(value: string): boolean {
   return year > now.getFullYear() || (year === now.getFullYear() && month > now.getMonth() + 1);
 }
 
-export function MonthPicker({ value, onChange }: Props) {
+export function MonthPicker({ value, onChange, className = 'inline-flex' }: Props) {
   const tCommon = useTranslations('common');
   const tDashboard = useTranslations('dashboard');
   const { year, month } = parse(value);
@@ -41,7 +47,7 @@ export function MonthPicker({ value, onChange }: Props) {
   const disableNext = isFuture(next);
 
   return (
-    <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5">
+    <div className={`${className} items-center bg-gray-100 rounded-lg p-0.5`}>
       <button
         type="button"
         onClick={() => onChange(shift(value, -1))}
@@ -52,7 +58,9 @@ export function MonthPicker({ value, onChange }: Props) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <span className="px-3 text-sm font-semibold text-gray-900 tabular-nums min-w-[110px] text-center">
+      {/* flex-1 lets the label fill the middle when the outer container is
+          full-width; for the default inline-flex use the min-w floor wins. */}
+      <span className="flex-1 px-3 text-sm font-semibold text-gray-900 tabular-nums min-w-[110px] text-center">
         {tDashboard(`monthShort.${month}`)} {year}
       </span>
       <button
