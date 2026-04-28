@@ -25,7 +25,7 @@ export function PastDueRollup({ count, totalRsd, oldestDays }: Props) {
 
   return (
     <section className="rounded-2xl border border-rose-200 bg-rose-50/50 overflow-hidden">
-      <div className="px-6 py-4 border-b border-rose-200/60 flex items-center justify-between gap-3">
+      <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-rose-200/60 flex items-center justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -33,24 +33,28 @@ export function PastDueRollup({ count, totalRsd, oldestDays }: Props) {
             </svg>
           </div>
           <div className="min-w-0">
-            <h2 className="font-semibold text-rose-900">Kasne fakture — pregled</h2>
-            <p className="text-xs text-rose-700/80 mt-0.5">
+            <h2 className="font-semibold text-rose-900 text-sm sm:text-base">Kasne fakture — pregled</h2>
+            {/* Subtitle is informational; the title carries the meaning at 375px. */}
+            <p className="hidden sm:block text-xs text-rose-700/80 mt-0.5">
               Zbir svih neokončanih faktura čiji je rok plaćanja prošao.
             </p>
           </div>
         </div>
         <Link
           href={orgPath('/invoices?past_due=true')}
+          aria-label="Pogledaj sve kasne fakture"
           className="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-rose-700 hover:text-rose-900 transition-colors"
         >
-          Pogledaj sve
+          <span className="hidden sm:inline">Pogledaj sve</span>
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
           </svg>
         </Link>
       </div>
 
-      <div className="grid grid-cols-3 divide-x divide-rose-200/60">
+      {/* Stack vertically below sm — the formatted RSD amount needs the full
+          row width to avoid clipping; the 3-col strip resumes at sm+. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-rose-200/60">
         <Stat label="Ukupno" value={count.toLocaleString('sr-Latn')} />
         <Stat
           label="Iznos"
@@ -77,14 +81,14 @@ function Stat({
   hint?: string;
 }) {
   return (
-    <div className="px-5 py-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-700/70">
+    <div className="px-4 py-3 sm:px-5 sm:py-4 min-w-0">
+      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-700/70">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-bold text-rose-900 tabular-nums leading-tight">
+      <p className="mt-1 text-xl sm:text-2xl font-bold text-rose-900 tabular-nums leading-tight">
         {value}
         {hint && (
-          <span className="ml-1 text-sm font-medium text-rose-700/70 align-baseline">
+          <span className="ml-1 text-xs sm:text-sm font-medium text-rose-700/70 align-baseline">
             {hint}
           </span>
         )}
