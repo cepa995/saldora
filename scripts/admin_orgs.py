@@ -53,6 +53,8 @@ ENVIRONMENTS: dict[str, Environment] = {
 
 APPROVED_STATUSES = ("active", "trial")
 PENDING_STATUSES = ("pending", "canceled")
+# Mirrors PlanTier in apps/api/app/plans.py — keep in sync.
+PLAN_TIERS = ("free", "starter", "pro", "agency")
 
 
 def _psql_argv(env: Environment) -> list[str]:
@@ -135,6 +137,18 @@ def update_status(env: Environment, org_id: str, new_status: str) -> None:
         "\\set org_id '" + org_id.replace("'", "''") + "'\n"
         "UPDATE organizations "
         "SET subscription_status = :'status' "
+        "WHERE id = :'org_id'::uuid;"
+    )
+    run_sql(env, sql)
+
+
+def update_plan(env: Environment, org_id: str, new_plan: str) -> None:
+    """Set the org's plan tier (free / starter / pro / agency)."""
+    sql = (
+        "\\set plan '" + new_plan.replace("'", "''") + "'\n"
+        "\\set org_id '" + org_id.replace("'", "''") + "'\n"
+        "UPDATE organizations "
+        "SET plan = :'plan' "
         "WHERE id = :'org_id'::uuid;"
     )
     run_sql(env, sql)
@@ -225,12 +239,25 @@ def pick_new_status(current: str | None) -> str | None:
     for i, opt in enumerate(options, 1):
         marker = "  ← current" if opt == current else ""
         print(f"    {i}) {opt}{marker}")
-    print("    q) cancel — no change")
+    print("    s) skip — keep current")
     print()
-    choice = _prompt("  Choose: ", allowed=[*("1234"), "q"])
-    if choice == "q":
+    choice = _prompt("  Choose: ", allowed=[*("1234"), "s"])
+    if choice == "s":
         return None
     return options[int(choice) - 1]
+
+
+def pick_new_plan(current: str | None) -> str | None:
+    print("\n  Set plan to:")
+    for i, opt in enumerate(PLAN_TIERS, 1):
+        marker = "  ← current" if opt == current else ""
+        print(f"    {i}) {opt}{marker}")
+    print("    s) skip — keep current")
+    print()
+    choice = _prompt("  Choose: ", allowed=[*("1234"), "s"])
+    if choice == "s":
+        return None
+    return PLAN_TIERS[int(choice) - 1]
 
 
 def main() -> int:
@@ -255,27 +282,44 @@ def main() -> int:
             continue
 
         org = orgs[int(choice) - 1]
+        current_status = org.get("status") or "—"
+        current_plan = org.get("plan") or "—"
         print(
             f"\n  Org: {_color(org['name'], '1')}  "
-            f"(id={org['id']}, current={org.get('status') or '—'})"
+            f"(id={org['id']}, status={current_status}, plan={current_plan})"
         )
+
         new_status = pick_new_status(org.get("status"))
-        if new_status is None:
-            print("  no change.\n")
-            continue
         if new_status == org.get("status"):
-            print("  already that status; skipping.\n")
+            new_status = None  # no actual change
+
+        new_plan = pick_new_plan(org.get("plan"))
+        if new_plan == org.get("plan"):
+            new_plan = None
+
+        if new_status is None and new_plan is None:
+            print("  nothing to change.\n")
             continue
 
-        confirm = _prompt(
-            f"  Set '{org['name']}' → {new_status}? [y/N]: ",
-        ).lower()
+        # Single combined confirmation summarising both changes.
+        change_lines = []
+        if new_status is not None:
+            change_lines.append(f"status: {current_status} → {new_status}")
+        if new_plan is not None:
+            change_lines.append(f"plan:   {current_plan} → {new_plan}")
+        print("\n  Pending changes:")
+        for line in change_lines:
+            print(f"    {line}")
+        confirm = _prompt(f"\n  Apply to '{org['name']}'? [y/N]: ").lower()
         if confirm not in ("y", "yes"):
             print("  cancelled.\n")
             continue
 
-        update_status(env, org["id"], new_status)
-        print(_color(f"  ✓ updated to '{new_status}'\n", "32"))
+        if new_status is not None:
+            update_status(env, org["id"], new_status)
+        if new_plan is not None:
+            update_plan(env, org["id"], new_plan)
+        print(_color("  ✓ applied\n", "32"))
 
 
 if __name__ == "__main__":
