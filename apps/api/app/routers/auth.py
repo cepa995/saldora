@@ -1,5 +1,6 @@
 """Authentication router - login, register, token refresh."""
 
+import os
 import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -41,10 +42,23 @@ from app.security import (
 )
 from app.services import audit
 from app.services.email import (
+    send_admin_new_org_email,
     send_password_reset_email,
     send_verification_email,
     send_welcome_email,
 )
+
+
+def _initial_subscription_status() -> str:
+    """Return the subscription status to assign to a freshly created org.
+
+    Production registrations land in "pending" so an admin must explicitly
+    activate the account before usage. Test runs auto-approve to avoid
+    re-wiring every fixture; the test fixture sets TESTING=1 before app
+    import.
+    """
+    return "active" if os.environ.get("TESTING") == "1" else "pending"
+
 
 router = APIRouter()
 settings = get_settings()
@@ -170,9 +184,18 @@ async def create_organization(
     if body.pib:
         _validate_pib(body.pib)
 
-    # Create organization
+    # Create organization. New orgs land in subscription_status="pending"
+    # so they cannot use mutational app routes until an admin flips the
+    # status to "active"/"trial" (see require_role in app.dependencies).
+    initial_status = _initial_subscription_status()
     org_slug = await _generate_unique_slug(db, body.name)
-    org = Organization(name=body.name, slug=org_slug, pib=body.pib, billing_email=user.email)
+    org = Organization(
+        name=body.name,
+        slug=org_slug,
+        pib=body.pib,
+        billing_email=user.email,
+        subscription_status=initial_status,
+    )
     db.add(org)
     await db.flush()
 
@@ -201,6 +224,19 @@ async def create_organization(
         verification_url = f"{settings.frontend_url}/verify-email?token={verification_token}"
         background_tasks.add_task(
             send_verification_email, user.email, user.first_name, verification_url
+        )
+
+    # Notify the admin mailbox so a human can approve the org. This is the
+    # gate for our manual-payment flow (no card-on-file). No-op if
+    # admin_email is not configured (e.g. local dev without Resend).
+    if initial_status == "pending":
+        background_tasks.add_task(
+            send_admin_new_org_email,
+            org.name,
+            org.pib,
+            user.email,
+            user.first_name,
+            user.last_name,
         )
 
     # Issue fresh tokens with org claim

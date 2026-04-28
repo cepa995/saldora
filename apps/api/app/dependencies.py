@@ -198,19 +198,31 @@ async def require_verified_email(user: User = Depends(get_current_user)) -> User
     return user
 
 
+# Subscription states that grant access to mutational app routes. Anything
+# outside this set (including "pending", "canceled", "expired", null) is
+# blocked by require_role with a clear 403 code so the frontend can show a
+# "your account is awaiting approval" landing page.
+APPROVED_SUBSCRIPTION_STATUSES: frozenset[str] = frozenset({"active", "trial"})
+
+
 def require_role(minimum_role: str) -> Callable:
-    """Create a dependency that enforces a minimum role level and org membership.
+    """Create a dependency that enforces a minimum role, org membership, and
+    an approved subscription on the org.
 
     Args:
         minimum_role: The minimum role required (admin, manager, operator, viewer).
 
     Returns:
         A FastAPI dependency that returns the authenticated user if they have
-        sufficient permissions, otherwise raises 403.
+        sufficient permissions and their org's subscription is approved,
+        otherwise raises 403.
     """
     min_level = ROLE_HIERARCHY[minimum_role]
 
-    async def _check_role(user: User = Depends(get_current_user)) -> User:
+    async def _check_role(
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
         if user.organization_id is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -221,6 +233,26 @@ def require_role(minimum_role: str) -> Callable:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Requires {minimum_role} role or higher",
+            )
+
+        # Subscription gate: new orgs land in "pending" until an admin
+        # flips them to "active"/"trial". This blocks self-service usage
+        # of the app until manual approval (no card-on-file flow yet).
+        sub_result = await db.execute(
+            select(Organization.subscription_status).where(Organization.id == user.organization_id)
+        )
+        sub_status = sub_result.scalar_one_or_none()
+        if sub_status not in APPROVED_SUBSCRIPTION_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "subscription_pending_approval",
+                    "message": (
+                        "Vaš nalog čeka odobrenje administratora. "
+                        "Bićete obavešteni email-om kada bude aktiviran."
+                    ),
+                    "subscription_status": sub_status,
+                },
             )
         return user
 

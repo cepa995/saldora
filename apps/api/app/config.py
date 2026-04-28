@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     resend_from_email: str = "noreply@saldora.rs"
     frontend_url: str = "http://localhost:3000"
+    # Mailbox that receives admin notifications (e.g. new registrations).
+    # Empty string disables admin notifications.
+    admin_email: str = ""
 
     # NBS (National Bank of Serbia) Exchange Rates
     nbs_api_url: str = "https://kurs.resenje.org/api/v1"

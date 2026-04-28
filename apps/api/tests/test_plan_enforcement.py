@@ -96,8 +96,7 @@ async def test_agency_user_can_access_rules(client: AsyncClient):
 
 
 @patch("app.routers.invoices.upload_document", return_value="fake/key.pdf")
-@patch("app.services.email.send_invoice_processed_email", return_value=None)
-async def test_free_user_invoice_limit(mock_email, mock_upload, client: AsyncClient):
+async def test_free_user_invoice_limit(mock_upload, client: AsyncClient):
     """Free user gets 402 after exceeding 10 invoice limit."""
     headers = await _create_user_with_plan(client, "free-quota@test.com", "free")
     png_bytes = _make_png()
@@ -126,8 +125,7 @@ async def test_free_user_invoice_limit(mock_email, mock_upload, client: AsyncCli
 
 
 @patch("app.routers.invoices.upload_document", return_value="fake/key.pdf")
-@patch("app.services.email.send_invoice_processed_email", return_value=None)
-async def test_starter_user_blocked_at_limit(mock_email, mock_upload, client: AsyncClient):
+async def test_starter_user_blocked_at_limit(mock_upload, client: AsyncClient):
     """Starter user gets 402 after exceeding 100 invoice limit."""
     headers = await _create_user_with_plan(client, "starter-quota@test.com", "starter")
     png_bytes = _make_png()

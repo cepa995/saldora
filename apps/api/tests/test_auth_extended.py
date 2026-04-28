@@ -565,3 +565,96 @@ async def test_login_before_org_creation_token_has_empty_org(client: AsyncClient
     payload = decode_token(login_resp.json()["access_token"])
     # No org yet — claim should be empty string or None
     assert not payload.get("org")
+
+
+# ---------------------------------------------------------------------------
+# Subscription approval gate (require_role)
+# ---------------------------------------------------------------------------
+
+
+async def _force_org_status(test_engine, org_id: str, status_value: str) -> None:
+    """Override an org's subscription_status. Tests run with TESTING=1 so
+    new orgs auto-approve to "active"; this helper drops one back into
+    "pending" (or any other state) to exercise the gate."""
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from app.models.organization import Organization
+
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        await session.execute(
+            update(Organization)
+            .where(Organization.id == org_id)
+            .values(subscription_status=status_value)
+        )
+        await session.commit()
+
+
+async def test_pending_org_blocked_from_require_role_routes(client: AsyncClient, test_engine):
+    """Org in subscription_status='pending' gets 403 from any require_role
+    endpoint with code 'subscription_pending_approval'."""
+    from uuid import uuid4
+
+    from app.auth import decode_token
+
+    uid = uuid4().hex[:8]
+    email = f"auth-pending-{uid}@example.com"
+    headers = await _register_with_org(client, email, f"Pending Org {uid}")
+
+    # Drop the auto-approved org back to pending.
+    org_id = decode_token(headers["Authorization"].removeprefix("Bearer "))["org"]
+    await _force_org_status(test_engine, org_id, "pending")
+
+    # Any require_role endpoint should now 403. /api/v1/clients (list) is a
+    # cheap, side-effect-free target gated by require_role("viewer").
+    # /audit-logs uses require_role("admin") with no feature gate, so it
+    # exercises the subscription gate cleanly (the registered user is the
+    # org's admin by default).
+    resp = await client.get("/api/v1/audit-logs", headers=headers)
+    assert resp.status_code == 403, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "subscription_pending_approval"
+    assert detail["subscription_status"] == "pending"
+
+
+async def test_canceled_org_blocked_from_require_role_routes(client: AsyncClient, test_engine):
+    """Anything outside {'active', 'trial'} is treated as not-approved,
+    including 'canceled' (used by the retention worker)."""
+    from uuid import uuid4
+
+    from app.auth import decode_token
+
+    uid = uuid4().hex[:8]
+    email = f"auth-canceled-{uid}@example.com"
+    headers = await _register_with_org(client, email, f"Canceled Org {uid}")
+
+    org_id = decode_token(headers["Authorization"].removeprefix("Bearer "))["org"]
+    await _force_org_status(test_engine, org_id, "canceled")
+
+    # /audit-logs uses require_role("admin") with no feature gate, so it
+    # exercises the subscription gate cleanly (the registered user is the
+    # org's admin by default).
+    resp = await client.get("/api/v1/audit-logs", headers=headers)
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "subscription_pending_approval"
+
+
+async def test_trial_org_passes_require_role(client: AsyncClient, test_engine):
+    """'trial' is an approved status alongside 'active'."""
+    from uuid import uuid4
+
+    from app.auth import decode_token
+
+    uid = uuid4().hex[:8]
+    email = f"auth-trial-{uid}@example.com"
+    headers = await _register_with_org(client, email, f"Trial Org {uid}")
+
+    org_id = decode_token(headers["Authorization"].removeprefix("Bearer "))["org"]
+    await _force_org_status(test_engine, org_id, "trial")
+
+    # /audit-logs uses require_role("admin") with no feature gate, so it
+    # exercises the subscription gate cleanly (the registered user is the
+    # org's admin by default).
+    resp = await client.get("/api/v1/audit-logs", headers=headers)
+    assert resp.status_code == 200, resp.text

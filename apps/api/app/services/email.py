@@ -268,6 +268,71 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
     return await _send_email(to_email, "Resetovanje lozinke — Saldora", html)
 
 
+async def send_admin_new_org_email(
+    org_name: str,
+    org_pib: str | None,
+    user_email: str,
+    user_first_name: str,
+    user_last_name: str,
+) -> bool:
+    """Notify the admin mailbox that a new organization has registered.
+
+    The admin must approve the organization (flip subscription_status to
+    "active" or "trial") before the user can use the app. This is the
+    gate manual-payment customers go through.
+
+    Args:
+        org_name: Name of the newly created organization.
+        org_pib: PIB of the organization, if provided at signup.
+        user_email: Email of the registering user (now the org admin).
+        user_first_name: First name of the registering user.
+        user_last_name: Last name of the registering user.
+
+    Returns:
+        True if email was sent successfully, False otherwise (or if
+        admin_email is not configured).
+    """
+    if not settings.admin_email:
+        logger.info("admin_email not configured; skipping new-org notification")
+        return False
+
+    pib_row = (
+        f"""<tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">PIB</td>
+        <td style="padding: 8px 0; font-weight: 500; text-align: right;">{org_pib}</td>
+      </tr>"""
+        if org_pib
+        else ""
+    )
+
+    content = f"""<p>Nova organizacija je registrovana i čeka odobrenje.</p>
+
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Organizacija</td>
+        <td style="padding: 8px 0; font-weight: 500; text-align: right;">{org_name}</td>
+      </tr>
+      {pib_row}
+      <tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Korisnik</td>
+        <td style="padding: 8px 0; font-weight: 500; text-align: right;">{user_first_name} {user_last_name}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Email</td>
+        <td style="padding: 8px 0; font-weight: 500; text-align: right;">{user_email}</td>
+      </tr>
+    </table>
+
+    <p style="color: #6b7280; font-size: 13px;">
+      Da odobrite, postavite <code>subscription_status</code> organizacije
+      na <code>active</code> ili <code>trial</code> u bazi.
+    </p>"""
+
+    html = _build_email_html("Nova registracija — čeka odobrenje", content)
+    subject = f"Nova registracija: {org_name} — Saldora"
+    return await _send_email(settings.admin_email, subject, html)
+
+
 async def send_archive_email(
     to_email: str,
     org_name: str,
