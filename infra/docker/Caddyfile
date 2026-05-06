@@ -4,7 +4,15 @@
 :80 {
 	@api host api.saldora.rs
 	handle @api {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			# Cloudflare's edge is always HTTPS, but CF→Caddy is plain
+			# HTTP (Flexible SSL mode). Without overriding this header,
+			# FastAPI sees scheme=http and any 307 trailing-slash
+			# redirect builds a Location: http://… that the browser
+			# blocks as mixed content. Forcing https unblocks every
+			# `@router.get("/")` list endpoint (rules, clients, etc.).
+			header_up X-Forwarded-Proto https
+		}
 	}
 
 	handle {
