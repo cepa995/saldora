@@ -56,5 +56,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application.
+# --proxy-headers makes uvicorn honour X-Forwarded-Proto/For from Caddy
+# so request.url.scheme reflects the original https scheme. Without it,
+# FastAPI's auto-307 trailing-slash redirects would build Location
+# headers with http:// and the browser blocks them as mixed content.
+# --forwarded-allow-ips=* trusts the header from any upstream IP — safe
+# because the API container's port 8000 is only reachable from the
+# docker network, not the public internet.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
