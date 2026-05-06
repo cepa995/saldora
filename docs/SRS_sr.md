@@ -1,9 +1,24 @@
 # Specifikacija softverskih zahteva (SRS)
-# FakturaAI - Platforma za obradu faktura pomoću veštačke inteligencije
+# Saldora — Sloj inteligencije za srpske računovodstvene agencije sa ugostiteljskim klijentima
 
-**Verzija:** 2.9
-**Datum:** Mart 2026
-**Status:** Aktivan
+**Verzija:** 4.0
+**Datum:** 2026-04-29
+**Status:** Aktivan (post-pivot izvor istine)
+
+---
+
+## Trenutna teza (post-pivot)
+
+Saldora je **sloj inteligencije za srpske računovodstvene agencije čiji su klijenti ugostiteljski objekti** — restorani, kafići, barovi, brze hrane, ketering. Klin je dvostruk:
+
+1. **OCR papirnih faktura sa mnogo stavki** — distributeri pića, suvoroba, sveža hrana, meso, sredstva za čišćenje, održavanje opreme — vrste faktura koje i dalje stižu u papirnoj formi ili kao PDF prilozi e-pošte i koje SEF (eFaktura) ne pokriva i verovatno neće uskoro pokriti.
+2. **Generisanje zakonom propisanih ugostiteljskih obrazaca** iz ekstrahovanih stavki — kalkulacije, šank lista, cenovnik, KEP, popis. Danas agencije ovo rade ručno u Excel-u.
+
+Kupac je **vlasnik agencije**; svakodnevni korisnici su **agencijski knjigovođe** koji vode 30–40 ugostiteljskih klijenata, pri čemu svaki klijent generiše 20–40 faktura mesečno. Saldora je pipeline od papirne fakture na ulazu do potpuno klasifikovanih, zakonski tačnih podataka na izlazu, koje predaje **MiniMax-u** (dominantni srpski cloud računovodstveni proizvod) za glavnu knjigu i finansijsko izveštavanje. **Saldora ne zamenjuje MiniMax.** Saldora ne radi bankarsko usaglašavanje, praćenje plaćanja niti knjiženja u glavnu knjigu.
+
+Originalna pozicija ovog dokumenta — generička obrada faktura — je zamenjena ugostiteljskom tezom. Sposobnosti koje su bile generičke (multi-tenant model, OCR + LLM ekstrakcija, izvoz, automatizovana pravila, upravljanje klijentima) i dalje rade i u opsegu su; jednostavno više nisu primarno marketinški ili produktni okvir. Sve što je bilo specifično za paušalce, oblikovano kao generički B2B portal ili nosivo na SEF-u je otpisano ili odloženo (vidi Odeljak 4.17, "Van obima / Otpisano").
+
+Za strateški narativ vidi [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md). Za status milestoneova vidi [`saldora-implementation-plan.md`](saldora-implementation-plan.md).
 
 ---
 
@@ -13,13 +28,18 @@
 2. [Opšti opis](#2-opšti-opis)
 3. [Arhitektura sistema](#3-arhitektura-sistema)
 4. [Funkcionalni zahtevi](#4-funkcionalni-zahtevi)
+   - 4.1 [Autentifikacija i autorizacija korisnika](#41-autentifikacija-i-autorizacija-korisnika)
    - 4.9 [Poslovna logika i pravila validacije](#49-poslovna-logika-i-pravila-validacije)
    - 4.10 [Sloj računovodstvene namere](#410-sloj-računovodstvene-namere)
    - 4.11 [Motor za automatizaciju pravila](#411-motor-za-automatizaciju-pravila)
    - 4.12 [Upravljanje klijentima (Agencija)](#412-upravljanje-klijentima-agencija)
    - 4.13 [Izveštaji o fakturama (Izveštaji)](#413-izveštaji-o-fakturama-izveštaji)
+   - 4.14 [Email ingestion pipeline (planirano)](#414-email-ingestion-pipeline-planirano)
    - 4.15 [Katalog proizvoda](#415-katalog-proizvoda)
-   - 4.16 [Sistem podrške u aplikaciji](#416-sistem-podrške-u-aplikaciji)
+   - 4.16 [Sistem podrške u aplikaciji (planirano)](#416-sistem-podrske-u-aplikaciji-planirano)
+   - 4.17 [Van obima / Otpisani moduli](#417-van-obima--otpisani-moduli)
+   - 4.18 [Klijent-prvi UI (M19)](#418-klijent-prvi-ui-m19)
+   - 4.19 [Ugostiteljski zakonski obrasci (M20, odloženo)](#419-ugostiteljski-zakonski-obrasci-m20-odlozeno)
 5. [Nefunkcionalni zahtevi](#5-nefunkcionalni-zahtevi)
 6. [Tehnološki stek](#6-tehnološki-stek)
 7. [Dizajn baze podataka](#7-dizajn-baze-podataka)
@@ -40,17 +60,25 @@
 
 ### 1.1 Svrha
 
-Ovaj dokument Specifikacije softverskih zahteva (SRS) pruža sveobuhvatan opis platforme FakturaAI - sistema za obradu faktura pomoću veštačke inteligencije, dizajniranog specifično za srpsko tržište. Dokument opisuje funkcionalne i nefunkcionalne zahteve, arhitekturu sistema i tehničke specifikacije.
+Ovaj dokument Specifikacije softverskih zahteva (SRS) je opis-izvor-istine platforme Saldora — sloja inteligencije za srpske računovodstvene agencije koje opslužuju ugostiteljske klijente. Dokument opisuje funkcionalne i nefunkcionalne zahteve, arhitekturu sistema i tehničke specifikacije onako kako proizvod postoji danas (post-pivot, april 2026).
+
+Ovo je živi dokument. Sadržaj koji je opisivao pre-pivot generičku B2B poziciju je ili napisan iznova kako bi odražavao ugostiteljsku tezu ili eksplicitno označen kao zamenjen.
 
 ### 1.2 Obim
 
-FakturaAI je SaaS platforma koja omogućava računovođama, računovodstvenim agencijama i preduzećima u Srbiji da:
+Saldora je SaaS platforma koja omogućava srpskim računovodstvenim agencijama sa ugostiteljskim portfeljima (restorani, kafići, barovi) da:
 
-- Automatski ekstrahuju podatke iz faktura pomoću AI-pokrenutog OCR-a
+- Primaju papirne fakture, fiskalne isečke i PDF priloge e-pošte u velikom obimu
+- Automatski ekstrahuju strukturirane podatke (zaglavlja **i** stavke) koristeći vision-language OCR pipeline plus LLM sloj za ekstrakciju
 - Obrađuju dokumenta na ćiriličnom i latiničnom pismu
-- Verifikuju poslovne subjekte kroz integraciju sa APR-om (Agencija za privredne registre)
-- Izvezuju strukturirane podatke u razne formate (Excel, CSV, JSON)
-- Efikasno upravljaju i organizuju podatke o fakturama
+- Normalizuju opise stavki na kanonske identitete proizvoda kroz katalog proizvoda po organizaciji
+- Upravljaju klijentima (agencijskim ugostiteljskim subjektima), dodeljuju svaku fakturu jednom klijentu i pregledaju portfelj agencije na prvi pogled
+- Primenjuju pravila automatizacije po klijentu i na nivou organizacije (tip dokumenta, PDV tretman, predloženi konto)
+- Generišu nabavnu inteligenciju (kalkulacija, RUC, troškovi po kategoriji, dnevna evidencija robe) povrh normalizovanih stavki
+- Izvoze strukturirane podatke u MiniMax (XML fajl ili REST API push), XLSX, CSV, JSON
+- Generišu mesečne arhive (ZIP sa registrom faktura, PDV pregledom, audit tragom, originalnim PDF-ovima) za retenciju
+
+Namerni ne-ciljevi sistema dokumentovani su u Odeljku 4.17.
 
 ### 1.3 Definicije, akronimi i skraćenice
 
@@ -74,11 +102,17 @@ FakturaAI je SaaS platforma koja omogućava računovođama, računovodstvenim ag
 
 ### 1.4 Ciljna publika
 
-- Samostalni računovođe
-- Računovodstvene agencije
-- Mala i srednja preduzeća (MSP)
-- Velika preduzeća sa velikim obimom faktura
-- Finansijska odeljenja
+**Primarno:**
+- Računovodstvene agencije čiji portfelji uključuju ugostiteljske klijente (restorani, kafići, barovi, ketering, brza hrana). Kupac = vlasnik agencije; svakodnevni korisnici = agencijski knjigovođe.
+
+**Sekundarno (i dalje podržano, ali više nije primarni pravac):**
+- Samostalni računovođe i male/srednje računovodstvene prakse koje vode mešovite portfelje.
+- Ugostiteljska MSP koja vode sopstveno knjigovodstvo interno (mali deo tržišta).
+
+**Uklonjeno iz ciljne publike:**
+- Paušalci kao persona — paušal modul je vraćen; MiniMax-ov dedikovani paušal proizvod opslužuje taj segment.
+- Krajnji klijenti agencija (npr. vlasnik restorana koji direktno koristi Saldoru) — vidi "bez klijent portala" u Odeljku 4.17. Agencija ostaje jedina klasa korisnika.
+- Generički enterprise B2B korisnici (velike korporacije sa hiljadama faktura mesečno) — nije klin; ove kompanije primaju većinu faktura preko SEF-a i imaju ustaljene tokove rada.
 
 ### 1.5 Konvencije dokumenta
 
@@ -92,11 +126,11 @@ FakturaAI je SaaS platforma koja omogućava računovođama, računovodstvenim ag
 
 ### 2.1 Perspektiva proizvoda
 
-FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integracije:
+Saldora funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integracije:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FakturaAI platforma                        │
+│                         Saldora platforma                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  Veb aplik. │  │  REST API   │  │    AI procesor           │  │
@@ -132,25 +166,25 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 
 ### 2.3 Klase korisnika i karakteristike
 
-#### 2.3.1 Samostalni računovođa
-- Obrađuje 50-200 faktura mesečno
-- Potreban mu je jednostavan, intuitivan interfejs
-- Osetljiv na cenu
-- Ograničeno tehničko znanje
+#### 2.3.1 Vlasnik agencije (kupac)
+- Donosi odluku o kupovini i upravlja pretplatom
+- Tipična agencija vodi 30–40 ugostiteljskih klijenata (restorani, kafići, barovi)
+- Ocenjuje proizvod prema uštedi vremena na knjigovodstvenim poslovima i izveštajima
+- Konfiguriše tim, planove, integraciju sa MiniMax-om
 
-#### 2.3.2 Računovodstvena agencija
-- Obrađuje 500-5000 faktura mesečno
-- Upravlja sa više klijenata putem funkcije Upravljanje klijentima (kreiranje, izmena, deaktivacija)
-- Fakture se automatski dodeljuju klijentima na osnovu PIB-a posle OCR ekstrakcije
-- Selektor klijenata u bočnom meniju za kontekstualno filtriranje faktura
-- Zahteva grupnu obradu
-- Potreban API pristup za integracije
+#### 2.3.2 Agencijski knjigovođa (svakodnevni korisnik)
+- Vodi knjigovodstvo za nekoliko ugostiteljskih klijenata istovremeno
+- Svaki klijent generiše 20–40 faktura mesečno (papirnih, PDF priloga e-pošte, povremeno SEF)
+- Otprema fakture, verifikuje OCR ekstrakciju, primenjuje pravila, generiše izveštaje (kalkulacija, šank lista, KEP)
+- Radi u Klijent-prvi UI-u (vidi 4.18): prelazi između radnih tabli pojedinačnih klijenata
+- Zahteva pouzdano izdvajanje stavki, brze masovne tokove i jasne tragove revizije
 
-#### 2.3.3 Korporativni korisnik
-- Obrađuje 5000+ faktura mesečno
-- Zahteva prilagođene integracije
-- Potrebne SLA garancije
-- Zahteva dedicirani suport
+#### 2.3.3 Sekundarni korisnik — interno knjigovodstvo ugostiteljskog MSP-a
+- Mali ugostiteljski subjekti koji rade sopstveno knjigovodstvo
+- Manji obim (jedna lokacija, 20–40 faktura mesečno)
+- I dalje podržan, ali nije primarni pravac
+
+> **Napomena:** Paušalci, krajnji klijenti agencija (klijent portal) i generički enterprise B2B korisnici **NISU** u opsegu (vidi 1.4 i 4.17).
 
 ### 2.4 Okruženje rada
 
@@ -333,6 +367,36 @@ FakturaAI funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integ
 | Menadžer | Obrada faktura, izvoz, pregled tima |
 | Operater | Obrada faktura, izvoz |
 | Čitalac | Pristup za čitanje obrađenih faktura |
+
+#### FR-4.1.5 Ručno odobrenje naloga (registracija → pristup)
+
+| ID | FR-4.1.5 |
+|----|----------|
+| **Opis** | Nove organizacije MORAJU da slete u `subscription_status = 'pending'` i ne smeju da pristupaju funkcionalnim endpointima dok admin ručno ne odobri nalog |
+| **Sprovođenje** | Deljena `require_role(...)` zavisnost vraća 403 sa telom `{"code": "subscription_pending_approval", "subscription_status": "pending"}` kad god korisnik pripada organizaciji čiji je `subscription_status` jednak `pending` |
+| **Frontend** | Korisnici sa pending statusom se rutiraju na `/awaiting-approval`, koji povlači user info svakih ~10 sekundi; čim se status promeni u `active` ili `trial`, AuthContext se osvežava i korisnik prelazi u aplikaciju |
+| **Admin obaveštenje** | Pri registraciji, Resend e-mail se šalje na adresu iz `ADMIN_EMAIL` sa nazivom organizacije, slug-om, kontaktom i e-mailom registranta |
+| **Mehanizam odobrenja** | Interaktivni skript `scripts/admin_orgs.py` (pokreće Saldora osoblje preko SSH-a) lista organizacije na čekanju i dozvoljava operateru da promeni `subscription_status` u `active` ili `trial` i izabere tier plana. U ovoj fazi kompanije nema koraka sa karticom na fajlu; naplata se obrađuje vanlinijski preko Paddle-a kada organizacija postane aktivna. |
+| **Razlog** | Pre faze prihoda, svaka registracija se ručno proverava da bi se izbegle zloupotrebe i zadržao fokus na agencijskim kupcima. Ovo je namerno ručno dok se self-serve onboarding ne poveže sa Paddle Checkout-om. |
+
+**Dozvoljene vrednosti `subscription_status`:**
+
+| Vrednost | Značenje |
+|----------|----------|
+| `pending` | Novoregistrovana organizacija na čekanju admin odobrenja (default za nove registracije) |
+| `trial` | Odobrena, aktivna u trial periodu |
+| `active` | Odobrena, plaća ili je u evaluaciji |
+| `canceled` | Pretplata otkazana od strane korisnika/admina; pristup obično ukinut na kraju perioda |
+| `expired` | Trial završen bez konverzije ili pretplata istekla |
+| `NULL` | Legacy vrednost za organizacije kreirane pre nego što je kolona postojala; gating logika je tretira kao `active` i backfilluje pri pristupu |
+
+#### FR-4.1.6 Pozivnice za tim i zahtevi za pristup
+
+| ID | FR-4.1.6 |
+|----|----------|
+| **Opis** | Admini MORAJU moći da pozovu članove tima preko e-maila; pozvani prihvata preko tokenizovanog linka |
+| **Modeli** | `invitations` (admin → e-mail, uloga, token, expires_at), `join_requests` (korisnik traži pristup poznatoj organizaciji preko e-mail podudaranja, zahteva odobrenje) |
+| **Limiti** | Plan-definisana ograničenja broja sedišta |
 
 ### 4.2 Otpremanje i upravljanje fakturama
 
@@ -725,7 +789,7 @@ VERIFIKUJ_PRORAČUNE(faktura):
 3. Nekritično polje nedostaje (npr. adresa kupca)
 ### 4.10 Sloj računovodstvene namere (AccountingIntent)
 
-Ovaj odeljak definiše **AccountingIntent** - kritičan domenski model koji se nalazi između sirove ekstrakcije fakture i izvoza u računovodstveni sistem. Ovo transformiše FakturaAI iz "OCR alata" u "platformu za računovodstvenu inteligenciju".
+Ovaj odeljak definiše **AccountingIntent** - kritičan domenski model koji se nalazi između sirove ekstrakcije fakture i izvoza u računovodstveni sistem. Ovo transformiše Saldoru iz "OCR alata" u "platformu za računovodstvenu inteligenciju".
 
 #### 4.10.1 Pregled
 
@@ -1452,13 +1516,32 @@ Ovaj odeljak definiše funkcionalnost Upravljanja klijentima koja je dostupna is
 | **Bez filtera** | Kada je `client_id` izostavljen, vraćaju se sve fakture organizacije |
 | **Autorizacija** | Klijent MORA pripadati organizaciji korisnika koji šalje zahtev |
 
-#### FZ-4.12.4 Selektor klijenata u bočnom meniju
+#### FZ-4.12.4 Selektor klijenata u bočnom meniju (zamenjeno u M19)
 | ID | FZ-4.12.4 |
 |----|-----------|
-| **Opis** | Sistem MORA da obezbedi selektor klijenata u bočnom meniju za korisnike na Agency planu |
-| **Ponašanje** | Izborom klijenta filtriraju se lista faktura i kontrolna tabla na fakture tog klijenta |
-| **Podrazumevano** | "Svi klijenti" prikazuje sve fakture svih klijenata |
-| **Vidljivost** | Selektor je vidljiv samo kada je `CLIENT_MANAGEMENT` oznaka funkcionalnosti omogućena |
+| **Opis** | **Zamenjeno u M19.** Bočni selektor klijenata je uklonjen u korist klijent-prvi UI-a (vidi 4.18). Pregled portfelja (`/pregled`) i radne table klijenata (`/klijenti/{id}`) sada zamenjuju filter u bočnom meniju. |
+| **Status** | Otpisano; ne implementirati u novom radu |
+
+#### FR-4.12.5 Log događaja klijenta (client_events)
+
+| ID | FR-4.12.5 |
+|----|-----------|
+| **Opis** | Append-only log događaja po klijentu, koji napaja tab "Hronologija" u radnoj tabli klijenta (vidi 4.18) |
+| **Model** | Tabela `client_events` — `id`, `organization_id`, `client_id`, `event_type`, `entity_type`, `entity_id`, `metadata` (JSONB), `created_by`, `created_at` |
+| **Tipovi događaja** | `invoice_uploaded`, `invoice_verified`, `invoice_exported`, `accounting_intent_classified`, `rule_fired`, `client_assigned` |
+| **Pisanje** | Servisni sloj upisuje događaje pri otpremanju fakture, verifikaciji, izvozu, klasifikaciji namere, paljenju pravila i dodeli klijentu. Neuspeh upisa se loguje ali ne prekida glavni tok. |
+| **Čitanje** | Hronologija tab u workspace-u klijenta (`/klijenti/{id}`) prikazuje paginirane događaje sortirane po `created_at DESC` |
+| **Indeksi** | `idx_client_events_org_client (organization_id, client_id, created_at DESC)`, `idx_client_events_type (event_type)`, `idx_client_events_entity (entity_type, entity_id)` |
+
+#### FR-4.12.6 Pravila po klijentu (rule_client_associations)
+
+| ID | FR-4.12.6 |
+|----|-----------|
+| **Opis** | Pravila automatizacije mogu biti globalna (svi klijenti) ili vezana za određenog klijenta |
+| **Model** | Join tabela `rule_client_associations` — `rule_id`, `client_id`, `created_at` |
+| **Semantika** | Pravilo bez asocijacija se primenjuje na sve klijente organizacije; pravilo sa jednom ili više asocijacija se primenjuje samo na te klijente |
+| **UI** | Pravila se mogu kreirati direktno iz radne table klijenta (CTA "Kreiraj pravilo za ovog klijenta") sa pre-popunjenom asocijacijom; org-wide pravila se uređuju iz globalne stranice `Pravila` u bočnom meniju |
+| **Indeksi** | `idx_rca_client (client_id)` |
 
 ---
 
@@ -1621,6 +1704,16 @@ Stranica `/izvestaji` je objedinjeni centar za sve izveštaje, upravljanje katal
 
 ---
 
+### 4.14 Email Ingestion Pipeline (planirano, još nije implementirano)
+
+| ID | FR-4.14 |
+|----|---------|
+| **Status** | Planirano. Tabele i kolone postoje u nekim migracijama, ali pipeline nije povezan u produkciji. |
+| **Opis** | Inbox po klijentu (npr. `klijent-slug@in.saldora.rs`) prima fakture kao priloge e-pošte; sistem ekstrahuje priloge, klasifikuje ih kao fakture i ubacuje ih u redovni OCR pipeline sa ispravnom dodelom klijenta. |
+| **Razlog za odlaganje** | Vlasnici agencija trenutno koriste zajedničke inbox-e ili upload-e; potreba za dedikovanim email ingestion-om je realno potvrđena tek nakon razgovora sa pilot agencijama. Specifikacija će se revidirati pre implementacije. |
+
+---
+
 ### 4.15 Katalog proizvoda
 
 Ovaj odeljak definiše funkcionalnost Kataloga proizvoda, koja obezbeđuje kanonički spisak proizvoda za tačno praćenje zaliha, analizu marže i poređenje cena — pre svega za ugostiteljske i hotelijerske klijente.
@@ -1682,7 +1775,9 @@ Upravljanje katalogom proizvoda je dostupno iz grupe "Upravljanje" na stranici `
 
 ---
 
-### 4.16 Sistem podrške u aplikaciji
+### 4.16 Sistem podrške u aplikaciji (planirano)
+
+> **Status:** Planirano. Šema i osnovni endpoint-i su definisani, ali UI sistem podrške nije povezan u produkciji. Trenutno se podrška obrađuje preko e-pošte; ovaj odeljak ostaje kao referentna specifikacija za buduću implementaciju.
 
 Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju tikete sa stranice Podrška, dodaju fajlove i prate status. Administratori upravljaju svim tiketima iz posebnog admin panela.
 
@@ -1720,6 +1815,143 @@ Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju t
 #### 4.16.5 Obaveštenja
 - Bedž u bočnoj traci za nepročitane odgovore (klijent) i otvorene tikete (admin)
 - Opciono email obaveštenje pri admin odgovoru i novom tiketu
+
+---
+
+### 4.17 Van obima / Otpisani moduli
+
+Ovaj odeljak konsoliduje sve što je eksplicitno uklonjeno, odloženo ili je trajno van obima. Postoji da budući saradnici ne bi trošili vreme ponavljajući već donete odluke.
+
+| Funkcionalnost | Status | Razlog |
+|----------------|--------|--------|
+| **Paušal modul** (M14) — KPO knjiga, paušalci kao kupci, polje `direction` na fakturama, `client_type`, tabela `customers`, `invoice_counters`, paušal-specifični ruteri | **Otpisano, kod vraćen** | Paušalci nisu ciljno tržište. MiniMax-ov dedikovani paušal proizvod opslužuje taj segment dobro; takmičenje tu je višegodišnja borba koju ne možemo dobiti. |
+| **Klijent portal** (krajnji klijenti šalju dokumente direktno) | **Otpisano** | Vlasnici ugostiteljskih objekata nisu portal korisnici. Agencija danas prima dokumente preko e-pošte/WhatsApp-a/papira i taj kanal nije Saldora-ina površina. Agencija ostaje jedina klasa korisnika. |
+| **Compliance Watchdog** (M18) — zakazana evaluacija pravila koja proizvodi alarme | **Otpisano** | Razmišljanje iz paušal ere. Pravila i dalje pucaju na događaje; zakazani watchdog ne dodaje vrednost ugostiteljskim agencijama. |
+| **Strani reverse-charge kao samostalan modul** (M15) | **Trajno odloženo** | Postojeća NBS konverzija + AccountingIntent već adekvatno opslužuju mali obim stranih ugostiteljskih faktura. Vratiti se samo ako agencije prijave kao stvarnu bol. |
+| **Praćenje plaćanja** (FR-4.7.4 u ranijim verzijama) — `payment_status`, `paid_amount`, `paid_date`, otvorene stavke, izveštaji starenja | **Uklonjeno** | Saldora je samo sloj inteligencije. Plaćanje pripada MiniMax-u. |
+| **Webhook obaveštenja** (FR-4.8.2 u ranijim verzijama) | **Deprioritetizovano** | Webhookovi postaju korisni tek kada je ceo radni tok API-driven sa kupčeve strane; nismo tu. Paddle webhookovi za naplatu ostaju u opsegu. |
+| **SEF integracija kao nosivi izvor podataka** (M-SEF, ranije Odeljak 12.5/12.6) | **Deprioritetizovano** | Klin su papirne fakture koje SEF ne pokriva. SEF ingestion kao sekundarni izvor podataka ostaje van-milestone aktivnost ali nije ni na jednom aktivnom milestone-u i uklonjen je iz ovog SRS-a kao prvoklasni odeljak. |
+| **Bankarsko usaglašavanje, knjiženja u glavnu knjigu, povezivanje plaćanja** | **Trajno van obima** | MiniMax to obrađuje. Saldora predaje podatke; ne vodi knjige. |
+| **Retreniranje modela / fine-tuning na korisničkim podacima** | **Trajno van obima** | Samo pre-trenirani modeli (dots.ocr za OCR, Claude Haiku za ekstrakciju). Logovi korekcija (Odeljak 9.8) postoje za monitoring kvaliteta, ne za treniranje. |
+| **Predprocesiranje slike za VLM** (deskewing, binarizacija, podešavanje kontrasta pre slanja u dots.ocr) | **Onemogućeno** | dots.ocr najbolje radi na originalnim slikama u boji. Pipeline za predprocesiranje koji je postojao za tradicionalne OCR engine je preskočen za VLM put. |
+| **EasyOCR fallback** kada dots.ocr ne uspe | **Uklonjen** | Alternativni OCR engine ne pružaju dovoljnu tačnost na srpskim ćiriličnim/latiničnim dokumentima. Ako dots.ocr ne uspe, faktura se markira za ručni pregled — bez automatskog fallback engine-a. |
+| **Stripe integracija** | **Trajno van obima** | Stripe nije dostupan u Srbiji. Paddle je Merchant of Record. Bilo koje reference na Stripe u starijim verzijama nisu aktuelne (ne Stripe). |
+| **SEF kao nosivi tok** | **Deprioritetizovano** | Vidi gore. SEF nema webhook podršku — samo polling. Zbog ugostiteljske teze ovaj modul više nije nosivi. |
+
+---
+
+### 4.18 Klijent-prvi UI (M19)
+
+Ovaj odeljak definiše klijent-prvi UI površinu uvedenu u milestone M19. Prethodni feature-indeksiran UI (top-level `Fakture`, `Klijenti`, `Izveštaji`, `Pravila` u bočnom meniju sa globalnim listama filtriranim po klijentu) je **zamenjen** klijent-osa UI-om u kojem agencija prvo bira klijenta i pronalazi sve sposobnosti po klijentu unutar tog klijentskog workspace-a.
+
+Pun UX obrazloženje živi u [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md), Deo Treći. Ovaj odeljak hvata samo površinu na nivou zahteva.
+
+#### FR-4.18.1 Pregled portfelja (`/pregled`)
+
+| ID | FR-4.18.1 |
+|----|-----------|
+| **Opis** | Početni prikaz na nivou agencije. Mreža svih klijenata agencije, gde svaka kartica prikazuje indikatore zdravlja |
+| **Indikatori (na startu)** | Fakture na čekanju za pregled, fakture blokirane za izvoz, recentnost aktivnosti (timestamp poslednje obrađene fakture) |
+| **Indikatori (proširivi)** | Novi tipovi indikatora se priključuju kako se novi podaci pojavljuju (npr. zakasneli obrasci kada M20 isporuči) |
+| **Akcija** | Svaka kartica linkuje na `/klijenti/{id}` (workspace pojedinačnog klijenta) |
+| **Default ruta** | `/pregled` je default landing stranica nakon prijave za agencijske korisnike |
+
+#### FR-4.18.2 Radna tabla klijenta (`/klijenti/{id}`)
+
+| ID | FR-4.18.2 |
+|----|-----------|
+| **Opis** | Single-page površina za jednog klijenta. Header sa imenom klijenta, PIB-om, detaljima aktivnosti, mesečnom navigacijom |
+| **Tabovi (na M19 merge)** | Hronologija (default), Fakture, Izveštaji, Pravila |
+| **Pre-scoping** | Svaki tab je pre-scope-ovan na trenutnog klijenta; ugnežđene komponente lista imaju uklonjene kontrole filtera klijenta |
+| **Proširivost** | Tabovi su rutabilne podsekcije; nove sposobnosti (obrasci, close checklist) sleću kao dodatni tabovi bez restrukturiranja shell-a |
+
+#### FR-4.18.3 Hronologija tab
+
+| ID | FR-4.18.3 |
+|----|-----------|
+| **Opis** | Default tab unutar klijentskog workspace-a. Renderuje događaje iz `client_events` (FR-4.12.5) za izabrani period |
+| **Grupisanje** | Po danu, obrnuto hronološki |
+| **Filtriranje** | Po tipu događaja (chip-ovi na vrhu taba) |
+| **Click-through** | Klik na događaj otvara osnovni entitet (detalje fakture, detalje izvršenja pravila, detalje računovodstvene namere) |
+
+#### FR-4.18.4 Fakture tab
+
+Postojeća komponenta liste faktura ugnežđena u workspace klijenta, pre-scope-ovana na trenutnog klijenta. Kontrola filtera klijenta je sakrivena (implicitna je). Svi ostali filteri (raspon datuma, status, pretraga, dobavljač) ostaju.
+
+#### FR-4.18.5 Izveštaji tab
+
+Postojeća površina izveštaja (FR-4.13) ugnežđena u klijentski workspace, pre-scope-ovana na trenutnog klijenta. Izveštaji koriste `client_id` kao fiksni filter. Ugostiteljski obrasci (M20, odloženo) će sleteti kao dodatne grupacije unutar ovog taba.
+
+#### FR-4.18.6 Pravila tab
+
+Lista pravila povezanih sa ovim klijentom (preko `rule_client_associations`) plus pravila na nivou organizacije. CTA "Kreiraj pravilo za ovog klijenta" otvara editor pravila sa pre-popunjenom asocijacijom klijenta. Upravljanje pravilima na nivou organizacije ostaje pod stavkom `Pravila` u bočnom meniju.
+
+#### FR-4.18.7 Struktura bočne trake (post-M19)
+
+```
+— Klijent radna tabla —
+🏠 Pregled portfelja          (/pregled — default home)
+👥 Klijenti                   (flat lista klijenata, brzi skok u workspace)
+
+— Operacije agencije —
+⚙️ Pravila                    (org-wide editor pravila)
+📦 Arhiviranje                (periodne arhive za poreze/retenciju)
+📁 Katalog proizvoda          (kanonički proizvodi, deljeni među klijentima)
+
+— Pomoćno —
+📊 Dashboard                  (globalna statistika, zadržana zasad)
+🔧 Podešavanja
+👤 Tim
+💳 Naplata
+```
+
+Top-level stavke `Fakture` i `Izveštaji` su **uklonjene**. Obe su client-scoped i žive unutar workspace-a po klijentu.
+
+#### FR-4.18.8 Politika koegzistencije
+
+Saldora još nije deploy-ovana na klijente koji plaćaju. M19 redizajn isporučuje se kao **zamena**, ne paralelna površina. Stare feature stranice su dostupne iz novog shell-a samo tokom razvoja i uklanjaju se pre nego što M19 grana merge-uje.
+
+---
+
+### 4.19 Ugostiteljski zakonski obrasci (M20, odloženo)
+
+> **Status:** Opseg je namerno TBD dok radna sesija sa stvarnim srpskim računovođom koji vodi ugostiteljske klijente ne proizvede dokument zahteva. Pravljenje ovih obrazaca samo iz čitanja zakona poznato proizvodi pogrešne kolone i pogrešne tokove rada.
+
+Namerni sledeći sloj vrednosti, povrh postojeće OCR + product catalog osnove podataka, je generisanje zakonom propisanih srpskih ugostiteljskih obrazaca direktno iz ekstrahovanih podataka faktura:
+
+| Obrazac | Srpski | Svrha | Izvor podataka |
+|---------|--------|-------|----------------|
+| **Kalkulacija** | Kalkulacija | Po proizvodu nabavna cena → marža → PDV → prodajna cena, regeneriše se kada se doda novi proizvod ili se dobavljačka cena promeni | `invoice_line_items` + `product_catalog` (selling_price, default_margin_pct) |
+| **Šank lista** | Šank lista | Periodni inventar bara: primljena roba, prodata roba, zalihe na kraju | Stavke + prodajni podaci (akvizicija prodajnih podataka je deo otvorenog opsega) |
+| **Cenovnik** | Cenovnik | Trenutni cenovnik / meni, mora se podudarati sa onim što se naplaćuje i mora biti javno izložen | `product_catalog.selling_price` |
+| **KEP** | Knjiga evidencije prometa | Knjiga evidencije prometa — knjiga sve primljene robe i sve prodaje | Stavke + prodajni podaci |
+| **Popis** | Popis | Periodni fizički popis sa procenom vrednosti na kraju perioda | Stanje zaliha izvedeno iz primljeno minus prodato (po periodu) |
+
+#### Status osnove podataka (već u mestu)
+
+- **Ekstrakcija stavki** sa popustom/poreskom osnovicom/količinom/jediničnom cenom/ukupno po redu (FR-4.3.2, FR-4.5.2).
+- **Denormalizovana `invoice_line_items`** tabela popunjena post-OCR i pri izmenama (FR-4.13.1).
+- **Katalog proizvoda** sa kanoničkim imenima, aliasima, kategorijama, prodajnim cenama, podrazumevanim maržama i pg_trgm fuzzy matching-om opisa stavki (Odeljak 4.15).
+- **Per-line-item `product_id` FK** koji povezuje svaku ekstrahovanu stavku sa kanoničkim unosom u katalogu.
+
+#### Otvorena pitanja (za sastanak sa računovođom)
+
+1. Tačan skup obrazaca koje agencija mora po zakonu da proizvede za ugostiteljskog klijenta i koliko često.
+2. Za svaki obrazac: tačne kolone / polja / formule koje zakon zahteva i bilo koji audit-trail zahtevi.
+3. Izvor podataka za svaki obrazac — samo nabavna strana ili i prodajna?
+4. Mesečni close workflow kako ga računovođe stvarno izvode, korak po korak.
+5. Da li je integracija sa fiskalnim isečcima potrebna za KEP i kako agencija danas prima dnevne prodajne podatke.
+
+#### Plan implementacije nakon izlaza sa sastanka
+
+- Dodaci modela podataka (npr. per-client override marže proizvoda, entitet perioda).
+- Generatori obrazaca (jedan Celery-friendly modul po zakonskom obrascu).
+- Novi tabovi / sekcije unutar `Izveštaji` taba po klijentu.
+- PDF + Excel export šabloni (Excel minimum; PDF verovatno takođe).
+
+#### M21 — Close Checklist & Semantika perioda (dalje odloženo)
+
+Entitet perioda sa close/lock semantikom, plus per-period checklist koji vodi mesec ugostiteljskog klijenta do završetka, sleće u M21. Oba zavise od poznatog skupa obrazaca i hvatanja close workflow-a sa sastanka. Ne otvaraju se issue-i dok M20 ne proizvede izlaz.
 
 ---
 
@@ -1839,14 +2071,14 @@ Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju t
 
 | Komponenta | Tehnologija | Verzija | Svrha |
 |-----------|------------|---------|-------|
-| **Server modela** | vLLM | najnovija | OpenAI-kompatibilan inference server za dots.ocr (GPU sidecar) |
+| **Hosting modela** | Modal (serverless GPU) | — | dots.ocr je deploy-ovan na Modal sa A10G GPU-om i scale-to-zero (zamenjuje vLLM kontejner u klasteru); ~2 min hladan start, milisekunde topao |
 | **Document AI** | dots.ocr | najnovija | Vizuelno-jezički model za objedinjenu detekciju rasporeda + OCR (~100 jezika, ćirilica/latinica) |
-| **OCR klijent** | openai (Python) | 1.x | OpenAI-kompatibilan klijent za pozivanje vLLM servera |
-| **NER** | spaCy | 3.7.x | Prepoznavanje imenovanih entiteta (dopunska ekstrakcija polja) |
+| **OCR klijent** | openai (Python) | 1.x | OpenAI-kompatibilan klijent za pozivanje Modal endpoint-a |
+| **LLM ekstraktor** | Anthropic Claude (Haiku) | — | Transformacija OCR teksta u strukturirane stavke fakture (zaglavlja + linije) |
 | **PDF obrada** | PyMuPDF | 1.24.x | Parsiranje PDF-a |
 | **Obrada slika** | Pillow | 10.x | Manipulacija slikama |
-| **OpenCV** | opencv-python | 4.9.x | Računarski vid |
-| **NumPy** | numpy | 1.26.x | Numeričko računanje |
+
+**EasyOCR fallback uklonjen.** Predprocesiranje slike (deskewing/binarizacija/kontrast) je preskočeno za VLM put — dots.ocr radi bolje na originalnim slikama u boji.
 
 ### 6.4 Baza podataka
 
@@ -1861,12 +2093,14 @@ Sistem podrške zasnovan na tiketima, ugrađen u aplikaciju. Klijenti kreiraju t
 | Komponenta | Tehnologija | Svrha |
 |-----------|------------|-------|
 | **Container Runtime** | Docker | Kontejnerizacija |
-| **Orkestracija** | Kubernetes | Orkestracija kontejnera |
-| **Cloud provajder** | AWS / Hetzner | Infrastruktura |
-| **Objektno skladište** | S3 / Cloudflare R2 | Skladištenje dokumenata |
+| **Orkestracija** | docker-compose na jednom Hetzner CX32 VPS-u | Zamenjuje Kubernetes; jednostavnost u skladu sa veličinom proizvoda |
+| **Reverse proxy / TLS** | Caddy | Automatski TLS sa Let's Encrypt; routing za FastAPI i Next.js |
+| **Cloud provajder** | Hetzner (CX32) | Primarni VPS — FastAPI + Next.js + PostgreSQL + Redis + Celery worker |
+| **GPU compute** | Modal (serverless) | dots.ocr scale-to-zero hosting (zamenjuje GPU sidecar u klasteru) |
+| **Objektno skladište** | Cloudflare R2 (prod), MinIO (dev) | Skladištenje originalnih dokumenata i izvoznih ZIP-ova |
+| **E-pošta** | Resend (jedini provajder) | Transakcioni e-mailovi (admin obaveštenja, reset lozinke, pozivnice) |
 | **CDN** | Cloudflare | Statički resursi, DDoS zaštita |
-| **SSL** | Let's Encrypt | TLS sertifikati |
-| **DNS** | Cloudflare | Upravljanje DNS-om |
+| **DNS** | Cloudflare | Upravljanje DNS-om za saldora.rs |
 
 ### 6.6 DevOps i monitoring
 
@@ -1980,6 +2214,7 @@ CREATE TABLE organizations (
     billing_email VARCHAR(255),
     plan_id UUID REFERENCES plans(id),
     payment_provider_customer_id VARCHAR(255),  -- Paddle customer ID
+    subscription_status VARCHAR(20),  -- 'pending' | 'trial' | 'active' | 'canceled' | 'expired' | NULL
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -1987,6 +2222,8 @@ CREATE TABLE organizations (
 
 CREATE INDEX idx_organizations_slug ON organizations(slug);
 ```
+
+**Semantika `subscription_status`:** vidi FR-4.1.5. Nove registracije su default `pending`; `require_role` zavisnost vraća 403 sa `subscription_pending_approval` dok je status `pending`. NULL je legacy vrednost koja se tretira kao `active` i backfilluje pri pristupu.
 
 #### 7.2.3 invoices
 ```sql
@@ -2096,13 +2333,50 @@ CREATE INDEX ix_pc_category ON product_catalog(category);
 
 Napomena: tabela `invoice_line_items` sadrži nullable FK kolonu `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` (dodata u migraciji 0007).
 
+#### 7.2.7 client_events
+
+Append-only log događaja po klijentu, koji napaja Hronologija prikaz (FR-4.12.5, FR-4.18.3).
+
+```sql
+CREATE TABLE client_events (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    client_id       UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_type      VARCHAR(50) NOT NULL,  -- invoice_uploaded | invoice_verified | invoice_exported | accounting_intent_classified | rule_fired | client_assigned
+    entity_type     VARCHAR(50),           -- npr. 'invoice', 'rule', 'accounting_intent'
+    entity_id       UUID,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    created_by      UUID REFERENCES users(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_client_events_org_client ON client_events(organization_id, client_id, created_at DESC);
+CREATE INDEX idx_client_events_type       ON client_events(event_type);
+CREATE INDEX idx_client_events_entity     ON client_events(entity_type, entity_id);
+```
+
+#### 7.2.8 rule_client_associations
+
+Per-client scoping za pravila automatizacije (FR-4.12.6).
+
+```sql
+CREATE TABLE rule_client_associations (
+    rule_id     UUID NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    client_id   UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (rule_id, client_id)
+);
+
+CREATE INDEX idx_rca_client ON rule_client_associations(client_id);
+```
+
 ---
 
 ## 8. API specifikacija
 
 ### 8.1 Pregled API-ja
 
-**Bazni URL:** `https://api.fakturaai.rs/v1`
+**Bazni URL:** `https://api.saldora.rs/v1`
 
 **Autentifikacija:** Bearer token (JWT) ili API ključ
 
@@ -2233,7 +2507,7 @@ Preuzimanje detalja fakture.
   "tax_amount": 10000.00,
   "total_amount": 60000.00,
   "currency": "RSD",
-  "document_url": "https://storage.fakturaai.rs/docs/...",
+  "document_url": "https://storage.saldora.rs/docs/...",
   "created_at": "2025-01-15T10:30:00Z",
   "updated_at": "2025-01-15T10:30:05Z"
 }
@@ -2341,7 +2615,7 @@ Verifikacija PIB-a prema APR bazi podataka.
 
 ### 9.1 Arhitektura OCR pipeline-a
 
-dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju rasporeda i ekstrakciju teksta** u jednom prolazu. Pokreće se kao **vLLM HTTP server** (GPU sidecar kontejner), a poziva ga laki OCR radnik putem OpenAI-kompatibilnog chat completions API-ja.
+dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju rasporeda i ekstrakciju teksta** u jednom prolazu. Pokreće se na **Modal** (serverless GPU) sa A10G uređajem i scale-to-zero (~2 min hladan start, milisekunde topao); poziva ga laki OCR radnik putem OpenAI-kompatibilnog chat completions API-ja. Prethodna arhitektura (vLLM HTTP server kao GPU sidecar u klasteru) je zamenjena Modal hosting-om.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -2412,6 +2686,8 @@ dots.ocr je vizuelno-jezički model (VLM) koji izvodi **objedinjenu detekciju ra
 
 ### 9.2 Predprocesiranje slike
 
+> **Status:** **Onemogućeno za VLM put.** dots.ocr radi najbolje na originalnim slikama u boji; tradicionalni preprocessing pipeline (deskewing/binarizacija/kontrast) je preskočen kad god je dots.ocr primarni engine. Sledeći detalji ostaju za referencu i potencijalnu upotrebu sa tradicionalnim OCR engine-ima.
+
 **Modul:** `app/ml/preprocessing.py`
 
 ```python
@@ -2447,18 +2723,18 @@ class InvoicePreprocessor:
 
 ### 9.3 OCR engine
 
-**Primarni engine:** dots.ocr (putem vLLM servera)
+**Primarni engine:** dots.ocr (hostovan na Modal-u)
 
-dots.ocr je optimizovan za razumevanje dokumenata i pruža superiornu tačnost na strukturiranim dokumentima poput faktura, sa odličnom podrškom za ćirilično i latinično pismo. Pokreće se kao zaseban **vLLM HTTP server** (GPU sidecar kontejner), a OCR radnik ga poziva putem OpenAI-kompatibilnog chat completions API-ja.
+dots.ocr je optimizovan za razumevanje dokumenata i pruža superiornu tačnost na strukturiranim dokumentima poput faktura, sa odličnom podrškom za ćirilično i latinično pismo. Pokreće se kao **Modal serverless GPU** funkcija (A10G, scale-to-zero), a OCR radnik je poziva putem OpenAI-kompatibilnog chat completions API-ja.
 
 **Arhitektura:**
-- **dots-ocr-server**: `vllm/vllm-openai:latest` Docker slika koja servira `rednote-hilab/dots.ocr` sa `--trust-remote-code --chat-template-content-format string`
-- **ocr-worker**: Lak Python 3.12 kontejner (bez GPU-a) koji poziva server putem `openai` Python klijenta
+- **Modal endpoint**: `rednote-hilab/dots.ocr` model deploy-ovan kao Modal Python aplikacija sa GPU dekoratorom (A10G), scale-to-zero (~2 min hladan start, ~milisekunde topao)
+- **ocr-worker**: Lak Python 3.12 Celery worker (na Hetzner CX32, bez GPU-a) koji poziva Modal endpoint putem `openai` Python klijenta
 - Radnik šalje base64-kodirane slike sa `<|img|><|imgpad|><|endofimg|>` prefiksom u promptu
 
 **Konfiguracija (promenljive okruženja):**
 ```
-DOTS_OCR_SERVER_URL=http://dots-ocr-server:8000/v1
+DOTS_OCR_SERVER_URL=https://<workspace>--saldora-dots-ocr.modal.run/v1
 DOTS_OCR_MODEL_NAME=model
 OCR_PRIMARY_ENGINE=dots
 OCR_FALLBACK_ENGINE=none
@@ -2466,7 +2742,7 @@ OCR_FALLBACK_ENGINE=none
 
 **Strategija rezerve:** Ručni pregled od strane korisnika
 
-Ne postoji automatski rezervni OCR engine. Ako dots.ocr ne uspe ili vrati rezultate niske pouzdanosti, faktura se označava za ručni pregled od strane krajnjeg korisnika. Ova projektna odluka je doneta jer alternativni OCR engine-i (npr. EasyOCR) pružaju nedovoljnu tačnost za srpske dokumente na ćirilici/latinici.
+Ne postoji automatski rezervni OCR engine. Ako dots.ocr ne uspe ili vrati rezultate niske pouzdanosti, faktura se označava za ručni pregled od strane krajnjeg korisnika. Ova projektna odluka je doneta jer alternativni OCR engine-i (npr. EasyOCR) pružaju nedovoljnu tačnost za srpske dokumente na ćirilici/latinici. **EasyOCR fallback je uklonjen.**
 
 ### 9.4 Analiza rasporeda dokumenta
 
@@ -2539,18 +2815,16 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **GPU zahtevi:**
 
-| Komponenta | GPU memorija | Instance | Napomene |
-|-----------|-------------|---------|----------|
-| dots.ocr vLLM server | 6-8 GB | 1-2 | GPU sidecar koji pokreće rednote-hilab/dots.ocr (1,7B parametara) |
-| OCR Radnik | 0 (samo CPU) | 1-2 | Lak Celery radnik koji poziva vLLM server putem HTTP-a |
-| NER model (opciono) | 2 GB | 1-2 | Za dopunsku ekstrakciju polja |
+| Komponenta | Hosting | Napomene |
+|-----------|---------|----------|
+| dots.ocr (rednote-hilab/dots.ocr, 1,7B parametara) | **Modal.com (A10G GPU)** | Scale-to-zero; ~2 min hladno pokretanje na prvi zahtev nakon mirovanja; kontejner ostaje topao 5 min nakon poslednjeg zahteva. Definicija u `infra/modal/dots_ocr.py`, deploy preko `modal deploy`. |
+| OCR Radnik | Hetzner CX32 (Celery, samo CPU) | Lak Celery radnik koji poziva Modal endpoint preko OpenAI-kompatibilnog API-ja (`DOTS_OCR_SERVER_URL`). |
 
-**Napomena:** dots.ocr zamenjuje potrebu za zasebnim Layout Parser + OCR Engine, smanjujući složenost infrastrukture. Ne postoji EasyOCR rezerva — neuspešan OCR rezultira ručnim pregledom od strane korisnika.
+**Napomena:** dots.ocr zamenjuje potrebu za zasebnim Layout Parser + OCR Engine, smanjujući složenost infrastrukture. **Ne postoji EasyOCR rezerva** — neuspešan OCR rezultira ručnim pregledom od strane korisnika.
 
 **Serviranje modela:**
-- **vLLM** (`vllm/vllm-openai:latest`) — OpenAI-kompatibilan inference server za dots.ocr
-- Zastavice servera: `--trust-remote-code --chat-template-content-format string --gpu-memory-utilization 0.90 --max-model-len 8192`
-- HuggingFace keš modela se čuva putem Docker volume-a (`huggingface_cache`)
+- **Modal.com** (produkcija) — A10G GPU, scale-to-zero, OpenAI-kompatibilan endpoint. Drži VPS bez GPU-a (Hetzner CX32 je samo CPU).
+- **Lokalni razvoj** — opciono `vllm/vllm-openai:latest` Docker kontejner za testiranje van Modal-a; ovo nije nosivi put i nije obavezno za rad lokalnog stack-a.
 
 **Napomena o modelu:** Sistem koristi unapred trenirane modele (dots.ocr, spaCy) bez naknadnog treniranja na korisničkim podacima. Ovaj pristup eliminiše potrebu za prikupljanjem podataka za trening, upravljanjem saglasnošću i složenom MLOps infrastrukturom, dok istovremeno obezbeđuje zaštitu privatnosti korisnika.
 
@@ -2706,8 +2980,8 @@ CREATE TABLE data_processing_agreements (
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     signed_by_customer VARCHAR(255),
     signed_by_customer_at TIMESTAMP WITH TIME ZONE,
-    signed_by_fakturaai VARCHAR(255),
-    signed_by_fakturaai_at TIMESTAMP WITH TIME ZONE,
+    signed_by_saldora VARCHAR(255),
+    signed_by_saldora_at TIMESTAMP WITH TIME ZONE,
     document_url VARCHAR(500),
     custom_clauses JSONB,
     valid_from DATE,
@@ -2806,7 +3080,7 @@ Admin → Izveštaji → Izvoz za inspekciju
 **XML format izvoza (kompatibilan sa eFaktura):**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<RegistarFaktura xmlns="urn:fakturaai:export:v1">
+<RegistarFaktura xmlns="urn:saldora:export:v1">
   <Zaglavlje>
     <Organizacija>
       <Naziv>Računovodstvo Petrović d.o.o.</Naziv>
@@ -2944,10 +3218,10 @@ Koji podaci su mogli biti ugroženi:
 [Preporuke za korisnika]
 
 Kontakt za dodatna pitanja:
-privacy@fakturaai.rs
+privacy@saldora.rs
 
 S poštovanjem,
-FakturaAI Tim
+Saldora Tim
 ```
 
 ### 10.7 Revizija i logovanje
@@ -2965,7 +3239,9 @@ FakturaAI Tim
 
 ## 11. Arhitektura deployovanja
 
-### 11.1 Produkciono okruženje
+### 11.1 Produkciono okruženje (jednomašinski Hetzner CX32)
+
+> **Promena u v4.0:** Kubernetes je zamenjen jedinstvenim Hetzner CX32 VPS-om sa docker-compose-om. Veličina proizvoda (jedna do nekoliko desetina agencija u prvoj fazi) ne opravdava operativni overhead k8s-a. GPU rad za dots.ocr je premešten na Modal (serverless).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -2974,89 +3250,56 @@ FakturaAI Tim
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Cloudflare (CDN + WAF)                         │
-│  - DDoS zaštita                                                     │
-│  - SSL terminacija                                                  │
-│  - Keširanje statičkih resursa                                     │
+│                      Cloudflare (CDN + WAF + DNS)                   │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Load Balancer (nginx/HAProxy)                    │
-└─────────────┬─────────────────┬─────────────────┬───────────────────┘
-              │                 │                 │
-              ▼                 ▼                 ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────────────────┐
-│   Veb aplikacija│ │   API server    │ │   ML radnici                │
-│   (Next.js)     │ │   (FastAPI)     │ │   (Celery + GPU)            │
-│   Replike: 2-4  │ │   Replike: 2-4  │ │   Replike: 2-4              │
-└─────────────────┘ └────────┬────────┘ └──────────────┬──────────────┘
-                             │                         │
-              ┌──────────────┴──────────────┬──────────┴──────────┐
-              ▼                             ▼                      ▼
-┌─────────────────────┐     ┌─────────────────────┐  ┌────────────────┐
-│     PostgreSQL      │     │       Redis         │  │   S3/R2        │
-│   Primarni + Replika│     │  Klaster (3 čvora)  │  │   Skladište    │
-└─────────────────────┘     └─────────────────────┘  └────────────────┘
+│           Hetzner CX32 VPS (jedan host, docker-compose)             │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │  Caddy (reverse proxy, automatski TLS sa Let's Encrypt)       │  │
+│  └─────────────┬───────────────────────────────────┬─────────────┘  │
+│                │                                   │                │
+│                ▼                                   ▼                │
+│  ┌──────────────────────┐              ┌──────────────────────┐    │
+│  │  Next.js (web)       │              │  FastAPI (api)       │    │
+│  │  saldora.rs          │              │  api.saldora.rs      │    │
+│  └──────────────────────┘              └──────────┬───────────┘    │
+│                                                    │                │
+│                                                    ▼                │
+│                                ┌──────────────────────────────┐    │
+│                                │  Celery worker (CPU)         │    │
+│                                │  poziva Modal preko HTTP-a   │    │
+│                                └──────────┬───────────────────┘    │
+│                                           │                        │
+│  ┌──────────────┐  ┌──────────────┐       │                        │
+│  │  PostgreSQL  │  │  Redis       │◀──────┘                        │
+│  │  16          │  │  7 (broker)  │                                │
+│  └──────────────┘  └──────────────┘                                │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌──────────────────────┐                ┌─────────────────────────────┐
+│  Modal (serverless)  │                │  Cloudflare R2              │
+│  dots.ocr (A10G)     │                │  Originalni dokumenti, ZIP  │
+│  scale-to-zero       │                │  arhive                     │
+└──────────────────────┘                └─────────────────────────────┘
 ```
 
-### 11.2 Kubernetes deployment
+### 11.2 docker-compose servisi
 
-**Namespace-ovi:**
-- `fakturaai-prod` - Produkciona opterećenja
-- `fakturaai-staging` - Staging okruženje
-- `fakturaai-monitoring` - Prometheus, Grafana
+| Servis | Slika | Svrha |
+|--------|-------|-------|
+| `caddy` | `caddy:2` | Reverse proxy + automatski TLS |
+| `web` | `ghcr.io/saldora/web:latest` | Next.js frontend |
+| `api` | `ghcr.io/saldora/api:latest` | FastAPI |
+| `worker` | `ghcr.io/saldora/api:latest` (`celery worker`) | Celery worker (OCR + ekstrakcija + izvoz) |
+| `beat` | `ghcr.io/saldora/api:latest` (`celery beat`) | Zakazani zadaci |
+| `postgres` | `postgres:16` | Primarna baza |
+| `redis` | `redis:7-alpine` | Broker + keš |
 
-**Ključni resursi:**
-
-```yaml
-# Deployment veb aplikacije
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-  namespace: fakturaai-prod
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    spec:
-      containers:
-      - name: web-app
-        image: ghcr.io/fakturaai/web:latest
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        ports:
-        - containerPort: 3000
-
----
-# Deployment ML radnika (sa GPU)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ml-worker
-  namespace: fakturaai-prod
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-      - name: ml-worker
-        image: ghcr.io/fakturaai/ml-worker:latest
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-            memory: "8Gi"
-          requests:
-            memory: "4Gi"
-```
+> **Modal** se ne pokreće lokalno; deploy se vrši zasebno (`modal deploy`) i `worker` ga poziva preko HTTPS-a.
 
 ### 11.3 CI/CD pipeline
 
@@ -3088,8 +3331,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and push Docker images
         run: |
-          docker build -t ghcr.io/fakturaai/web:${{ github.sha }} ./web
-          docker push ghcr.io/fakturaai/web:${{ github.sha }}
+          docker build -t ghcr.io/saldora/web:${{ github.sha }} ./apps/web
+          docker push ghcr.io/saldora/web:${{ github.sha }}
+          docker build -t ghcr.io/saldora/api:${{ github.sha }} ./apps/api
+          docker push ghcr.io/saldora/api:${{ github.sha }}
 
   test:
     needs: build
@@ -3100,20 +3345,21 @@ jobs:
           npm test
           pytest tests/
 
-  deploy-staging:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to staging
-        run: kubectl apply -f k8s/staging/
-
   deploy-prod:
-    needs: deploy-staging
+    needs: test
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Deploy to production
-        run: kubectl apply -f k8s/prod/
+      - name: SSH to Hetzner CX32 and pull/restart
+        run: |
+          ssh deploy@saldora.rs "cd /srv/saldora && docker compose pull && docker compose up -d"
+
+  deploy-modal:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy dots.ocr to Modal
+        run: modal deploy modal_app.py
 ```
 
 ### 11.4 Monitoring stek
@@ -3160,7 +3406,7 @@ Sistem MORA biti dizajniran sa apstrakcijskim slojem koji omogućava zamenu APR 
 
 ### 12.2 Integracija plaćanja (Paddle)
 
-**Zašto Paddle:** Paddle funkcioniše kao Merchant of Record (MoR), što znači da Paddle upravlja svim platnim transakcijama, PDV obavezama i poreskom usklađenošću globalno, u ime FakturaAI. Ovo je kritično za srpsko tržište jer:
+**Zašto Paddle (ne Stripe):** Paddle funkcioniše kao Merchant of Record (MoR), što znači da Paddle upravlja svim platnim transakcijama, PDV obavezama i poreskom usklađenošću globalno, u ime Saldore. Ovo je kritično za srpsko tržište jer:
 - Paddle preuzima odgovornost za obračun i naplatu PDV-a u svim jurisdikcijama
 - Nije potreban lokalni merchant nalog u Srbiji
 - Pojednostavljeno finansijsko izveštavanje - jedna uplata od Paddle-a umesto hiljada pojedinačnih transakcija
@@ -3218,21 +3464,25 @@ async def handle_paddle_webhook(payload: dict, signature: str):
     return {"status": "processed"}
 ```
 
-### 12.3 Servis e-pošte (SendGrid/Resend)
+### 12.3 Servis e-pošte (Resend)
+
+> **Promena u v4.0:** Resend je jedini provajder e-pošte. Reference na SendGrid u starijim verzijama nisu više aktuelne.
 
 **Transakcione e-poruke:**
-- E-mail dobrodošlice
+- Admin obaveštenje o novoj registraciji (FR-4.1.5; šalje se na adresu iz `ADMIN_EMAIL`)
+- Pozivnice za tim (FR-4.1.6)
 - Verifikacija e-pošte
 - Resetovanje lozinke
 - Obrada fakture završena
-- Obaveštenja o pretplati
+- Obaveštenja o pretplati (Paddle webhook hook-ovi)
 
-### 12.4 Skladištenje (Cloudflare R2 / AWS S3)
+### 12.4 Skladištenje (Cloudflare R2 prod, MinIO dev)
 
 **Bucket-i:**
-- `fakturaai-documents` - Otpremljene fakture
-- `fakturaai-exports` - Generisani izvozi
-- `fakturaai-backups` - Rezervne kopije baze
+- `saldora-documents` (R2 prod) — Otpremljene fakture
+- `saldora-exports` (R2 prod) — Generisani izvozi
+- `saldora-backups` (R2 prod) — Rezervne kopije baze
+- MinIO se koristi u dev okruženju za S3-kompatibilan API bez troška R2-a
 
 **Konvencija ključeva objekata:**
 Dokumenta su organizovana po organizaciji radi multi-tenant izolacije:
@@ -3247,7 +3497,7 @@ organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
 
 ### 12.5 MiniMax integracija
 
-MiniMax (minimax.rs) je najkorišćeniji cloud računovodstveni softver u Srbiji. FakturaAI se integriše sa MiniMax-om putem XML izvoza i direktnog REST API slanja.
+MiniMax (minimax.rs) je najkorišćeniji cloud računovodstveni softver u Srbiji. Saldora se integriše sa MiniMax-om putem XML izvoza i direktnog REST API slanja.
 
 #### 12.5.1 MiniMax XML izvoz
 
@@ -3316,493 +3566,11 @@ Nazivi polja i ID-ovi validirani prema MiniMax RS Swagger API specifikaciji:
 | 8% | 3 | P |
 | 0% | 1 | N |
 
-### 12.6 SEF integracija (eFaktura)
+### 12.6 SEF integracija (eFaktura) — deprioritetizovano
 
-Sistem elektronskih faktura (SEF) je obavezan za B2G i B2B transakcije u Srbiji. FakturaAI MORA da se integriše sa SEF-om kao **prvoklasnim izvorom podataka**, ne samo kao format izvoza.
+Deprioritizovano. SEF nema webhook podršku — samo polling. Zbog ugostiteljske teze, ovaj modul nije više nosivi. Prethodna detaljna specifikacija (podešavanje konekcije, sinhronizacija ulaznih i izlaznih faktura, polling statusa, hibridna obrada SEF + OCR, SEF inbox UI, obrada grešaka i tabele `sef_connections` / `sef_invoices`) uklonjena je iz ove verzije SRS-a. Ako se SEF rad pokrene ponovo, specifikacija će biti vraćena iz istorije verzionisanja (SRS v3.2 i ranije) umesto da se održava kao mrtav tekst ovde.
 
-#### 12.6.1 Pregled
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Arhitektura SEF integracije                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐   │
-│  │    SEF      │◀───────▶│  FakturaAI  │◀───────▶│  Korisnički │   │
-│  │   portal    │   API   │   backend   │   Web   │  interfejs  │   │
-│  │  (eFaktura) │         │             │         │             │   │
-│  └─────────────┘         └──────┬──────┘         └─────────────┘   │
-│                                 │                                   │
-│                    ┌────────────┼────────────┐                      │
-│                    ▼            ▼            ▼                      │
-│             ┌───────────┐ ┌───────────┐ ┌───────────┐              │
-│             │  Ulazne   │ │  Izlazne  │ │  Status   │              │
-│             │  fakture  │ │  fakture  │ │  sinhron. │              │
-│             │  (Pull)   │ │  (Push)   │ │ (Polling) │              │
-│             └───────────┘ └───────────┘ └───────────┘              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Napomena:** SEF ne podržava nativne webhook obaveštenja. Sistem MORA koristiti periodično povlačenje (polling) za praćenje promena statusa faktura. Preporučeni interval: svakih 15 minuta.
-
-#### 12.6.2 Podešavanje SEF konekcije
-
-**Autentifikacija:**
-
-| Metod | Opis | Slučaj korišćenja |
-|-------|------|-------------------|
-| API ključ | SEF API ključ na nivou organizacije | Produkcija |
-| Sertifikat | Kvalifikovani elektronski sertifikat | Organizacije visoke bezbednosti |
-
-**Konfiguracija konekcije:**
-
-```json
-{
-  "sef_connection": {
-    "environment": "production",
-    "api_base_url": "https://efaktura.mfin.gov.rs/api/v1",
-    "organization_pib": "123456789",
-    "api_key": "encrypted:xxx",
-    "certificate_path": "/secrets/sef-cert.p12",
-    "sync_enabled": true,
-    "sync_interval_minutes": 15
-  }
-}
-```
-
-**Šema baze podataka:**
-
-```sql
-CREATE TABLE sef_connections (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-
-    -- Podešavanja konekcije
-    environment VARCHAR(20) NOT NULL DEFAULT 'production',
-    api_key_encrypted TEXT,
-    certificate_path VARCHAR(500),
-    pib VARCHAR(9) NOT NULL,
-
-    -- Podešavanja sinhronizacije
-    sync_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    sync_interval_minutes INTEGER DEFAULT 15,
-    last_sync_at TIMESTAMP WITH TIME ZONE,
-    last_sync_status VARCHAR(20),
-    last_sync_error TEXT,
-
-    -- Statistike
-    total_invoices_synced INTEGER DEFAULT 0,
-    invoices_synced_today INTEGER DEFAULT 0,
-
-    -- Vremenski žigovi
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    CONSTRAINT unique_sef_per_org UNIQUE (organization_id),
-    CONSTRAINT valid_environment CHECK (environment IN ('production', 'test'))
-);
-```
-
-#### 12.6.3 Sinhronizacija ulaznih faktura (SEF → FakturaAI)
-
-Sistem MORA da povlači fakture iz SEF-a i obrađuje ih kroz FakturaAI pipeline.
-
-**Tok sinhronizacije:**
-
-```
-1. Periodično povlačenje iz SEF API-ja (svakih 15 minuta)
-   │
-   ▼
-2. Preuzmi nove/ažurirane fakture od poslednje sinhronizacije
-   GET /api/v1/purchase-invoices?from={last_sync}&status=DELIVERED
-   │
-   ▼
-3. Za svaku fakturu:
-   ┌─────────────────────────────────────────────────────────────┐
-   │ a. Proveri da li već postoji (po SEF ID-u)                  │
-   │ b. Preuzmi XML + PDF prilog                                 │
-   │ c. Parsiraj UBL/XML strukturirane podatke                   │
-   │ d. Sačuvaj PDF u skladište dokumenata                       │
-   │ e. Kreiraj zapis fakture sa SEF metapodacima                │
-   │ f. Pokreni OCR na PDF-u (za dodatne podatke/validaciju)     │
-   │ g. Generiši AccountingIntent                                 │
-   │ h. Primeni pravila automatizacije                           │
-   └─────────────────────────────────────────────────────────────┘
-   │
-   ▼
-4. Ažuriraj last_sync_at vremenski žig
-```
-
-**SEF statusi faktura:**
-
-| SEF status | Srpski | FakturaAI akcija |
-|-----------|--------|-----------------|
-| `SENT` | Poslata | N/A (samo za izlazne) |
-| `DELIVERED` | Isporučena | Importuj i obradi |
-| `SEEN` | Viđena | Ažuriraj status |
-| `APPROVED` | Odobrena | Označi kao prihvaćenu |
-| `REJECTED` | Odbijena | Označi za pažnju |
-| `CANCELLED` | Stornirana | Obradi storniranje |
-| `PAID` | Plaćena | Ažuriraj status plaćanja |
-
-**Struktura podataka SEF fakture (iz UBL-a):**
-
-```json
-{
-  "sef_invoice": {
-    "sef_id": "12345678-1234-1234-1234-123456789012",
-    "sef_status": "DELIVERED",
-    "invoice_number": "2025-0001",
-    "invoice_date": "2025-01-15",
-    "due_date": "2025-02-15",
-
-    "seller": {
-      "pib": "123456789",
-      "name": "Dobavljač d.o.o.",
-      "address": "Ulica 1, Beograd",
-      "mb": "12345678",
-      "jbkjs": null
-    },
-
-    "buyer": {
-      "pib": "987654321",
-      "name": "Kupac d.o.o.",
-      "address": "Ulica 2, Novi Sad",
-      "mb": "87654321"
-    },
-
-    "line_items": [
-      {
-        "description": "Usluge konsaltinga",
-        "quantity": 10,
-        "unit": "HUR",
-        "unit_price": 5000.00,
-        "discount": null,
-        "tax_base": null,
-        "total": 50000.00,
-        "vat_rate": 20.00,
-        "vat_amount": 10000.00
-      }
-    ],
-
-    "monetary_totals": {
-      "line_extension_amount": 50000.00,
-      "tax_exclusive_amount": 50000.00,
-      "tax_inclusive_amount": 60000.00,
-      "payable_amount": 60000.00
-    },
-
-    "vat_breakdown": [
-      {
-        "taxable_amount": 50000.00,
-        "tax_amount": 10000.00,
-        "tax_category": "S",
-        "percent": 20.00
-      }
-    ],
-
-    "attachments": [
-      {
-        "filename": "faktura-2025-0001.pdf",
-        "mime_type": "application/pdf",
-        "embedded": true
-      }
-    ],
-
-    "sef_metadata": {
-      "creation_date": "2025-01-15T10:30:00Z",
-      "delivery_date": "2025-01-15T10:30:05Z",
-      "cir_invoice_id": null,
-      "is_government": false
-    }
-  }
-}
-```
-
-**Šema baze podataka - Mapiranje SEF faktura:**
-
-```sql
-CREATE TABLE sef_invoices (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-    invoice_id UUID REFERENCES invoices(id),
-
-    -- SEF identifikatori
-    sef_id VARCHAR(100) NOT NULL,
-    sef_internal_id VARCHAR(100),
-    cir_invoice_id VARCHAR(100),
-
-    -- Praćenje SEF statusa
-    sef_status VARCHAR(30) NOT NULL,
-    sef_status_updated_at TIMESTAMP WITH TIME ZONE,
-
-    -- Smer
-    direction VARCHAR(10) NOT NULL,
-
-    -- Sirovi SEF podaci
-    ubl_xml TEXT,
-    sef_response_json JSONB,
-
-    -- PDF prilog
-    pdf_document_id UUID REFERENCES documents(id),
-
-    -- Metapodaci sinhronizacije
-    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    processed_at TIMESTAMP WITH TIME ZONE,
-    processing_error TEXT,
-
-    -- Akcije korisnika
-    user_accepted BOOLEAN,
-    user_accepted_at TIMESTAMP WITH TIME ZONE,
-    user_accepted_by UUID REFERENCES users(id),
-    rejection_reason TEXT,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    CONSTRAINT unique_sef_id UNIQUE (organization_id, sef_id),
-    CONSTRAINT valid_direction CHECK (direction IN ('INBOUND', 'OUTBOUND')),
-    CONSTRAINT valid_sef_status CHECK (sef_status IN (
-        'SENT', 'DELIVERED', 'SEEN', 'APPROVED', 'REJECTED',
-        'CANCELLED', 'PAID', 'STORNO', 'ERROR'
-    ))
-);
-
-CREATE INDEX idx_sef_invoices_org ON sef_invoices(organization_id);
-CREATE INDEX idx_sef_invoices_status ON sef_invoices(sef_status);
-CREATE INDEX idx_sef_invoices_invoice ON sef_invoices(invoice_id);
-CREATE INDEX idx_sef_invoices_synced ON sef_invoices(synced_at);
-```
-
-#### 12.6.4 Slanje izlaznih faktura (FakturaAI → SEF)
-
-Sistem TREBALO BI da podržava slanje faktura na SEF (za organizacije koje izdaju fakture).
-
-**Tok slanja:**
-
-```
-1. Korisnik kreira/otprema izlaznu fakturu u FakturaAI
-   │
-   ▼
-2. Sistem validira:
-   • Sva obavezna UBL polja prisutna
-   • PIB kupca validan u APR
-   • Matematička tačnost
-   • Obračun PDV-a ispravan
-   │
-   ▼
-3. Generiši UBL 2.1 XML
-   │
-   ▼
-4. Korisnik klikne "Pošalji na SEF"
-   │
-   ▼
-5. POST na SEF API
-   │
-   ├──▶ Uspeh: Sačuvaj SEF ID, ažuriraj status
-   │
-   └──▶ Greška: Zapiši grešku, obavesti korisnika, dozvoli ponovni pokušaj
-```
-
-**Zahtevi za generisanje UBL-a:**
-
-| UBL polje | Izvor | Validacija |
-|-----------|-------|------------|
-| `ID` | invoice.invoice_number | Obavezno |
-| `IssueDate` | invoice.invoice_date | Obavezno, format YYYY-MM-DD |
-| `DueDate` | invoice.due_date | Obavezno |
-| `InvoiceTypeCode` | accounting_intent.document_type | 380 = Faktura, 381 = Knjižno odobrenje |
-| `DocumentCurrencyCode` | invoice.currency | Mora biti RSD za domaće |
-| `AccountingSupplierParty` | seller.* | PIB, naziv, adresa obavezni |
-| `AccountingCustomerParty` | buyer.* | PIB, naziv, adresa obavezni |
-| `TaxTotal` | Izračunato | PDV razrada po stopi |
-| `LegalMonetaryTotal` | invoice.* | Svi ukupni iznosi |
-| `InvoiceLine` | line_items[] | Opis, količina, cena, PDV |
-
-#### 12.6.5 Sinhronizacija statusa (Polling)
-
-SEF ne podržava nativne webhook obaveštenja za promene statusa faktura. Sistem MORA koristiti periodično povlačenje (polling) za praćenje promena statusa.
-
-**Mehanizam polling-a:**
-
-Cron/Celery zadatak se izvršava svakih 15 minuta i proverava SEF API za fakture čiji se status promenio od poslednje provere.
-
-```python
-# Celery periodični zadatak - izvršava se svakih 15 minuta
-@celery_app.task(name="sync_sef_statuses")
-async def sync_sef_statuses():
-    """
-    Periodično povlačenje statusa faktura iz SEF-a.
-    Proverava promene statusa za sve aktivne organizacije.
-    """
-    # 1. Preuzmi sve aktivne SEF konekcije
-    connections = await get_active_sef_connections()
-
-    for connection in connections:
-        try:
-            # 2. Upitaj SEF API za fakture sa promenjenim statusom
-            last_check = connection.last_sync_at or datetime.now() - timedelta(hours=1)
-
-            changed_invoices = await sef_api.get_status_changes(
-                pib=connection.pib,
-                api_key=decrypt(connection.api_key_encrypted),
-                since=last_check
-            )
-
-            # 3. Za svaku fakturu sa promenjenim statusom, obradi promenu
-            for sef_data in changed_invoices:
-                await process_status_change(
-                    organization_id=connection.organization_id,
-                    sef_id=sef_data["sef_id"],
-                    new_status=sef_data["status"],
-                    metadata=sef_data.get("metadata", {})
-                )
-
-            # 4. Ažuriraj vremenski žig poslednje sinhronizacije
-            connection.last_sync_at = datetime.now()
-            connection.last_sync_status = "success"
-            await db.save(connection)
-
-        except SEFConnectionError as e:
-            connection.last_sync_status = "error"
-            connection.last_sync_error = str(e)
-            await db.save(connection)
-            logger.error(f"SEF sync greška za org {connection.organization_id}: {e}")
-
-
-async def process_status_change(
-    organization_id: UUID,
-    sef_id: str,
-    new_status: str,
-    metadata: dict
-):
-    """
-    Obrada promene statusa pojedinačne SEF fakture.
-    """
-    # 1. Pronađi odgovarajuću fakturu
-    sef_invoice = await get_sef_invoice(organization_id, sef_id)
-    if not sef_invoice:
-        logger.warning(f"Nepoznata SEF faktura: {sef_id}")
-        return
-
-    # 2. Ažuriraj status
-    old_status = sef_invoice.sef_status
-    sef_invoice.sef_status = new_status
-    sef_invoice.sef_status_updated_at = datetime.now()
-
-    # 3. Obradi specifične prelaze statusa
-    match new_status:
-        case "APPROVED":
-            # Faktura prihvaćena od strane kupca - bezbedno za knjiženje
-            await mark_invoice_accepted(sef_invoice.invoice_id)
-            await notify_user(sef_invoice, "Faktura odobrena od strane kupca")
-
-        case "REJECTED":
-            # Faktura odbijena - zahteva pažnju
-            await flag_invoice_for_review(
-                sef_invoice.invoice_id,
-                reason=f"Odbijena na SEF: {metadata.get('rejection_reason', 'Bez razloga')}"
-            )
-            await notify_user(sef_invoice, "Faktura odbijena!", priority="high")
-
-        case "CANCELLED":
-            # Faktura stornirana - kreiraj storno ako je već proknjižena
-            if sef_invoice.invoice and sef_invoice.invoice.status == "exported":
-                await create_cancellation_record(sef_invoice.invoice_id)
-
-        case "PAID":
-            # Plaćanje evidentirano u SEF-u
-            await update_payment_status(sef_invoice.invoice_id, paid=True)
-
-    # 4. Zapiši promenu statusa
-    await log_sef_status_change(sef_invoice, old_status, new_status, metadata)
-
-    await db.save(sef_invoice)
-```
-
-**Konfiguracija Celery periodičnog zadatka:**
-
-```python
-# Celery beat konfiguracija
-CELERY_BEAT_SCHEDULE = {
-    "sync-sef-statuses": {
-        "task": "sync_sef_statuses",
-        "schedule": crontab(minute="*/15"),  # Svakih 15 minuta
-    },
-}
-```
-
-#### 12.6.6 SEF-OCR hibridna obrada
-
-Kada se fakture primaju iz SEF-a, sistem koristi i strukturirane UBL podatke I OCR za maksimalnu tačnost:
-
-**Pravila spajanja:**
-- PIB, MB: Uvek koristi SEF (autoritativno)
-- Iznosi: Koristi SEF, označi ako se OCR razlikuje za > 1%
-- Broj fakture: Koristi SEF
-- Stavke: Spoji - preferiraj SEF strukturu, OCR za detalje
-- Uslovi plaćanja: OCR može imati više detalja
-- Prilozi: Sačuvaj PDF iz SEF-a
-
-**Obrada neslaganja:**
-
-| Polje | SEF vrednost | OCR vrednost | Akcija |
-|-------|-------------|-------------|--------|
-| total_amount | 60000.00 | 60000.00 | Poklapanje - nastavi |
-| total_amount | 60000.00 | 59999.50 | U okviru tolerancije (0.01%) |
-| total_amount | 60000.00 | 58000.00 | Označi za pregled (>1% razlika) |
-| line_items | 3 stavke | 5 stavki | OCR pronašao više detalja - pregled |
-| seller_pib | 123456789 | 123456780 | Koristi SEF (autoritativno) |
-
-#### 12.6.7 SEF inbox korisnički interfejs
-
-Sistem MORA da pruži dedicirani "SEF Inbox" prikaz za upravljanje dolaznim eFaktura fakturama:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  SEF Inbox                                              [↻ Sinhronizuj]│
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Filter: [Sve] [Ovaj mesec]                   Pretraga: [________]  │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐│
-│  │   │ Status      │ Dobavljač           │ Br. fakture │ Iznos    │ ││
-│  ├───┼─────────────┼─────────────────────┼─────────────┼──────────┤ ││
-│  │ ☑ │ Nova        │ Telekom Srbija      │ 2025-001234 │ 4.500 RSD│ ││
-│  │ ☐ │ Nova        │ EPS Snabdevanje     │ 01-25-98765 │ 12.340 RSD││
-│  │ ☐ │ Na čekanju  │ Dobavljač XYZ       │ F-2025-042  │ 156.000 RSD││
-│  │ ☐ │ Obrađeno    │ Partner ABC         │ 2025/0015   │ 45.000 RSD││
-│  │ ☐ │ Odbijeno    │ Nepoznat d.o.o.     │ INV-999     │ 8.000 RSD ││
-│  └─────────────────────────────────────────────────────────────────┘│
-│                                                                      │
-│  Izabrano: 1                     [Obradi izabrane] [Odbij] [Arhiviraj]│
-│                                                                      │
-│  Poslednja sinhronizacija: pre 5 minuta                             │
-│  Neobrađenih faktura: 2                                             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Akcije za SEF fakture:**
-
-| Akcija | Opis | Rezultat |
-|--------|------|---------|
-| Obradi | Obradi kroz FakturaAI pipeline | Kreira fakturu + računovodstvenu nameru |
-| Prihvati na SEF | Pošalji prihvatanje na SEF | Ažurira SEF status na APPROVED |
-| Odbij | Odbij fakturu | Šalje odbijanje na SEF sa razlogom |
-| Arhiviraj | Arhiviraj bez obrade | Čuva ali ne kreira fakturu |
-
-#### 12.6.8 Obrada grešaka SEF-a
-
-| Greška | Uzrok | Oporavak |
-|--------|-------|----------|
-| `SEF_CONNECTION_FAILED` | Mrežni/API problemi | Ponovni pokušaj sa eksponencijalnim odlaganjem |
-| `SEF_AUTH_EXPIRED` | API ključ/sertifikat istekao | Obavesti admina, onemogući sinhronizaciju |
-| `SEF_RATE_LIMITED` | Previše zahteva | Smanji frekvenciju sinhronizacije |
-| `SEF_INVALID_RESPONSE` | Neočekivan format podataka | Zapiši, preskoči fakturu, upozori |
-| `SEF_DUPLICATE_INVOICE` | Već obrađeno | Preskoči, ažuriraj samo status |
-| `UBL_PARSE_ERROR` | Neispravan XML | Zapiši, pokušaj obradu samo PDF-om |
+Pridružene tabele `sef_connections` i `sef_invoices` nisu nikada izgrađene i nisu prisutne u šemi.
 
 ### 12.7 NBS integracija (Narodna banka Srbije)
 
@@ -3996,16 +3764,24 @@ async def fetch_nbs_exchange_rates():
 
 | Ekran | Opis |
 |-------|------|
-| Landing stranica | Marketing stranica sa funkcionalnostima, cenama |
-| Prijava/Registracija | Ekrani za autentifikaciju |
-| Kontrolna tabla | Pregled, statistike, brze akcije |
+| Landing stranica | Marketing stranica sa funkcionalnostima, cenama (saldora.rs) |
+| Prijava / Registracija / Awaiting Approval | Auth ekrani; nove organizacije sleću na `/awaiting-approval` dok admin ne odobri (FR-4.1.5) |
+| **Pregled portfelja** (`/pregled`) | Default home za agencijske korisnike; mreža kartica klijenata sa indikatorima zdravlja (FR-4.18.1) |
+| **Klijent radna tabla** (`/klijenti/{id}`) | Single-page workspace za jednog klijenta sa tabovima Hronologija (default), Fakture, Izveštaji, Pravila (FR-4.18.2) |
+| Hronologija tab | Render `client_events` događaja, grupisanih po danu, filterabilan po tipu (FR-4.18.3) |
+| Fakture tab | Lista faktura pre-scope-ovana na trenutnog klijenta (FR-4.18.4) |
+| Izveštaji tab | Izveštaji (FR-4.13) pre-scope-ovani na trenutnog klijenta; budući ugostiteljski obrasci (M20) (FR-4.18.5) |
+| Pravila tab | Pravila po klijentu + org-wide; CTA "Kreiraj pravilo za ovog klijenta" (FR-4.18.6) |
+| Klijenti (flat lista) | Brzi skok u workspace pojedinog klijenta |
+| Pravila (org-wide editor) | Globalna pravila van per-client konteksta |
+| Arhiviranje | Periodne arhive za poreze/retenciju |
+| Katalog proizvoda | Kanonički proizvodi deljeni među klijentima |
 | Otpremanje | Drag & drop interfejs za otpremanje |
-| Obrada | Status obrade u realnom vremenu |
 | Pregled fakture | Uporedni prikaz dokumenta i podataka |
-| Lista faktura | Filtrabilna, sortabilna tabela |
 | Izvoz | Izbor formata, mapiranje polja |
-| Podešavanja | Profil, tim, API ključevi |
-| Naplata | Izbor plana, korišćenje, fakture |
+| Podešavanja / Tim / Naplata | Profil, članovi tima, plan i naplata |
+
+**Bočna struktura (post-M19):** vidi FR-4.18.7. Top-level stavke `Fakture` i `Izveštaji` su uklonjene; obe žive unutar workspace-a po klijentu.
 
 ### 13.3 Responzivne tačke preloma
 
@@ -4187,6 +3963,7 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 | 2.2 | Mart 2026 | FakturaAI Tim | Generacija PDV knjiga (KPR/KIR) zamenjena funkcionalnosti Izveštaja (4.13): denormalizovana tabela invoice_line_items koja se popunjava pri završetku OCR obrade i pri izmenama; pet unapred definisanih šablona izveštaja (pregled primljene robe, troškovi po dobavljaču, mesečni pregled stavki, poređenje cena, pregled troškova) na /api/v1/reports/; nulti LLM trošak; CSV izvoz; stranica na /{orgSlug}/izvestaji; kontrola PRO plana. Dodato upravljanje klijentima za Agency plan (4.12). |
 | 2.8 | Mart 2026 | Saldora Tim | Dodat Katalog proizvoda (4.15): kanonička imena, aliasi (JSONB), kategorije, prodajne cene, marže, pg_trgm fuzzy matching, FK product_id na invoice_line_items, CRUD + merge API na /api/v1/products/. Dodata četiri endpoint-a za nabavnu inteligenciju (4.13.2.6–4.13.2.9): /kalkulacija, /ruc, /spending-by-category, /dpu (dnevna evidencija robe). Stranica /izvestaji objedinjena sa tri grupe: Opšti, Nabavka i prodaja, Upravljanje; uklonjene odvojene stranice /katalog i /dpu. Dodat product_catalog u šemu baze (7.2.6). Preimenovano: "Šank lista" → "Dnevna evidencija robe"; "Ugostiteljstvo" → "Nabavka i prodaja". Ispravke: sinhronizacija stavki pri verifikaciji fakture; kaskadno brisanje pri grupnom brisanju; mesečni pregled prikazuje PDV % i PDV iznos; poruke o greškama verifikacije prevedene na srpski. |
 | 2.9 | Mart 2026 | Saldora Tim | Dodat sistem podrške u aplikaciji (4.16). Ažurirana referenca MiniMax API polja (12.5.4). Ažurirani detalji bezbednosnih poboljšanja (10.1, 10.3). Dodate serverless GPU opcije deployovanja (9.7). Ažuriran prikaz pouzdanosti sa procenata na tekstualne oznake (4.3.3). |
+| 4.0 | 2026-04-29 | Saldora Tim | **Ugostiteljski pivot.** Repozicioniran dokument kao izvor istine za post-pivot proizvod (sloj inteligencije za srpske računovodstvene agencije sa ugostiteljskim klijentima). Novo zaglavlje ("trenutna teza"). Ažurirane persone (1.4, 2.3) — vlasnici agencija i knjigovođe kao primarni; paušalci uklonjeni kao persona. Dodat FR-4.1.5 ručno odobrenje naloga (subscription_status, /awaiting-approval, admin_orgs.py) i FR-4.1.6 pozivnice/zahtevi za pristup. Proširen Odeljak 4.12 sa FR-4.12.5 client_events log i FR-4.12.6 rule_client_associations; uklonjen bočni selektor klijenata u korist klijent-prvi UI-a. Dodat Odeljak 4.17 (Van obima / Otpisano) konsolidacija otpisanih funkcionalnosti: paušal modul, klijent portal, compliance watchdog, strani reverse-charge modul, praćenje plaćanja, webhookovi, EasyOCR fallback, Stripe, predprocesiranje slike za VLM. Dodat Odeljak 4.18 (Klijent-prvi UI / M19) sa `/pregled`, `/klijenti/{id}`, tabovima Hronologija/Fakture/Izveštaji/Pravila, restrukturom bočne trake. Dodat Odeljak 4.19 (Ugostiteljski zakonski obrasci / M20) označen kao odložen do sastanka sa računovođom; dokumentovani kalkulacije, šank lista, cenovnik, KEP, popis kao sledeći sloj sa osnovom podataka u mestu. Označen Odeljak 4.14 (email ingestion) i 4.16 (in-app podrška) kao planirano/još nije povezano. Ažuriran tehnološki stek (Odeljak 6) na Modal-hosted dots.ocr (zamenjuje vLLM kontejner), Hetzner CX32 jednomašinski docker-compose (zamenjuje k8s), Cloudflare R2 (prod) + MinIO (dev), Resend (jedini). Zamenjena arhitektura deployovanja iz Odeljka 11 sa single-host Caddy/FastAPI/Next.js/PostgreSQL/Redis/Celery topologijom. Uklonjeni svi SEF integracioni podOdeljci (12.6.2–12.6.8) — zadržan stub koji ukazuje na deprioritizaciju i upućuje na v3.2 za prethodnu specifikaciju. Dodate 7.2.7 (client_events) i 7.2.8 (rule_client_associations) DB šeme; dokumentovana semantika subscription_status na organizations (7.2.2). Ažurirani UI ključni ekrani (13.2). Razne čišćenja zastarelih referenci (fakturaai.rs → saldora.rs, fakturaai DB nazivi kolona → saldora). |
 
 ---
 

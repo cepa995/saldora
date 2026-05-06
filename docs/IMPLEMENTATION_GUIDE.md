@@ -1,45 +1,61 @@
 # Saldora — Implementation Guide
 
 **Reference:** [SRS.md](SRS.md)
-**Date:** 2026-02-25
+**Original date:** 2026-02-25
+**Last reviewed:** 2026-04-29
+
+---
+
+> **⚠️ This document captures the original M1-M16 milestone breakdown.** It is preserved for traceability against the SRS.
+>
+> - For the **current active roadmap (M19 onward)** and post-pivot decisions see [`saldora-implementation-plan.md`](./saldora-implementation-plan.md).
+> - For the **strategic shift toward hospitality agencies** (the thesis driving M19+) see [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md).
+> - **M14 (Paušal Module), M16 (Client Portal in the GH tracker), and M18 (Compliance Watchdog) are dropped.** See the "Post-pivot milestones" section near the end for status of every milestone numbered above 13.
 
 ---
 
 ## Overview
 
-This guide breaks the Saldora SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
+This guide breaks the original Saldora SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
+
+After M13 the project pivoted toward Serbian hospitality accounting agencies; M14+ live in [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) and are summarised at the bottom of this file.
 
 > **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
 ### Milestone Map
 
 ```
-M1: Foundation & Authentication [COMPLETED]
+M1: Foundation & Authentication                                 [DONE]
  │
- ├──► M2: Document Storage & Upload
+ ├──► M2: Document Storage & Upload                             [DONE]
  │     │
- │     └──► M3: OCR Processing Pipeline
+ │     └──► M3: OCR Processing Pipeline (Modal-hosted dots.ocr) [DONE]
  │           │
- │           ├──► M4: Invoice Management & Verification
+ │           ├──► M4: Invoice Management & Verification         [DONE]
  │           │     │
- │           │     ├──► M5: Accounting Intelligence & Rules Engine
+ │           │     ├──► M5: Accounting Intelligence & Rules     [DONE]
  │           │     │
- │           │     └──► M6: Data Export
+ │           │     └──► M6: Data Export                         [DONE]
  │           │
- │           └──► M7: External Integrations (SEF, NBS, Paddle)
+ │           └──► M7: External Integrations (NBS, Paddle, …)    [DONE]
  │
- ├──► M8: Frontend Application (can start after M1, iterates with backend milestones)
+ ├──► M8: Frontend Application                                  [DONE]
  │
- ├──► M9: CI/CD, Security & Production
+ ├──► M9: CI/CD, Security & Production                          [DONE — Hetzner; K8s deferred]
  │
- ├──► M10: Multi-Country Tax ID Validation (after M3+M4, before production launch)
+ ├──► M10: Multi-Country Tax ID Validation                      [PARTIAL — Serbian only]
  │
- ├──► M11: Invoice Template Learning & LLM Cost Optimization (after M3, best after M8)
+ ├──► M11: Invoice Template Learning & LLM Cost Optimization    [OPEN]
  │
- ├──► M12: Client Management for Agencies (after M4+M8, requires multi-tenant foundation)
+ ├──► M12: Client Management for Agencies                       [DONE]
  │
- └──► M13: Invoice Reports / Izveštaji (after M3+M12, requires OCR pipeline + line items data)
+ └──► M13: Invoice Reports / Izveštaji                          [DONE]
+        │
+        └──► M16: Restaurant / Procurement Intelligence         [DONE]
+                  (extends M13 with product catalog + procurement reports)
 ```
+
+After M16 the project pivoted toward Serbian hospitality accounting agencies. See "Post-pivot milestones" below and [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) for the active M19+ work.
 
 ### Requirement Coverage
 
@@ -180,24 +196,22 @@ This milestone is complete. It established the database module, core models (Use
 
 #### 3.2 — Integrate dots.ocr as primary OCR engine
 
-**Description:** Implement the dots.ocr VLM engine wrapper that connects to a vLLM server running dots.ocr and calls it via the OpenAI-compatible chat completions API (the official approach from the dots.ocr project).
+**Description:** Implement the dots.ocr VLM engine wrapper that connects to a hosted dots.ocr server and calls it via the OpenAI-compatible chat completions API (the official approach from the dots.ocr project).
 
 **Requirements covered:** FR-4.3.1, FR-4.3.3 (layout analysis), Section 3.4, Section 4.3.7
 
-**Architecture:** dots.ocr runs as a separate vLLM server (`vllm/vllm-openai` Docker image) with GPU access. The worker calls it over HTTP via the `openai` Python client. This follows the official `demo_vllm.py` pattern from the dots.ocr repo.
+**Architecture (production):** dots.ocr is deployed on **Modal** (A10G GPU, scale-to-zero) at `infra/modal/dots_ocr.py`. The worker calls it via the `openai` Python client over HTTPS using `DOTS_OCR_SERVER_URL` pointing at the Modal endpoint. Cold start ~2 min on first request after idle; container stays warm 5 min after the last request. This replaced an earlier in-cluster `vllm/vllm-openai` Docker service to keep the Hetzner VPS GPU-free.
 
 **Tasks:**
 - Implement `DotsOCREngine` in `packages/ml/fakturaai_ml/ocr/dots_ocr.py`:
-  - Connect to vLLM server via OpenAI-compatible API (`DOTS_OCR_SERVER_URL` env var)
+  - Connect to the OCR server via OpenAI-compatible API (`DOTS_OCR_SERVER_URL` env var)
   - Send images as base64 data URIs with the official prompt format (includes `<|img|><|imgpad|><|endofimg|>` tokens)
   - Accept raw color image (no preprocessing — VLMs work best with originals), return text/structured output
   - Support Cyrillic and Latin script recognition (100+ languages)
-- Add `dots-ocr-server` service to `docker-compose.yml`:
-  - Uses `vllm/vllm-openai:latest` image with GPU reservation
-  - Launches with `--chat-template-content-format string --trust-remote-code`
-  - Model weights cached in `huggingface_cache` Docker volume
-  - Health check on `/health` endpoint (5-min start period for model loading)
+- Deploy the GPU server: `modal deploy infra/modal/dots_ocr.py` (see [DEPLOYMENT.md](./DEPLOYMENT.md) → Modal OCR Management)
 - Define `OCRResult` dataclass with regions, reading order, full text, overall confidence
+
+> **Note:** EasyOCR fallback was removed — if dots.ocr fails, the user reviews the invoice manually. The `OCR_FALLBACK_ENGINE=none` setting is the default everywhere.
 - Handle server unavailability gracefully (log error, return empty result for manual review)
 
 **Acceptance:** Feed a sample Serbian invoice image → receive structured output with extracted text, layout regions, and confidence scores.
@@ -1909,26 +1923,66 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 
 ---
 
-## Summary
+## Summary (M1-M16 from the original SRS)
 
-| Milestone | Issues | Key Deliverable |
-|-----------|--------|----------------|
-| **M1: Foundation & Auth** [DONE] | 1.1–1.6 | Users can register, login, JWT auth works, test infrastructure established |
-| **M2: Document Storage & Upload** | 2.1–2.4 | Files upload to S3, database records created, Celery tasks queued |
-| **M3: OCR Processing Pipeline** | 3.1–3.7 | dots.ocr (OCR) + Claude LLM (field extraction) extract structured data including tax_groups; regex fallback; PIB + math validation in pipeline; results saved to DB |
-| **M4: Invoice Management & Verification** | 4.1–4.7 | Full CRUD, APR PIB verification, math checks, correction logging, audit trail |
-| **M5: Accounting Intelligence & Rules** | 5.1–5.4 | AccountingIntent, VAT treatment, konta, PDV books, automation rules engine |
-| **M6: Data Export** | 6.1–6.5 | XLSX/CSV/JSON export, custom templates, audit export for tax inspections |
-| **M7: External Integrations** | 7.1–7.8 | SEF eFaktura sync, NBS exchange rates, Paddle billing, email, webhooks, usage tracking |
-| **M8: Frontend Application** | 8.1–8.11 | Dashboard, upload, invoice list, review, settings, SEF inbox, billing, i18n, responsive, landing page |
-| **M9: CI/CD & Production** | 9.1–9.10 | CI pipeline, E2E tests, security, monitoring, K8s deployment, ZZPL compliance, API keys, OAuth, data retention |
-| **M10: Multi-Country Tax ID** | 10.1–10.4 | OIB/JIB/EU VAT validators, LLM prompt for multi-country, country-aware confidence scoring, tests |
-| **M11: Template Learning & LLM Cost Optimization** | 11.1–11.5 | Invoice layout fingerprinting, template-based extraction (LLM bypass), auto-learning from LLM outputs, cost analytics dashboard |
-| **M12: Client Management for Agencies** | 12.1–12.5 | Client model with feature gating, CRUD API, invoice-client auto-assignment via PIB, frontend client context and scoping, tests |
-| **M13: Invoice Reports (Izveštaji)** | 13.1–13.4 | Denormalized invoice_line_items table + sync logic, five report endpoints with CSV export, frontend Izveštaji page with template cards and filters, tests |
-| **M16: Restaurant / Procurement Intelligence** [DONE] | 16.1–16.5 | Product catalog (pg_trgm fuzzy matching, aliases, margins), four procurement report endpoints (kalkulacija, RUC, spending-by-category, dpu), unified /izvestaji page with group tabs, bug fixes |
+| Milestone | Status | Issues | Key Deliverable |
+|-----------|--------|--------|----------------|
+| **M1: Foundation & Auth** | DONE | 1.1–1.6 | Users register/login, JWT auth, test infrastructure |
+| **M2: Document Storage & Upload** | DONE | 2.1–2.4 | Files upload to S3/R2, database records created, Celery tasks queued |
+| **M3: OCR Processing Pipeline** | DONE | 3.1–3.7 | dots.ocr on Modal + Claude Haiku (field extraction); regex fallback; PIB + math validation; results saved to DB |
+| **M4: Invoice Management & Verification** | DONE | 4.1–4.7 | Full CRUD, APR PIB verification, math checks, correction logging, audit trail |
+| **M5: Accounting Intelligence & Rules** | DONE | 5.1–5.4 | AccountingIntent, VAT treatment, konta, PDV books, automation rules engine |
+| **M6: Data Export** | DONE | 6.1–6.5 | XLSX/CSV/JSON export, custom templates, audit export |
+| **M7: External Integrations** | DONE | 7.1–7.8 | NBS exchange rates, Paddle billing skeleton, Resend email, webhooks, usage tracking |
+| **M8: Frontend Application** | DONE | 8.1–8.11 | Dashboard, upload, invoice list, review, settings, billing, i18n, responsive, landing page |
+| **M9: CI/CD & Production** | MOSTLY DONE | 9.1–9.10 | CI pipeline, security, monitoring, ZZPL compliance, API keys, data retention. K8s deferred — running on Hetzner via Caddy + Cloudflare |
+| **M10: Multi-Country Tax ID** | PARTIAL | 10.1–10.4 | Serbian PIB validation in production; multi-country (OIB/JIB/EU VAT) deferred until cross-border becomes a real customer ask |
+| **M11: Template Learning & LLM Cost Optimization** | OPEN | 11.1–11.5 | Layout fingerprinting + template extraction to bypass LLM on recurring suppliers. Issues #108–#112 still open |
+| **M12: Client Management for Agencies** | DONE | 12.1–12.5 | Client model, CRUD API, PIB auto-assignment, sidebar client context |
+| **M13: Invoice Reports (Izveštaji)** | DONE | 13.1–13.4 | Denormalized `invoice_line_items` table, 5 SQL-based report endpoints, frontend page with CSV export |
+| **M16: Restaurant / Procurement Intelligence** | DONE | 16.1–16.5 | Product catalog (pg_trgm), kalkulacija/RUC/category/DPU report endpoints, unified `/izvestaji` |
 
-**Total: 80 issues across 14 milestones.**
+**Total documented above: 80 issues across 14 milestones.**
+
+> **Note:** SEF (eFaktura) and the standalone PDV-book module that featured prominently in earlier drafts are no longer load-bearing. SEF is deprioritised because it lacks webhooks (polling-only) and because the wedge moved to paper invoices the agency receives outside SEF. The PDV-book generators were superseded by the more flexible report library introduced in M13. See [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md) for the rationale.
+
+---
+
+## Post-pivot milestones (M14 onward)
+
+Numbering is the GitHub-tracker numbering, which doesn't always line up with the SRS numbering. These are not specced in detail here — see [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) for the active roadmap.
+
+| Milestone | Status | Summary |
+|-----------|--------|---------|
+| **M14: Paušal Module** | DROPPED | The paušal data model + outgoing-invoice issuance work (M14.1, M14.4 in PR #193, KPO ledger in #194) was reverted in PR #197. Paušalci are not the target market; MiniMax's dedicated paušal app handles that segment. The `direction`/`client_type`/`customers`/`invoice_counters` columns and routers are gone. |
+| **M15: Foreign Invoice Reverse-Charge** | DEFERRED | Re-evaluate only if hospitality agencies surface it as a real pain. NBS conversion + AccountingIntent already cover the common case. |
+| **M15 (tracker): In-App Support System** | OPEN | Ticket-based support (`Podrška` page, file attachments, admin thread view). Issues #146–#150 open. |
+| **M17 (tracker): Email Ingestion Pipeline** | OPEN | Per-org inbound address (`org-slug@invoices.saldora.ai`). DNS + provider not yet provisioned. Issues #135–#141 open. |
+| **M17 (tracker): Data Protection & Automated Archives** | DONE | Daily DB backups → R2 (30-day retention), monthly archive emails to billing contact, ZZPL ToS/legal text. Shifts retention responsibility to the customer. |
+| **M16 (tracker): Client Portal** | DROPPED | End clients are not the buyer; agency remains the sole user class. |
+| **M18: Compliance Watchdog** | DROPPED | Scheduled rule evaluation producing alerts. Paušal-era thinking; doesn't serve hospitality. The rules engine still fires on events. |
+| **M19: Client-First UI** | ACTIVE | Reorganise the app around the client axis: portfolio view, per-client workspace at `/klijenti/{id}` with Hronologija/Fakture/Izveštaji/Pravila tabs, `client_events` event log, sidebar restructure. M19.1–M19.9 shipped in PR #210; M19.10 (E2E + cleanup), M19.11 (tests), and #211 (responsive sweep) in flight. |
+| **M19 follow-on: Manual approval gate** | DONE | New registrations land in `subscription_status="pending"`; `require_role` 403s with `subscription_pending_approval` until an admin flips the status. `scripts/admin_orgs.py` interactive CLI for staging/production. Required because Saldora doesn't accept cards (Paddle infra exists but customers pay manually for now). |
+| **M20: Hospitality Legal Forms** | DEFERRED | Kalkulacije, šank lista, cenovnik, KEP, popis. Specs to be drafted from a real accountant meeting, not from reading the law. |
+| **M21: Close Checklist & Period Semantics** | DEFERRED | Period entity with close/lock semantics, monthly checklist. Depends on M20 output. |
+
+### Out-of-milestone work currently considered
+
+- **SEF ingestion as a data source** — pulling SEF'd invoices into the pipeline for visibility (independently useful, not strategic).
+- **Public Serbian tax calendar widget** — marketing/SEO.
+- **Rule template marketplace** — extends the existing rules engine.
+- **Pricing page update** — reflect the hospitality positioning once the forms layer ships.
+
+---
+
+## Sequencing principles (post-pivot)
+
+From [`saldora-implementation-plan.md`](./saldora-implementation-plan.md):
+
+1. **Client-first UI first.** The structural reorganisation is additive under any version of the forms story and unblocks every future client-scoped feature.
+2. **No forms work before the accountant meeting.** The cost of building the wrong columns/formulas is higher than the cost of waiting.
+3. **One branch, one cutover.** Saldora has no live paying customers; coexistence is friction for the developer, not safety for the user.
+4. **New features land inside the client workspace** unless legitimately agency-scoped. Resist new top-level sidebar entries.
 
 ### Parallelization Opportunities
 
