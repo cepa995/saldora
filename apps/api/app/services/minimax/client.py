@@ -90,10 +90,26 @@ class MiniMaxClient:
             )
 
         if response.status_code != 200:
+            body = response.text
+            # Log the upstream body server-side so we can diagnose without
+            # leaking it back to the user. OAuth2 token errors are JSON
+            # with shape { "error": "invalid_grant", "error_description": "…" }
+            # but some providers return a plain string — handle both.
+            logger.warning(
+                "MiniMax authentication failed: status=%s body=%s",
+                response.status_code,
+                body,
+            )
+            error_code = ""
+            try:
+                error_code = (response.json() or {}).get("error", "") or ""
+            except (ValueError, AttributeError):
+                pass
+            suffix = f" ({error_code})" if error_code else ""
             raise MiniMaxError(
-                f"Authentication failed: {response.status_code}",
+                f"Authentication failed: {response.status_code}{suffix}",
                 status_code=response.status_code,
-                response_body=response.text,
+                response_body=body,
             )
 
         data = response.json()
