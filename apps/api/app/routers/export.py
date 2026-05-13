@@ -1105,8 +1105,6 @@ async def test_minimax_connection(
         )
 
     try:
-        from app.services.minimax.client import MiniMaxClient
-
         client = MiniMaxClient(
             client_id=config.client_id,
             client_secret=config.client_secret,
@@ -1116,11 +1114,45 @@ async def test_minimax_connection(
         )
         await client.authenticate()
         return {"status": "connected", "message": "Uspešno povezano sa MiniMax"}
+    except MiniMaxError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Neuspešna veza: {exc} — {_minimax_auth_hint(exc.response_body)}",
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Neuspešna veza: {exc}",
         )
+
+
+# OAuth2 error codes returned by MiniMax's token endpoint mapped to friendly
+# Serbian hints. Keeps the UI useful without leaking the raw provider body.
+_MINIMAX_OAUTH_HINTS: dict[str, str] = {
+    "invalid_client": (
+        "Pogrešan client_id ili client_secret. Proveri kredencijale iz MiniMax developer portala."
+    ),
+    "invalid_grant": "Pogrešan username ili password.",
+    "unauthorized_client": (
+        "Klijent nema dozvolu za password grant. Proveri podešavanja integracije u MiniMax-u."
+    ),
+    "invalid_scope": "Tražen scope nije dozvoljen za ovog klijenta.",
+    "unsupported_grant_type": "Provajder ne podržava password grant.",
+}
+
+
+def _minimax_auth_hint(response_body: str) -> str:
+    """Map an OAuth2 token-endpoint error body to a Serbian hint."""
+    if not response_body:
+        return "Telo odgovora nije dostupno."
+    try:
+        import json as _json
+
+        data = _json.loads(response_body)
+    except (ValueError, TypeError):
+        return "Nepoznata greška provajdera."
+    error = (data or {}).get("error") or ""
+    return _MINIMAX_OAUTH_HINTS.get(error, error or "Nepoznata greška provajdera.")
 
 
 async def _get_minimax_config(db: AsyncSession, organization_id) -> MiniMaxConfig:

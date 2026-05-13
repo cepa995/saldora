@@ -1,9 +1,24 @@
 # Software Requirements Specification (SRS)
-# Saldora - AI-Powered Invoice Processing Platform
+# Saldora - Intelligence Layer for Serbian Hospitality Accounting Agencies
 
-**Version:** 3.2
-**Date:** April 2026
-**Status:** Draft
+**Version:** 4.0
+**Date:** 2026-04-29
+**Status:** Source of truth (post-pivot)
+
+---
+
+## Current Thesis (post-pivot)
+
+Saldora is an **intelligence layer for Serbian accounting agencies whose clients are hospitality businesses** — restaurants, cafes, bars, fast food outlets, catering. The wedge is twofold:
+
+1. **OCR on paper invoices with many line items** — beverage distributors, dry-goods suppliers, produce, meat, cleaning supplies, equipment maintenance — the kinds of invoices that still arrive on paper or as PDF email attachments and that SEF (eFaktura) does not and probably will not soon cover.
+2. **Generation of legally-required Serbian hospitality forms** from the extracted line-item data — kalkulacije, šank lista, cenovnik, KEP, popis. Today, agencies generate these by hand in Excel.
+
+The buyer is the **agency owner**; the daily users are **agency bookkeepers** who handle 30–40 hospitality clients each, with each client producing 20–40 invoices per month. Saldora is the pipeline from paper-invoice-in to fully-classified, legally-correct data out, and hands that data to **MiniMax** (the dominant Serbian cloud accounting product) for the general ledger and financial reporting. **Saldora does not replace MiniMax.** Saldora does not do bank reconciliation, payment tracking, or general-ledger postings.
+
+The original positioning of this document — "generic AI-powered invoice processing for accountants, agencies, and enterprises" — is **superseded** by the hospitality thesis. Capabilities that were generic (multi-tenant org model, OCR + LLM extraction, exports, automation rules, client management) still work and are still in scope; they are simply no longer the primary marketing or product framing. Anything that was paušalci-specific, generic-B2B-portal-shaped, or SEF-load-bearing has been dropped or deferred (see Section 4.17, "Out of scope / dropped").
+
+For the strategic narrative, see [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md). For milestone status, see [`saldora-implementation-plan.md`](saldora-implementation-plan.md).
 
 ---
 
@@ -13,25 +28,27 @@
 2. [Overall Description](#2-overall-description)
 3. [System Architecture](#3-system-architecture)
 4. [Functional Requirements](#4-functional-requirements)
+   - 4.1 [User Authentication & Authorization](#41-user-authentication--authorization)
    - 4.9 [Business Logic & Validation Rules](#49-business-logic--validation-rules)
    - 4.10 [Accounting Intent Layer](#410-accounting-intent-layer)
    - 4.11 [Automation Rules Engine](#411-automation-rules-engine)
    - 4.12 [Client Management (Agency)](#412-client-management-agency)
    - 4.13 [Invoice Reports (Izveštaji)](#413-invoice-reports-izveštaji)
-   - 4.14 [Email Ingestion Pipeline](#414-email-ingestion-pipeline)
+   - 4.14 [Email Ingestion Pipeline (planned, not yet wired)](#414-email-ingestion-pipeline-planned)
    - 4.15 [Product Catalog (Katalog proizvoda)](#415-product-catalog-katalog-proizvoda)
-   - 4.16 [In-App Support System](#416-in-app-support-system)
+   - 4.16 [In-App Support System (planned)](#416-in-app-support-system-planned)
+   - 4.17 [Out-of-Scope / Dropped Features](#417-out-of-scope--dropped-features)
+   - 4.18 [Client-First UI (M19)](#418-client-first-ui-m19)
+   - 4.19 [Hospitality Legal Forms (deferred, M20)](#419-hospitality-legal-forms-deferred-m20)
 5. [Non-Functional Requirements](#5-non-functional-requirements)
 6. [Tech Stack](#6-tech-stack)
 7. [Database Design](#7-database-design)
 8. [API Specification](#8-api-specification)
 9. [AI/ML Components](#9-aiml-components)
-   - 9.9 [Human-in-the-Loop & Feedback System](#99-human-in-the-loop--feedback-system)
 10. [Security Requirements](#10-security-requirements)
     - 10.6 [Legal & Compliance Flows](#106-legal--compliance-flows)
 11. [Deployment Architecture](#11-deployment-architecture)
 12. [Third-Party Integrations](#12-third-party-integrations)
-    - 12.5 [SEF Integration (eFaktura)](#125-sef-integration-efaktura)
 13. [User Interface Requirements](#13-user-interface-requirements)
 14. [Testing Requirements](#14-testing-requirements)
 15. [Appendices](#15-appendices)
@@ -42,17 +59,25 @@
 
 ### 1.1 Purpose
 
-This Software Requirements Specification (SRS) document provides a comprehensive description of the Saldora platform (formerly Saldora) - an AI-powered invoice processing system designed specifically for the Serbian market. The document outlines functional and non-functional requirements, system architecture, and technical specifications.
+This Software Requirements Specification (SRS) document is the source-of-truth description of the Saldora platform — an intelligence layer for Serbian accounting agencies handling hospitality clients. The document outlines functional and non-functional requirements, system architecture, and technical specifications as the product exists today (post-pivot, April 2026).
+
+This is a living document. Content describing pre-pivot generic-B2B positioning has been either rewritten in place to reflect the hospitality thesis or explicitly marked as superseded.
 
 ### 1.2 Scope
 
-Saldora is a SaaS platform that enables accountants, accounting agencies, and businesses in Serbia to:
+Saldora is a SaaS platform that enables Serbian accounting agencies handling hospitality portfolios (restaurants, cafes, bars) to:
 
-- Automatically extract data from invoices using AI-powered OCR
+- Ingest paper invoices, fiscal receipts, and PDF email attachments at scale
+- Automatically extract structured data (header fields **and** line items) using a vision-language OCR pipeline plus an LLM extraction layer
 - Process both Cyrillic and Latin script documents
-- Verify business entities through APR (Serbian Business Registers Agency) integration
-- Export structured data to various formats (Excel, CSV, JSON)
-- Manage and organize invoice data efficiently
+- Normalize line-item descriptions to canonical product identities via a per-organization product catalog
+- Manage clients (the agency's hospitality businesses), scope every invoice to one client, and surface the agency's portfolio at a glance
+- Apply per-client and org-wide automation rules to classify invoices (document type, VAT treatment, suggested konto)
+- Generate procurement intelligence reports (kalkulacija, RUC, spending by category, dnevna evidencija robe) on top of normalized line items
+- Export structured data to MiniMax (XML file or REST API push), XLSX, CSV, JSON
+- Generate monthly archives (ZIP with invoice register, PDV summary, audit trail, original PDFs) for retention
+
+The system's deliberate non-goals are documented in Section 4.17.
 
 ### 1.3 Definitions, Acronyms, and Abbreviations
 
@@ -77,11 +102,17 @@ Saldora is a SaaS platform that enables accountants, accounting agencies, and bu
 
 ### 1.4 Target Audience
 
-- Independent accountants
-- Accounting agencies
-- Small and medium enterprises (SMEs)
-- Large corporations with high invoice volumes
-- Financial departments
+**Primary:**
+- Accounting agencies whose portfolios include hospitality clients (restaurants, cafes, bars, catering, fast food). Buyer = agency owner; daily users = agency bookkeepers.
+
+**Secondary (still supported, no longer the primary motion):**
+- Independent accountants and small-to-medium accounting practices that handle a mixed portfolio.
+- Hospitality SMEs that do their own bookkeeping in-house (a small minority of the market).
+
+**Removed from target audience:**
+- Paušalci (flat-rate entrepreneurs) as a persona — the paušal module was reverted; MiniMax's dedicated paušal product handles that segment.
+- End clients of agencies (e.g., a restaurant owner directly using Saldora) — see "no client portal" in Section 4.17. The agency remains the sole user class.
+- Generic enterprise B2B users (large corporations with thousands of invoices/month) — not the wedge; these companies receive the bulk of their invoices via SEF and have established workflows.
 
 ### 1.5 Document Conventions
 
@@ -119,41 +150,57 @@ Saldora operates as a standalone web application with the following integration 
 
 ### 2.2 Product Features (High-Level)
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Invoice Upload | Multi-format document upload (PDF, JPG, PNG, TIFF) | P0 |
-| AI Data Extraction | Automatic extraction of invoice fields | P0 |
-| Cyrillic/Latin Support | Full support for Serbian scripts | P0 |
-| PIB Verification | Real-time verification against APR database | P0 |
-| Data Export | Export to Excel, CSV, JSON formats | P0 |
-| Batch Processing | Process multiple invoices simultaneously | P1 |
-| User Management | Multi-user accounts with role-based access | P1 |
-| Dashboard & Analytics | Usage statistics and processing history | P1 |
-| Client Management | Manage clients and scope invoices per client (Agency plan) | P1 |
-| API Access | RESTful API for third-party integrations | P2 |
-| Custom Integrations | Custom export templates | P2 |
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Invoice Upload | Multi-format document upload (PDF, JPG, PNG, TIFF, WEBP) | Shipped |
+| AI Data Extraction | Vision-language OCR (dots.ocr) + Anthropic Claude Haiku LLM extraction | Shipped |
+| Cyrillic/Latin Support | Full support for Serbian scripts at OCR, extraction, and UI level | Shipped |
+| Manual Approval Gate | New organizations land in `pending` status; require admin approval before access | Shipped (M-Auth) |
+| Multi-Tenant Org Model | All data scoped by `organization_id`; role-based access | Shipped |
+| Client Management | First-class for Agency plan: CRUD, hard delete, retroactive PIB-based assignment | Shipped (M12) |
+| Per-Client Automation Rules | Rules optionally scoped to specific clients via `rule_client_associations` | Shipped (M19) |
+| Client Event Log (Timeline) | Append-only `client_events` table for per-client activity feed | Shipped (M19.1) |
+| Client-First UI | Portfolio view + per-client workspace + Hronologija/Fakture/Izveštaji/Pravila tabs | Shipping (M19) |
+| Procurement Reports | Kalkulacija, RUC, spending by category, dnevna evidencija robe | Shipped (M16-equivalent) |
+| Product Catalog | Canonical products + aliases + pg_trgm fuzzy matching from line items | Shipped |
+| Automation Rules Engine | Org-wide and per-client rules for konto/VAT classification | Shipped |
+| Accounting Intent Layer | Document type, transaction type, VAT treatment, suggested konta | Shipped |
+| MiniMax Export | XML file export and REST API push (received invoices, partner sync) | Shipped |
+| Generic Exports | XLSX, CSV, JSON with custom templates | Shipped |
+| Monthly Archives | Automated ZIP delivery via email; retention shifted to user | Shipped |
+| Hospitality Legal Forms | Kalkulacije, šank lista, cenovnik, KEP, popis (data foundation in place) | **Deferred** (M20, post-accountant-meeting) |
+| Email Ingestion | Per-org inbound address `org-slug@invoices.saldora.ai` | **Planned, not yet wired** |
+| In-App Support Tickets | Ticket system with attachments | **Planned** (M15) |
+| API Access | REST API + per-org API keys | Shipped |
+| Paddle Billing | Merchant of Record subscription billing (no Stripe) | Shipped |
 
 ### 2.3 User Classes and Characteristics
 
-#### 2.3.1 Individual Accountant
-- Processes 50-200 invoices/month
-- Needs simple, intuitive interface
-- Price-sensitive
-- Limited technical knowledge
+#### 2.3.1 Agency Owner (primary buyer)
 
-#### 2.3.2 Accounting Agency
-- Processes 500-5000 invoices/month
-- Manages multiple clients via Client Management (create, update, soft-delete)
-- Invoices auto-assigned to clients via PIB matching after OCR
-- Sidebar client selector for context-based invoice scoping
-- Requires batch processing
-- Needs API access for integration
+- Owns or manages a small accounting agency (typically 1–10 bookkeepers).
+- Holds 30–40 hospitality clients in the portfolio.
+- Decides whether to adopt Saldora; signs the contract; pays the bill.
+- Cares about: time saved per bookkeeper per month, audit traceability, smooth handoff to MiniMax, ZZPL compliance posture.
+- Day-to-day, primarily uses the Portfolio view and the Billing / Settings pages.
 
-#### 2.3.3 Enterprise User
-- Processes 5000+ invoices/month
-- Requires custom integrations
-- Needs SLA guarantees
-- Dedicated support required
+#### 2.3.2 Agency Bookkeeper (primary daily user)
+
+- Processes 20–40 invoices per hospitality client per month, across the agency's full portfolio.
+- Spends most time inside the per-client workspace: uploading or reviewing invoices, fixing OCR misreads on line items, generating reports, exporting to MiniMax.
+- Needs the workflow to be fast and keyboard-friendly; needs the OCR to actually capture line items, not just totals.
+- Cares about: line-item accuracy, low review rate, one-click export.
+
+#### 2.3.3 Independent Accountant (secondary)
+
+- Processes 50–200 invoices/month for a mixed portfolio.
+- Uses the same UI as agency bookkeepers but typically does not need the Portfolio view and Client Management as heavily.
+- Still supported on Professional and Agency plans.
+
+#### 2.3.4 Hospitality SME (rare, secondary)
+
+- Owner-operated restaurant or cafe doing in-house bookkeeping.
+- Single-client organization. Treated as a degenerate case of the agency model with one client = the SME itself.
 
 ### 2.4 Operating Environment
 
@@ -173,13 +220,21 @@ Saldora operates as a standalone web application with the following integration 
 
 **Assumptions:**
 - Users have stable internet connection
-- Invoice documents are legible (not severely damaged or blurred)
-- APR API remains available and maintains current data format
+- Invoice documents are legible (not severely damaged or blurred); the OCR worker logs and surfaces an error otherwise — there is no automatic OCR fallback
+- APR registry data is available via a licensed intermediary or commercial contract; a manual override path exists for outages
+- The hospitality clients of an agency continue to receive invoices on paper / PDF email attachments at meaningful volume (the wedge depends on this)
 
 **Dependencies:**
-- APR for PIB verification (requires commercial contract or licensed intermediary)
-- Cloud storage provider (AWS S3 or Cloudflare R2)
-- Payment processor (Paddle) as Merchant of Record
+- **Cloudflare R2** for production document storage (S3-compatible, MinIO for local dev)
+- **Modal.com** for GPU OCR inference (dots.ocr on A10G, scale-to-zero)
+- **Anthropic** for Claude Haiku LLM field extraction
+- **Resend** for transactional email (welcome, password reset, monthly archive delivery, admin approval notifications)
+- **Paddle** as Merchant of Record for subscription billing (Stripe is not available in Serbia)
+- **Cloudflare** for DNS, SSL, CDN, DDoS protection
+- **Hetzner CX32 VPS** as the application host
+- **NBS** (Narodna banka Srbije) public exchange-rate API for foreign-currency → RSD conversion
+- **APR** registry for PIB verification (licensed intermediary or commercial contract; manual override available)
+- **MiniMax** REST API for direct push of received invoices and partner sync (per-org credentials)
 
 ---
 
@@ -217,17 +272,18 @@ Saldora operates as a standalone web application with the following integration 
 ┌──────────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
 │   AI PROCESSING      │ │    DATABASE      │ │   FILE STORAGE       │
 │  ┌────────────────┐  │ │  ┌────────────┐  │ │  ┌────────────────┐  │
-│  │ vLLM Server   │  │ │  │ PostgreSQL │  │ │  │   S3/R2        │  │
-│  │ - dots.ocr VLM│  │ │  │            │  │ │  │   Compatible   │  │
-│  │ (GPU sidecar) │  │ │  └────────────┘  │ │  └────────────────┘  │
-│  └────────────────┘  │ │  ┌────────────┐  │ └──────────────────────┘
-│  ┌────────────────┐  │ │  │   Redis    │  │
-│  │ OCR Worker     │  │ │  │  (Cache)   │  │
-│  │(Celery+OpenAI) │  │ │  └────────────┘  │
+│  │ Modal.com      │  │ │  │ PostgreSQL │  │ │  │ Cloudflare R2  │  │
+│  │ - dots.ocr VLM │  │ │  │ (Hetzner)  │  │ │  │ (prod)         │  │
+│  │ (A10G GPU,     │  │ │  └────────────┘  │ │  │ MinIO (dev)    │  │
+│  │  scale-to-zero)│  │ │  ┌────────────┐  │ │  └────────────────┘  │
+│  └────────────────┘  │ │  │   Redis    │  │ └──────────────────────┘
+│  ┌────────────────┐  │ │  │  (Cache+   │  │
+│  │ OCR Worker     │  │ │  │   Celery)  │  │
+│  │ (Celery, CPU)  │  │ │  └────────────┘  │
 │  └────────────────┘  │ └──────────────────┘
 │  ┌────────────────┐  │
 │  │ LLM Extractor  │  │
-│  │ (Claude API)   │  │
+│  │ (Claude Haiku) │  │
 │  └────────────────┘  │
 └──────────────────────┘
 ```
@@ -274,10 +330,17 @@ Saldora operates as a standalone web application with the following integration 
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
 │                                                                      │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
-│  │ Billing Service │    │  Queue Service  │    │ Webhook Service │  │
-│  │  - Paddle int.  │    │ - Celery tasks  │    │ (DEPRIORITIZED) │  │
-│  │  - Usage track  │    │ - Job status    │    │  - Notifications│  │
-│  │  - Invoicing    │    │ - Retry logic   │    │  - Callbacks    │  │
+│  │ Billing Service │    │  Queue Service  │    │ MiniMax Service │  │
+│  │  - Paddle (MoR) │    │ - Celery tasks  │    │  - XML export   │  │
+│  │  - Usage record │    │ - Job status    │    │  - REST push    │  │
+│  │  - Approval gate│    │ - Retry logic   │    │  - Token cache  │  │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
+│                                                                      │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
+│  │ Reports Service │    │ Catalog Service │    │ Event Logger    │  │
+│  │  - SQL aggreg.  │    │  - pg_trgm      │    │  - client_events│  │
+│  │  - CSV export   │    │  - merge UI     │    │  - timeline     │  │
+│  │  - per-client   │    │  - aliases      │    │  - audit_log    │  │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
@@ -309,16 +372,17 @@ Saldora operates as a standalone web application with the following integration 
 #### FR-4.1.1 User Registration
 | ID | FR-4.1.1 |
 |----|----------|
-| **Description** | System MUST allow users to register using email and password |
-| **Input** | Email, password, company name (optional) |
-| **Output** | User account created, verification email sent |
+| **Description** | System MUST allow users to register using email and password and creates a fresh organization for the registrant |
+| **Input** | Email, password, first/last name, organization name |
+| **Output** | User account created, organization created with `subscription_status = 'pending'`, admin notification email dispatched |
 | **Validation** | Email format, password strength (min 8 chars, 1 uppercase, 1 number) |
+| **Default role** | `admin` of the new org (the registrant); subsequent users are invited via `/invitations` |
 
 #### FR-4.1.2 User Login
 | ID | FR-4.1.2 |
 |----|----------|
-| **Description** | System MUST authenticate users via email/password or OAuth |
-| **Input** | Email, password OR OAuth token |
+| **Description** | System MUST authenticate users via email/password |
+| **Input** | Email, password |
 | **Output** | JWT access token, refresh token |
 | **Session** | Access token expires in 1 hour, refresh token in 7 days |
 
@@ -326,7 +390,7 @@ Saldora operates as a standalone web application with the following integration 
 | ID | FR-4.1.3 |
 |----|----------|
 | **Description** | System MUST allow password reset via email |
-| **Flow** | Request reset → Email with link → New password form → Confirmation |
+| **Flow** | Request reset → Resend email with link → New password form → Confirmation |
 
 #### FR-4.1.4 Role-Based Access Control
 | ID | FR-4.1.4 |
@@ -336,10 +400,40 @@ Saldora operates as a standalone web application with the following integration 
 
 | Role | Permissions |
 |------|-------------|
-| Admin | Full access, billing, team management |
+| Admin | Full access, billing, team management, Paddle settings |
 | Manager | Invoice processing, export, team view |
 | Operator | Invoice processing, export |
 | Viewer | Read-only access to processed invoices |
+
+#### FR-4.1.5 Manual Approval Gate (registration → access)
+
+| ID | FR-4.1.5 |
+|----|----------|
+| **Description** | New organizations MUST land in `subscription_status = 'pending'` and be unable to access functional endpoints until an admin manually approves the account |
+| **Enforcement** | The shared `require_role(...)` dependency 403s with body `{"code": "subscription_pending_approval", "subscription_status": "pending"}` whenever a user belongs to an org whose `subscription_status` is `pending` |
+| **Frontend** | Pending users are routed to `/awaiting-approval`, which polls user info every ~10 seconds; once status flips to `active` or `trial`, the AuthContext refreshes and the user is forwarded into the app |
+| **Admin notification** | On registration, a Resend email is dispatched to the address in `ADMIN_EMAIL` containing org name, slug, contact, and the registrant's email |
+| **Approval mechanism** | An interactive script `scripts/admin_orgs.py` (run by Saldora staff over SSH) lists pending orgs and allows the operator to flip `subscription_status` to `active` or `trial` and choose the plan tier. There is no card-on-file step at this stage of the company; billing is handled out-of-band via Paddle once an org is active. |
+| **Rationale** | Pre-revenue, every signup is hand-vetted to avoid abuse and to keep our agency-buyer focus tight. This is intentionally manual until self-serve onboarding is wired with Paddle Checkout. |
+
+**`subscription_status` allowed values:**
+
+| Value | Meaning |
+|-------|---------|
+| `pending` | Newly registered org awaiting admin approval (default for new registrations) |
+| `trial` | Approved, active in trial window |
+| `active` | Approved, paying or evaluation account |
+| `canceled` | Subscription canceled by user/admin; access typically revoked at period end |
+| `expired` | Trial ended without conversion or subscription lapsed |
+| `NULL` | Legacy value for orgs created before the column existed; treated as `active` by gating logic and backfilled on access |
+
+#### FR-4.1.6 Team Invitations & Join Requests
+
+| ID | FR-4.1.6 |
+|----|----------|
+| **Description** | Admins MUST be able to invite teammates via email; the invitee accepts via a tokenized link |
+| **Models** | `invitations` (admin → email, role, token, expires_at), `join_requests` (a user requesting to join a known org by email match, requires approval) |
+| **Limits** | Plan-defined seat caps |
 
 ### 4.2 Invoice Upload & Management
 
@@ -1668,9 +1762,11 @@ The system SHOULD provide pre-built rule templates for common Serbian accounting
 
 ### 4.12 Client Management (Agency)
 
-This section defines the Client Management feature available exclusively to organizations on the Agency plan. It enables accounting agencies to manage their client companies and scope invoices per client.
+Client Management is the **central organizational entity for agency users** post-pivot. The agency's "clients" are the hospitality businesses the agency serves; every invoice, every event, every report, and every per-client rule is scoped to one client.
 
-**Feature Gate:** The entire Client Management feature is gated behind the `CLIENT_MANAGEMENT` feature flag, which MUST be enabled only for the Agency plan.
+This section defines the data model and CRUD surface. The UX surface that makes this load-bearing — the per-client workspace, timeline, and tab structure — is documented in Section 4.18 (Client-First UI).
+
+**Feature Gate:** Available on the Agency plan. Other plans use a single implicit "self" client.
 
 #### FR-4.12.1 Client CRUD
 | ID | FR-4.12.1 |
@@ -1701,13 +1797,32 @@ This section defines the Client Management feature available exclusively to orga
 | **No Filter** | When `client_id` is omitted, all organization invoices are returned |
 | **Authorization** | Client MUST belong to the requesting user's organization |
 
-#### FR-4.12.4 Client Selector in Sidebar
-| ID | FR-4.12.4 |
+#### FR-4.12.4 Client Workspace (replaces sidebar selector)
+
+The previous sidebar client selector has been **superseded** by the per-client workspace introduced in M19 (see Section 4.18). Instead of filtering global lists by a sticky selector, agency users navigate to `/klijenti/{id}` and find every per-client view (invoices, reports, rules, timeline) pre-scoped within that workspace. The Portfolio view at `/pregled` is the agency-wide home and primary entry point.
+
+#### FR-4.12.5 Client Event Log
+
+| ID | FR-4.12.5 |
 |----|-----------|
-| **Description** | System MUST provide a client selector in the sidebar for Agency-plan users |
-| **Behavior** | Selecting a client filters the invoice list and dashboard to that client's invoices |
-| **Default** | "Svi klijenti" (All clients) shows all invoices across all clients |
-| **Visibility** | The selector is only visible when `CLIENT_MANAGEMENT` feature flag is enabled |
+| **Description** | The system MUST maintain an append-only event log per client to power the timeline view |
+| **Model** | `client_events` table — `id`, `organization_id`, `client_id`, `event_type`, `entity_type`, `entity_id`, `metadata` (JSONB), `created_by`, `created_at` |
+| **Event types at launch** | `invoice_uploaded`, `invoice_verified`, `invoice_exported`, `accounting_intent_classified`, `rule_fired`, `client_assigned` |
+| **Future event types** | `form_generated`, `period_closed`, etc. (added as new milestones land) |
+| **Emission** | Events are emitted from the existing write sites: invoice upload pipeline, verify endpoint, export endpoints, accounting-intent classification step, rules engine execution, client assignment (manual or PIB-match) |
+| **Backfill** | A one-shot backfill script populates historical events from `audit_logs`, `correction_logs`, and `invoices` so timelines are not empty at deploy time |
+| **API** | `GET /api/v1/clients/{id}/events?period=YYYY-MM&type=...` — paginated, filterable by event type, sorted reverse-chronological |
+| **Append-only** | No update/delete operations; events are immutable history |
+
+#### FR-4.12.6 Per-Client Automation Rules
+
+| ID | FR-4.12.6 |
+|----|-----------|
+| **Description** | Automation rules (Section 4.11) MAY be scoped to one or more specific clients, or remain global within the organization |
+| **Model** | `rule_client_associations` join table — `rule_id`, `client_id`, `created_at` |
+| **Default** | A rule with no associations applies organization-wide; a rule with one or more associations applies only when the invoice's `client_id` matches one of the associated client IDs |
+| **UI** | Rules listed inside `/klijenti/{id}` Pravila tab show only rules associated with this client + global rules; a "Create rule for this client" CTA pre-fills the association |
+| **Org-wide editor** | Sidebar entry `Pravila` shows all rules and exposes per-rule client associations |
 
 ---
 
@@ -1873,11 +1988,14 @@ The `/izvestaji` page is a unified hub for all reports, product catalog manageme
 
 ---
 
-### 4.14 Email Ingestion Pipeline
+<a id="414-email-ingestion-pipeline-planned"></a>
+### 4.14 Email Ingestion Pipeline (planned, not yet wired)
 
-This section defines the Email Ingestion feature, which allows organizations to receive invoices via a dedicated email address and automatically route them into the processing pipeline — eliminating manual upload for the majority of invoices.
+> **Status (April 2026):** This feature is **planned** for milestone M17 but is **not yet provisioned**. No DNS records, no inbound email provider account (Postmark / Resend Inbound / SES), and no `inbound_emails` table exist in production today. The spec below is the design target; the section describes intended behavior and is retained so the implementation can land directly against it.
 
-**Feature Gate:** Email Ingestion is available on Professional and Agency plans.
+This section defines the Email Ingestion feature, which will allow organizations to receive invoices via a dedicated email address and automatically route them into the processing pipeline — eliminating manual upload for the majority of invoices.
+
+**Feature Gate (planned):** Email Ingestion will be available on Professional and Agency plans.
 
 #### 4.14.1 Overview
 
@@ -2185,11 +2303,14 @@ Product catalog management is accessible from the "Upravljanje" group on the `/i
 
 ---
 
-### 4.16 In-App Support System
+<a id="416-in-app-support-system-planned"></a>
+### 4.16 In-App Support System (planned)
 
-Ticket-based support system built into the application. Clients create tickets from a Podrška page, attach files, and track status. Admins manage all tickets from a dedicated admin panel.
+> **Status (April 2026):** Planned for milestone M15. The data model, endpoints, and frontend described below are not yet built. Support today is handled out-of-band via email.
 
-**Feature Gate:** Available on all plans.
+Ticket-based support system to be built into the application. Clients will create tickets from a Podrška page, attach files, and track status. Admins will manage all tickets from a dedicated admin panel.
+
+**Feature Gate (planned):** Available on all plans.
 
 #### 4.16.1 Data Model
 
@@ -2223,6 +2344,145 @@ Ticket-based support system built into the application. Clients create tickets f
 #### 4.16.5 Notifications
 - Sidebar badge for unread replies (client) and open tickets (admin)
 - Optional email notification on admin reply and new ticket
+
+---
+
+### 4.17 Out-of-Scope / Dropped Features
+
+This section consolidates everything that has been explicitly removed, deferred, or is permanently out of scope. It exists so future contributors do not waste time re-litigating decisions.
+
+| Feature | Status | Rationale |
+|---------|--------|-----------|
+| **Paušal module** (M14) — KPO ledger, paušalci-as-customers, `direction` field on invoices, `client_type`, `customers` table, `invoice_counters`, paušal-specific routers | **Dropped, code reverted** | Paušalci are not the target market. MiniMax's dedicated paušal product handles that segment well; competing there is a multi-year battle we cannot win. |
+| **Client portal** (end clients submitting documents directly) | **Dropped** | Hospitality owners are not portal users. The agency receives documents by email/WhatsApp/paper today and that channel is not Saldora's surface. The agency stays the sole user class. |
+| **Compliance Watchdog** (M18) — scheduled rule evaluation producing alerts | **Dropped** | Paušal-era thinking. Rules continue to fire on events; a scheduled watchdog adds no value for hospitality agencies. |
+| **Foreign reverse-charge as a standalone module** (M15) | **Deferred indefinitely** | The existing NBS conversion + AccountingIntent already handle the small volume of foreign hospitality invoices adequately. Revisit only if hospitality agencies report it as real pain. |
+| **Payment tracking** (FR-4.7.4 in earlier versions) — `payment_status`, `paid_amount`, `paid_date`, open items, aging reports | **Removed** | Saldora is intelligence-only. Payment operations belong in MiniMax. |
+| **Webhook notifications** (FR-4.8.2 in earlier versions) | **Deprioritized** | Webhooks become useful only after the full workflow is API-driven from the customer's side; we are not there. Paddle webhooks for billing remain in scope. |
+| **SEF integration as a load-bearing input source** (M-SEF, formerly Section 12.5/12.6) | **Deprioritized** | The wedge is paper invoices SEF doesn't cover. SEF ingestion as a secondary data source remains as out-of-milestone ongoing work but is not on any active milestone and was removed from this SRS as a first-class section. |
+| **Bank reconciliation, general-ledger postings, payment matching** | **Permanently out of scope** | MiniMax handles these. Saldora hands off; it does not do the books. |
+| **Model retraining / fine-tuning on user data** | **Permanently out of scope** | Pre-trained models only (dots.ocr for OCR, Claude Haiku for extraction). Correction logs (Section 9.8) exist for monitoring quality, not for training. |
+| **Image preprocessing for VLM** (deskewing, binarization, contrast adjustments before sending to dots.ocr) | **Disabled** | dots.ocr works best on original color images. The preprocessing pipeline that existed for traditional OCR engines is bypassed for the VLM path. |
+| **EasyOCR fallback** when dots.ocr fails | **Removed** | Alternative OCR engines deliver insufficient accuracy on Serbian Cyrillic/Latin documents. If dots.ocr fails, the invoice is flagged for manual review by the user — no automatic fallback engine. |
+| **Stripe integration** | **Permanently out of scope** | Stripe is unavailable in Serbia. Paddle is the Merchant of Record. Any references to Stripe in older drafts are stale. |
+| **Compliance Watchdog scheduled checks** | **Dropped** | See above. |
+
+---
+
+<a id="418-client-first-ui-m19"></a>
+### 4.18 Client-First UI (M19)
+
+This section defines the client-first UI surface introduced in milestone M19. The previous feature-indexed UI (top-level `Fakture`, `Klijenti`, `Izveštaji`, `Pravila` sidebar entries with global lists filtered per client) is **superseded** by a client-axis UI in which the agency picks a client first and finds every per-client capability inside that client's workspace.
+
+The full UX rationale lives in [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md), Part Three. This section captures the requirement-level surface only.
+
+#### FR-4.18.1 Portfolio View (`/pregled`)
+
+| ID | FR-4.18.1 |
+|----|-----------|
+| **Description** | The agency-wide home view. A grid of all the agency's clients, each card showing health indicators |
+| **Indicators (at launch)** | Invoices pending review, invoices blocked from export, activity recency (last invoice processed timestamp) |
+| **Indicators (extensible)** | New indicator types plug in as new data lights up (e.g., overdue forms once M20 ships) |
+| **Action** | Each card links to `/klijenti/{id}` (the per-client workspace) |
+| **Default route** | `/pregled` is the default landing page after login for agency users |
+
+#### FR-4.18.2 Client Workspace (`/klijenti/{id}`)
+
+| ID | FR-4.18.2 |
+|----|-----------|
+| **Description** | A single-page surface for one client. Header with client name, PIB, activity details, month navigation |
+| **Tabs (at M19 merge)** | Hronologija (default), Fakture, Izveštaji, Pravila |
+| **Pre-scoping** | Every tab is pre-scoped to the current client; the embedded list components have their client-filter controls removed |
+| **Extensibility** | Tabs are routable subsections; new capabilities (forms, close checklist) land as additional tabs without restructuring the shell |
+
+#### FR-4.18.3 Hronologija (Timeline) Tab
+
+| ID | FR-4.18.3 |
+|----|-----------|
+| **Description** | The default tab inside the client workspace. Renders events from `client_events` (FR-4.12.5) for the selected period |
+| **Grouping** | By day, reverse chronological |
+| **Filtering** | By event type (chips at the top of the tab) |
+| **Click-through** | Clicking an event opens the underlying entity (invoice detail, rule execution detail, accounting-intent detail) |
+
+#### FR-4.18.4 Fakture Tab
+
+The existing invoice list component embedded into the client workspace, pre-scoped to the current client. The client filter control is hidden (it is implicit). All other filters (date range, status, search, supplier) remain.
+
+#### FR-4.18.5 Izveštaji Tab
+
+The existing reports surface (FR-4.13) embedded into the client workspace, pre-scoped to the current client. Reports use `client_id` as a fixed filter. Hospitality forms (M20, deferred) will land as additional groupings within this tab.
+
+#### FR-4.18.6 Pravila Tab
+
+Lists rules associated with this client (via `rule_client_associations`) plus org-wide rules. A "Kreiraj pravilo za ovog klijenta" CTA opens the rule editor with the client association pre-filled. Org-wide rule management remains under the sidebar `Pravila` entry.
+
+#### FR-4.18.7 Sidebar Structure (post-M19)
+
+```
+— Klijent radna tabla —
+🏠 Pregled portfelja          (/pregled — default home)
+👥 Klijenti                   (flat client list, quick jump to workspace)
+
+— Operacije agencije —
+⚙️ Pravila                    (org-wide rules editor)
+📦 Arhiviranje                (period archives for tax/retention)
+📁 Katalog proizvoda          (canonical products, shared across clients)
+
+— Pomoćno —
+📊 Dashboard                  (global stats, kept for now)
+🔧 Podešavanja
+👤 Tim
+💳 Naplata
+```
+
+Top-level `Fakture` and `Izveštaji` entries are **removed**. Both are client-scoped and live inside the per-client workspace.
+
+#### FR-4.18.8 Coexistence Policy
+
+Saldora has not yet deployed to paying customers. The M19 redesign ships as a **replacement**, not a parallel surface. Old feature pages are reachable from within the new shell during development only and are removed before the M19 branch merges.
+
+---
+
+<a id="419-hospitality-legal-forms-deferred-m20"></a>
+### 4.19 Hospitality Legal Forms (deferred, M20)
+
+> **Status:** Scope deliberately TBD until a working session with a real Serbian accountant who handles hospitality clients produces the requirements document. Building these from a reading of the law alone is known to produce wrong column structures and wrong workflows.
+
+The deliberate next layer of value, on top of the existing OCR + product catalog data foundation, is the generation of legally-required Serbian hospitality forms directly from extracted invoice data:
+
+| Form | Serbian | Purpose | Data source |
+|------|---------|---------|-------------|
+| **Kalkulacija** | Kalkulacija | Per-product cost-price → markup → VAT → sale-price calculation, regenerated when a new product is added or a supplier price changes | `invoice_line_items` + `product_catalog` (selling_price, default_margin_pct) |
+| **Šank lista** | Šank lista | Periodic bar inventory: received goods, sold goods, closing stock | Line items + sales data (sales-side data acquisition is part of the open scope) |
+| **Cenovnik** | Cenovnik | Current price list / menu, must match what is charged and must be publicly displayed | `product_catalog.selling_price` |
+| **KEP** | Knjiga evidencije prometa | Trade records book — a ledger of all goods received and all sales | Line items + sales data |
+| **Popis** | Popis | Periodic physical inventory count with valuation at period end | Inventory state derived from received minus sold (period-bounded) |
+
+#### Data foundation status (already in place)
+
+- **Line-item extraction** with discount/tax_base/quantity/unit_price/total per row (FR-4.3.2, FR-4.5.2).
+- **Denormalized `invoice_line_items`** table populated post-OCR and on edits (FR-4.13.1).
+- **Product catalog** with canonical names, aliases, categories, selling prices, default margins, and pg_trgm fuzzy matching of line-item descriptions (Section 4.15).
+- **Per-line-item product_id FK** linking each extracted item to its canonical catalog entry.
+
+#### Open questions (for the accountant meeting)
+
+1. The exact set of forms an agency is legally required to produce for a hospitality client, and how often.
+2. For each form: exact columns / fields / formulas required by law, and any audit-trail requirements.
+3. The source data for each form — purchase-side only or sales-side too?
+4. The monthly close workflow as accountants actually perform it, step by step.
+5. Whether fiscal-receipt integration is needed for KEP, and how the agency receives daily sales data today.
+
+#### Implementation plan once meeting output exists
+
+- Data-model additions (e.g., per-client product markup overrides, period entity).
+- Form generators (one Celery-friendly module per legal form).
+- New tabs / sections within the per-client `Izveštaji` tab.
+- PDF + Excel export templates (Excel at minimum; PDF likely also).
+
+#### M21 — Close Checklist & Period Semantics (further deferred)
+
+A period entity with close/lock semantics, plus the per-period checklist that drives a hospitality client's month to completion, lands in M21. Both depend on the form set being known and the close workflow being captured from the meeting. No issues will be opened until M20 produces output.
 
 ---
 
@@ -2341,15 +2601,19 @@ Ticket-based support system built into the application. Clients create tickets f
 
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
-| **Model Server** | vLLM | latest | OpenAI-compatible inference server for dots.ocr (GPU sidecar) |
-| **Document AI** | dots.ocr | latest | Vision-language model for unified layout detection + OCR (~100 languages, Cyrillic/Latin) |
-| **OCR Client** | openai (Python) | 1.x | OpenAI-compatible client for calling vLLM server |
+| **OCR Inference Host** | Modal.com | — | Serverless GPU host for the dots.ocr server. A10G GPU, scale-to-zero (~2 min cold start, ~5 min warm window after last request). Deployed via `infra/modal/dots_ocr.py`. |
+| **Document AI** | dots.ocr (rednote-hilab/dots.ocr) | 1.7B | Vision-language model for unified layout detection + OCR; supports ~100 languages including Serbian Cyrillic and Latin |
+| **OCR Client** | openai (Python) | 1.x | OpenAI-compatible client used by the Celery OCR worker to call the Modal-hosted dots.ocr endpoint |
 | **LLM Extraction** | anthropic (Python) | latest | Anthropic Claude API client for structured field extraction from OCR text |
-| **LLM Model** | Claude (Haiku/Sonnet) | configurable | Primary field extraction — converts raw OCR text to structured JSON |
+| **LLM Model** | Claude Haiku | latest | Primary field extraction — converts raw OCR text to structured JSON. Sonnet may be selected via env for harder documents. |
 | **PDF Processing** | PyMuPDF | 1.24.x | PDF parsing |
-| **Image Processing** | Pillow | 10.x | Image manipulation |
-| **OpenCV** | opencv-python | 4.9.x | Computer vision |
+| **Image Processing** | Pillow | 10.x | Image manipulation (e.g. rendering PDF pages) |
+| **OpenCV** | opencv-python | 4.9.x | Reserved for future preprocessing needs (currently bypassed for the VLM path) |
 | **NumPy** | numpy | 1.26.x | Numerical computing |
+
+**No image preprocessing is applied before sending to dots.ocr.** Original color images give the VLM the best signal. The preprocessing module exists in code but is bypassed for the dots.ocr path (Section 4.17).
+
+**No automated OCR fallback engine.** EasyOCR has been removed. If dots.ocr fails or returns low-confidence output, the invoice is flagged for manual review.
 
 ### 6.4 Database
 
@@ -2363,13 +2627,16 @@ Ticket-based support system built into the application. Clients create tickets f
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Container Runtime** | Docker | Containerization |
-| **Orchestration** | Kubernetes | Container orchestration |
-| **Cloud Provider** | AWS / Hetzner | Infrastructure |
-| **Object Storage** | S3 / Cloudflare R2 | Document storage |
-| **CDN** | Cloudflare | Static assets, DDoS protection |
-| **SSL** | Let's Encrypt | TLS certificates |
-| **DNS** | Cloudflare | DNS management |
+| **Container Runtime** | Docker + docker-compose | Containerization on the Hetzner VPS |
+| **Orchestration** | docker-compose (single host) | No Kubernetes; one VPS runs the full stack via `infra/docker/docker-compose.prod.yml` |
+| **Application Host** | Hetzner CX32 VPS | Single VPS hosting Caddy, Next.js, FastAPI, PostgreSQL, Redis, OCR worker, Celery beat |
+| **Reverse Proxy** | Caddy | Routes `saldora.rs` → Next.js, `api.saldora.rs` → FastAPI; serves Let's Encrypt TLS certs |
+| **GPU Inference** | Modal.com | Off-host serverless GPU for dots.ocr (A10G, scale-to-zero) |
+| **Object Storage (prod)** | Cloudflare R2 | Document storage (S3-compatible API) |
+| **Object Storage (dev)** | MinIO | S3-compatible local storage in dev compose |
+| **CDN / DNS / SSL / DDoS** | Cloudflare | DNS, SSL termination at edge, CDN, DDoS protection |
+| **Database backups** | pg_dump → R2 | Daily 04:00 UTC ZIP, 30-day retention |
+| **Transactional email** | Resend | Welcome, password reset, monthly archives, admin approval notifications |
 
 ### 6.6 DevOps & Monitoring
 
@@ -2469,22 +2736,32 @@ Ticket-based support system built into the application. Clients create tickets f
 │ updated_at          │
 └─────────────────────┘
 
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  audit_logs     │       │  usage_records  │       │    webhooks     │
-├─────────────────┤       ├─────────────────┤       ├─────────────────┤
-│ id (PK)         │       │ id (PK)         │       │ id (PK)         │
-│ organization_id │       │ organization_id │       │ organization_id │
-│ user_id (FK)    │       │ period_start    │       │ url             │
-│ action          │       │ period_end      │       │ events (JSON)   │
-│ entity_type     │       │ invoices_count  │       │ secret          │
-│ entity_id       │       │ api_calls_count │       │ is_active       │
-│ old_values      │       │ storage_bytes   │       │ created_at      │
-│ new_values      │       └─────────────────┘       └─────────────────┘
-│ ip_address      │
-│ user_agent      │
-│ created_at      │
-└─────────────────┘
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────────┐
+│  audit_logs     │       │  usage_records  │       │  client_events      │
+├─────────────────┤       ├─────────────────┤       ├─────────────────────┤
+│ id (PK)         │       │ id (PK)         │       │ id (PK)             │
+│ organization_id │       │ organization_id │       │ organization_id     │
+│ user_id (FK)    │       │ period_start    │       │ client_id (FK)      │
+│ action          │       │ period_end      │       │ event_type          │
+│ entity_type     │       │ invoices_count  │       │ entity_type         │
+│ entity_id       │       │ api_calls_count │       │ entity_id           │
+│ old_values      │       │ storage_bytes   │       │ metadata (JSONB)    │
+│ new_values      │       └─────────────────┘       │ created_by (FK)     │
+│ ip_address      │                                 │ created_at          │
+│ user_agent      │       ┌─────────────────────────┴──┐
+│ created_at      │       │  rule_client_associations  │
+└─────────────────┘       ├────────────────────────────┤
+                          │ rule_id (FK)               │
+                          │ client_id (FK)             │
+                          │ created_at                 │
+                          └────────────────────────────┘
 ```
+
+**Models actually present in `apps/api/app/models/`:**
+
+`accounting_intent`, `api_key`, `audit_log`, `automation_rule`, `client`, `client_event`, `consent_record`, `correction_log`, `data_processing_agreement`, `deletion_request`, `exchange_rate`, `export_template`, `invitation`, `invoice`, `join_request`, `line_item`, `minimax_config`, `organization`, `product_catalog`, `rule_client_association`, `scheduled_export_log`, `usage_record`, `user`.
+
+Notably **absent** (consistent with Section 4.17): `webhook`, `customer`, `invoice_counter`, `kpo_entry`, `sef_invoice`, `sef_connection`, `inbound_email`, `support_ticket`.
 
 ### 7.2 Table Definitions
 
@@ -2519,14 +2796,18 @@ CREATE TABLE organizations (
     slug VARCHAR(100) UNIQUE NOT NULL,
     billing_email VARCHAR(255),
     plan_id UUID REFERENCES plans(id),
-    payment_provider_customer_id VARCHAR(255),
+    payment_provider_customer_id VARCHAR(255),  -- Paddle customer ID
+    subscription_status VARCHAR(50),            -- pending|trial|active|canceled|expired|NULL
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX idx_organizations_slug ON organizations(slug);
+CREATE INDEX idx_organizations_subscription_status ON organizations(subscription_status);
 ```
+
+**`subscription_status` semantics:** see FR-4.1.5. New registrations default to `pending`; the `require_role` dependency 403s with `subscription_pending_approval` while pending. NULL is a legacy value treated as `active` and backfilled on access.
 
 #### 7.2.3 invoices
 
@@ -2669,15 +2950,80 @@ CREATE INDEX ix_pc_category ON product_catalog(category);
 
 Note: `invoice_line_items` includes a `product_id UUID REFERENCES product_catalog(id) ON DELETE SET NULL` column (added in migration 0007) for linking line items to their canonical catalog entry.
 
+#### 7.2.7 client_events
+
+Append-only event log per client, powering the timeline view (FR-4.12.5, FR-4.18.3).
+
+```sql
+CREATE TABLE client_events (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    client_id       UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    event_type      VARCHAR(50) NOT NULL,
+    entity_type     VARCHAR(50),               -- e.g. 'invoice', 'rule', 'accounting_intent'
+    entity_id       UUID,                      -- FK to the relevant entity (no DB-level constraint to keep flexibility)
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    created_by      UUID REFERENCES users(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT valid_client_event_type CHECK (event_type IN (
+        'invoice_uploaded', 'invoice_verified', 'invoice_exported',
+        'accounting_intent_classified', 'rule_fired', 'client_assigned'
+        -- Additional types added by future milestones (form_generated, period_closed, …)
+    ))
+);
+
+CREATE INDEX idx_client_events_org_client ON client_events(organization_id, client_id, created_at DESC);
+CREATE INDEX idx_client_events_type       ON client_events(event_type);
+CREATE INDEX idx_client_events_entity     ON client_events(entity_type, entity_id);
+```
+
+#### 7.2.8 rule_client_associations
+
+Per-client scoping for automation rules (FR-4.12.6).
+
+```sql
+CREATE TABLE rule_client_associations (
+    rule_id    UUID NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    client_id  UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (rule_id, client_id)
+);
+
+CREATE INDEX idx_rca_client ON rule_client_associations(client_id);
+```
+
+A rule with no associations applies organization-wide; a rule with one or more associations applies only when the invoice's `client_id` matches one of the associated client IDs.
+
+#### 7.2.9 correction_logs
+
+Defined in Section 9.8 (extraction quality monitoring). Logs every human field correction for monitoring purposes — **not** for model training.
+
+#### 7.2.10 usage_records
+
+Write-only counter that tracks monthly invoice processing per organization. Plan limits are checked against this counter, not against live invoice counts, so deleting invoices does not reset usage (see FR-4.7.2).
+
+#### 7.2.11 minimax_configs
+
+Per-organization MiniMax credentials and integration state (Section 12.5).
+
+#### 7.2.12 scheduled_export_logs
+
+History of automated monthly archive exports (delivered via email, FR-4.7.5).
+
+#### 7.2.13 Additional present models
+
+`api_keys`, `audit_logs`, `consent_records`, `data_processing_agreements`, `deletion_requests`, `exchange_rates`, `export_templates`, `invitations`, `join_requests`, `accounting_intents`, `automation_rules` — schemas appear elsewhere in this document where directly relevant; otherwise their definitions live in the SQLAlchemy models under `apps/api/app/models/`.
+
 ---
 
 ## 8. API Specification
 
 ### 8.1 API Overview
 
-**Base URL:** `https://api.fakturaai.rs/v1`
+**Base URL:** `https://api.saldora.rs/api/v1`
 
-**Authentication:** Bearer token (JWT) or API key
+**Authentication:** Bearer token (JWT) or per-org API key
 
 **Content Type:** `application/json`
 
@@ -2687,7 +3033,8 @@ Note: `invoice_line_items` includes a `product_id UUID REFERENCES product_catalo
 |------|-----------------|--------------|
 | Starter | 30 | 1,000 |
 | Professional | 100 | 10,000 |
-| Enterprise | 500 | Unlimited |
+| Agency | 300 | 30,000 |
+| Enterprise (custom) | 500+ | Unlimited |
 
 ### 8.2 Authentication Endpoints
 
@@ -2832,7 +3179,7 @@ Get invoice details.
   "warnings": [],
   "blocked": false,
   "field_warnings": {},
-  "document_url": "https://storage.fakturaai.rs/docs/...",
+  "document_url": "https://storage.saldora.rs/docs/...",
   "raw_ocr_text": null,
   "raw_llm_output": null,
   "created_at": "2025-01-15T10:30:00Z",
@@ -2988,7 +3335,7 @@ Generate audit export for tax inspection (ZIP with invoice register, PDFs, audit
 **Response (200 OK):**
 ```json
 {
-  "download_url": "https://storage.fakturaai.rs/exports/audit/...",
+  "download_url": "https://storage.saldora.rs/exports/audit/...",
   "expires_at": "2025-02-14T11:30:00Z",
   "file_size": 5242880,
   "invoice_count": 150,
@@ -3056,7 +3403,7 @@ Verify PIB against APR database.
 
 ### 9.1 OCR Pipeline Architecture
 
-dots.ocr is a vision-language model (VLM) that performs **unified layout detection and text extraction** in a single pass. It runs as a **vLLM HTTP server** (GPU sidecar container), called by a lightweight OCR worker via the OpenAI-compatible chat completions API.
+dots.ocr is a vision-language model (VLM) that performs **unified layout detection and text extraction** in a single pass. It runs on **Modal.com** as a serverless GPU endpoint (A10G, scale-to-zero). The Celery OCR worker on the Hetzner VPS calls it over HTTPS using the OpenAI-compatible chat completions API.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -3064,16 +3411,17 @@ dots.ocr is a vision-language model (VLM) that performs **unified layout detecti
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  ┌─────────────┐    ┌─────────────────────────────────────────────┐  │
-│  │   Input     │    │          vLLM Server (GPU sidecar)          │  │
+│  │   Input     │    │          Modal.com (A10G GPU)               │  │
 │  │  Document   │    │  ┌───────────────────────────────────────┐  │  │
 │  │ (PDF/Image) │    │  │  dots.ocr Vision-Language Model       │  │  │
-│  └──────┬──────┘    │  │  (rednote-hilab/dots.ocr, 1.7B)      │  │  │
+│  └──────┬──────┘    │  │  (rednote-hilab/dots.ocr, 1.7B)       │  │  │
 │         │           │  └───────────────────────────────────────┘  │  │
-│         ▼           │  OpenAI-compatible API (:8000/v1)           │  │
-│  ┌─────────────┐    └──────────────────────┬──────────────────────┘  │
-│  │ OCR Worker  │                           │                         │
-│  │ (Celery,    │    HTTP POST              │ Structured              │
-│  │  no GPU)    │───▶/v1/chat/completions   │ JSON Output             │
+│         ▼           │  OpenAI-compatible HTTPS endpoint            │  │
+│  ┌─────────────┐    │  Scale-to-zero (~2 min cold start)           │  │
+│  │ OCR Worker  │    └──────────────────────┬──────────────────────┘  │
+│  │ (Celery,    │                           │                         │
+│  │  CPU only,  │    HTTPS POST             │ Structured              │
+│  │  Hetzner)   │───▶/v1/chat/completions   │ JSON Output             │
 │  │             │    (base64 image +        │ (layout +               │
 │  │ openai      │     special tokens)       │  text + bbox)           │
 │  │ Python      │◀──────────────────────────┘                         │
@@ -3163,26 +3511,25 @@ class InvoicePreprocessor:
 
 ### 9.3 OCR Engine
 
-**Primary Engine:** dots.ocr (via vLLM server)
+**Primary Engine:** dots.ocr, hosted on Modal.com
 
-dots.ocr is optimized for document understanding and provides superior accuracy on structured documents like invoices, with excellent Cyrillic and Latin script support. It runs as a separate **vLLM HTTP server** (GPU sidecar container) and is called by the OCR worker via the OpenAI-compatible chat completions API.
+dots.ocr is optimized for document understanding and provides high accuracy on structured documents like invoices, with strong Cyrillic and Latin script support. In production it runs on **Modal.com** as a scale-to-zero GPU endpoint; the OCR worker on the Hetzner VPS calls it via the OpenAI-compatible chat completions API.
 
 **Architecture:**
-- **dots-ocr-server**: `vllm/vllm-openai:latest` Docker image serving `rednote-hilab/dots.ocr` with `--trust-remote-code --chat-template-content-format string`
-- **ocr-worker**: Lightweight Python 3.12 container (no GPU) calling the server via `openai` Python client
-- Worker sends base64-encoded images with `<|img|><|imgpad|><|endofimg|>` prompt prefix
+- **Modal app** (`infra/modal/dots_ocr.py`): A Modal deployment serving `rednote-hilab/dots.ocr` on an A10G GPU. Scales to zero when idle; first request after idle has roughly a 2-minute cold start (model loading); container stays warm ~5 minutes after the last request.
+- **ocr-worker**: Python 3.12 Celery container on the Hetzner VPS (CPU only) calling Modal via the `openai` Python client.
+- Worker sends base64-encoded images with the `<|img|><|imgpad|><|endofimg|>` prompt prefix.
+- For local development the same code path can talk to a local vLLM server via the `DOTS_OCR_SERVER_URL` env var (so dev does not depend on Modal credit).
 
 **Configuration (environment variables):**
 ```
-DOTS_OCR_SERVER_URL=http://dots-ocr-server:8000/v1
+DOTS_OCR_SERVER_URL=https://<modal-endpoint>/v1   # prod
 DOTS_OCR_MODEL_NAME=model
 OCR_PRIMARY_ENGINE=dots
 OCR_FALLBACK_ENGINE=none
 ```
 
-**Fallback Strategy:** Manual review by user
-
-There is no automated OCR fallback engine. If dots.ocr fails or returns low-confidence results, the invoice is flagged for manual review by the end user. This design decision was made because alternative OCR engines (e.g., EasyOCR) provide insufficient accuracy for Serbian Cyrillic/Latin documents.
+**Fallback Strategy:** Manual review by user. There is no automated OCR fallback engine — EasyOCR has been removed (Section 4.17).
 
 ### 9.4 Document Layout Analysis
 
@@ -3289,31 +3636,16 @@ def calculate_confidence(extracted_data: dict) -> float:
 
 **GPU Requirements:**
 
-| Component | GPU Memory | Instances | Notes |
-|-----------|------------|-----------|-------|
-| dots.ocr vLLM server | 6-8 GB | 1-2 | GPU sidecar running rednote-hilab/dots.ocr (1.7B params) |
-| OCR Worker | 0 (CPU only) | 1-2 | Lightweight Celery worker calling vLLM server and Claude API |
-| LLM Extraction (Claude) | 0 (API call) | N/A | Anthropic Claude API for structured field extraction from OCR text |
+| Component | GPU | Hosting | Notes |
+|-----------|-----|---------|-------|
+| dots.ocr | A10G | Modal.com (prod) | Scale-to-zero serverless GPU; ~2 min cold start; ~5 min warm window |
+| dots.ocr (dev) | Any local GPU | Local vLLM (optional) | Switched via `DOTS_OCR_SERVER_URL` env var; not required for dev (Modal can be hit directly) |
+| OCR Worker | None (CPU) | Hetzner CX32 | Celery worker calling Modal endpoint and Claude API |
+| Claude (field extraction) | None (API call) | Anthropic API | No local compute needed |
 
-**Note:** dots.ocr replaces the need for separate Layout Parser + OCR Engine, reducing infrastructure complexity. Field extraction is performed by Claude LLM via API call (no local GPU needed). If dots.ocr fails, the invoice is flagged for manual review by the user.
+**Model Note:** The system uses pre-trained models (dots.ocr for OCR, Claude Haiku for field extraction) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection. Correction logs (Section 9.8) exist for monitoring quality, **not** for training.
 
-**Model Serving:**
-- **vLLM** (`vllm/vllm-openai:latest`) — OpenAI-compatible inference server for dots.ocr
-- Server flags: `--trust-remote-code --chat-template-content-format string --gpu-memory-utilization 0.90 --max-model-len 8192`
-- HuggingFace model cache persisted via Docker volume (`huggingface_cache`)
-
-**Model Note:** The system uses pre-trained models (dots.ocr for OCR, Claude for field extraction) without additional training on user data. This approach eliminates the need for training data collection, consent management, and complex MLOps infrastructure, while ensuring user privacy protection.
-
-**Deployment Options:**
-
-| Option | Cost | Cold Start | Use Case |
-|--------|------|------------|----------|
-| Local vLLM (Docker) | $0 (own GPU) | None | Development |
-| Hetzner GEX44 | ~$200/mo fixed | None | Production (10+ clients) |
-| Google Cloud Run (L4 GPU) | ~$0.0002/sec | 10-30s | Production (scale-to-zero) |
-| Cerebrium Serverless | ~$0.0006/invoice | 30-60s | Production (early stage) |
-
-The OCR worker connects to any OpenAI-compatible API endpoint via `DOTS_OCR_SERVER_URL` environment variable. Switching between local, Cloud Run, or Cerebrium requires only an env change — no code modifications.
+**Modal deployment** (`infra/modal/dots_ocr.py`): a single Modal app exposes the OpenAI-compatible chat completions endpoint backed by dots.ocr on an A10G. Cost scales with usage; at ~10K invoices/month the GPU bill sits around $60 (see DEPLOYMENT.md cost table). Switching to a fixed-price always-on GPU (e.g., a Hetzner GEX44) is a deployment-only change — the worker code is unchanged.
 
 ### 9.8 Extraction Quality Monitoring
 
@@ -3588,8 +3920,8 @@ CREATE TABLE data_processing_agreements (
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     signed_by_customer VARCHAR(255),
     signed_by_customer_at TIMESTAMP WITH TIME ZONE,
-    signed_by_fakturaai VARCHAR(255),
-    signed_by_fakturaai_at TIMESTAMP WITH TIME ZONE,
+    signed_by_saldora VARCHAR(255),
+    signed_by_saldora_at TIMESTAMP WITH TIME ZONE,
     document_url VARCHAR(500),
     custom_clauses JSONB,
     valid_from DATE,
@@ -3709,7 +4041,7 @@ CREATE TABLE audit_exports (
 **XML Export Format (eFaktura compatible):**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<RegistarFaktura xmlns="urn:fakturaai:export:v1">
+<RegistarFaktura xmlns="urn:saldora:export:v1">
   <Zaglavlje>
     <Organizacija>
       <Naziv>Računovodstvo Petrović d.o.o.</Naziv>
@@ -3826,7 +4158,7 @@ Koji podaci su mogli biti ugroženi:
 [Preporuke za korisnika]
 
 Kontakt za dodatna pitanja:
-privacy@fakturaai.rs
+privacy@saldora.rs
 
 S poštovanjem,
 Saldora Tim
@@ -3849,173 +4181,108 @@ Saldora Tim
 
 ### 11.1 Production Environment
 
+The full app runs on a **single Hetzner CX32 VPS** behind Caddy. There is no Kubernetes cluster, no managed database, and no horizontal autoscaler. GPU inference is offloaded to **Modal.com** (scale-to-zero). Object storage is **Cloudflare R2**. Cloudflare also provides DNS, edge SSL, CDN, and DDoS protection.
+
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Internet                                     │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Cloudflare (CDN + WAF)                         │
-│  - DDoS protection                                                   │
-│  - SSL termination                                                   │
-│  - Static asset caching                                             │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Load Balancer (nginx/HAProxy)                    │
-└─────────────┬─────────────────┬─────────────────┬───────────────────┘
-              │                 │                 │
-              ▼                 ▼                 ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────────────────┐
-│   Web App       │ │   API Server    │ │   ML Workers                │
-│   (Next.js)     │ │   (FastAPI)     │ │   (Celery + GPU)            │
-│   Replicas: 2-4 │ │   Replicas: 2-4 │ │   Replicas: 2-4             │
-└─────────────────┘ └────────┬────────┘ └──────────────┬──────────────┘
-                             │                         │
-              ┌──────────────┴──────────────┬──────────┴──────────┐
-              ▼                             ▼                      ▼
-┌─────────────────────┐     ┌─────────────────────┐  ┌────────────────┐
-│     PostgreSQL      │     │       Redis         │  │   S3/R2        │
-│   Primary + Replica │     │  Cluster (3 nodes)  │  │   Storage      │
-└─────────────────────┘     └─────────────────────┘  └────────────────┘
-```
+                    ┌─────────────┐
+                    │ Cloudflare  │
+                    │ DNS+SSL+CDN │
+                    └──────┬──────┘
+                           │ HTTPS
+                           ▼
+                    ┌──────────────┐
+                    │  Hetzner     │
+                    │  VPS (CX32)  │
+                    └──────┬───────┘
+                           │ port 80/443
+                           ▼
+                    ┌──────────────┐
+                    │    Caddy     │
+                    │ reverse proxy│
+                    └──┬────────┬──┘
+                       │        │
+       saldora.rs      │        │   api.saldora.rs
+                       ▼        ▼
+                ┌─────────┐ ┌──────────┐
+                │ Next.js │ │ FastAPI  │
+                │  :3000  │ │  :8000   │
+                └─────────┘ └────┬─────┘
+                                 │
+                  ┌──────────────┼──────────────┐
+                  ▼              ▼              ▼
+            ┌──────────┐   ┌────────┐    ┌──────────┐
+            │PostgreSQL│   │ Redis  │    │  Celery  │
+            │  :5432   │   │ :6379  │    │  Worker  │
+            └──────────┘   └────────┘    └─────┬────┘
+                                               │ HTTPS
+                                               ▼
+                                       ┌──────────────┐
+                                       │  Modal.com   │
+                                       │  dots.ocr    │
+                                       │  (A10G GPU)  │
+                                       └──────────────┘
 
-### 11.2 Kubernetes Deployment
-
-**Namespaces:**
-- `fakturaai-prod` - Production workloads
-- `fakturaai-staging` - Staging environment
-- `fakturaai-monitoring` - Prometheus, Grafana
-
-**Key Resources:**
-
-```yaml
-# Web Application Deployment
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: web-app
-  namespace: fakturaai-prod
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: web-app
-  template:
-    spec:
-      containers:
-      - name: web-app
-        image: ghcr.io/fakturaai/web:latest
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        ports:
-        - containerPort: 3000
-
----
-# ML Worker Deployment (with GPU)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ml-worker
-  namespace: fakturaai-prod
-spec:
-  replicas: 2
-  template:
-    spec:
-      containers:
-      - name: ml-worker
-        image: ghcr.io/fakturaai/ml-worker:latest
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-            memory: "8Gi"
-          requests:
-            memory: "4Gi"
+Object storage:  Cloudflare R2 (production), MinIO (local dev)
+Email:           Resend
+LLM:             Anthropic Claude Haiku
 ```
 
-### 11.3 CI/CD Pipeline
+### 11.2 Production Service Topology
+
+| Service | Container | Purpose |
+|---------|-----------|---------|
+| **Caddy** | `saldora-caddy` | Reverse proxy: routes `saldora.rs` → web, `api.saldora.rs` → API; Let's Encrypt TLS |
+| **Next.js** | `saldora-web` | Frontend (port 3000) |
+| **FastAPI** | `saldora-api` | Backend API (port 8000) |
+| **PostgreSQL** | `saldora-postgres` | Database |
+| **Redis** | `saldora-redis` | Cache + Celery broker |
+| **OCR Worker** | `saldora-ocr-worker` | Celery worker; calls Modal for OCR and Claude for extraction |
+| **Celery Beat** | `saldora-celery-beat` | Scheduled tasks (NBS rates, retention, backups, monthly archives) |
+
+Compose file: `infra/docker/docker-compose.prod.yml` (env from `infra/docker/.env.prod`).
+
+### 11.3 Scheduled Tasks (Celery Beat)
+
+| Task | Schedule | Purpose |
+|------|----------|---------|
+| NBS exchange rates | Weekdays 08:30 | Fetch EUR/USD/CHF/GBP rates from NBS |
+| Usage aggregation | Daily 02:00 | Reconcile invoice counts per org into `usage_records` |
+| Data retention | Daily 03:00 | Clean up expired data per ZZPL |
+| Database backup | Daily 04:00 UTC | pg_dump → ZIP with checksums → R2 |
+| Monthly archives | 1st of month 06:00 | Generate per-org archive ZIPs and email to billing contact |
+
+### 11.4 Backup & Recovery
+
+- **Automated backups**: daily 04:00 UTC via Celery beat. SQL dump (gzip) + manifest with checksums, stored in R2 at `backups/db/saldora_YYYY-MM-DD.zip`. **30-day retention** (older backups auto-deleted).
+- **Manual backup**: Celery task can be triggered on demand from the worker container.
+- **Restore**: download the backup ZIP from R2, extract `.sql.gz`, pipe to `psql` against the postgres container.
+
+### 11.5 CI/CD Pipeline
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   Commit    │───▶│    Build    │───▶│    Test     │───▶│   Deploy    │
-│   to main   │    │   & Lint    │    │   Suite     │    │  Staging    │
+│  Commit to  │───▶│ GitHub Acts │───▶│   Tests     │───▶│ SSH deploy  │
+│   feature/  │    │  (lint+     │    │  (pytest +  │    │ to Hetzner  │
+│   *  branch │    │   build)    │    │   jest)     │    │ via merge   │
 └─────────────┘    └─────────────┘    └─────────────┘    └──────┬──────┘
                                                                 │
                                                                 ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Monitor    │◀───│   Deploy    │◀───│   Approve   │◀───│  E2E Tests  │
-│  & Alert    │    │    Prod     │    │  (Manual)   │    │  (Staging)  │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+                                                    docker compose up -d
+                                                    --build (selective)
+                                                    alembic upgrade head
 ```
 
-**GitHub Actions Workflow:**
+Production deploys are issued by SSH'ing into the Hetzner VPS, pulling `main`, and rebuilding the affected service via the production compose file (see `docs/DEPLOYMENT.md`). There is no Kubernetes manifest set; staging is a separate VPS or a feature branch run locally.
 
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
+### 11.6 Monitoring & Logging
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and push Docker images
-        run: |
-          docker build -t ghcr.io/fakturaai/web:${{ github.sha }} ./web
-          docker push ghcr.io/fakturaai/web:${{ github.sha }}
+Logging is currently container-stdout based (read via `docker logs`). Error tracking via Sentry is in place for the Next.js and FastAPI services. A full Prometheus/Grafana/Loki/Jaeger stack is **not deployed** at this scale; introduce only when the metrics they would surface justify the operational cost.
 
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run tests
-        run: |
-          npm test
-          pytest tests/
-
-  deploy-staging:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to staging
-        run: kubectl apply -f k8s/staging/
-
-  deploy-prod:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Deploy to production
-        run: kubectl apply -f k8s/prod/
-```
-
-### 11.4 Monitoring Stack
-
-| Component | Tool | Purpose |
-|-----------|------|---------|
-| Metrics | Prometheus | Time-series metrics |
-| Dashboards | Grafana | Visualization |
-| Logging | Loki | Log aggregation |
-| Tracing | Jaeger | Distributed tracing |
-| Alerting | Alertmanager | Alert routing |
-| Error Tracking | Sentry | Error monitoring |
-
-**Key Metrics:**
-- Request latency (p50, p95, p99)
-- Error rate
-- OCR processing time
-- Queue depth
-- GPU utilization
-- Database connection pool
+**Key signals tracked today:**
+- Application errors via Sentry (frontend + backend).
+- Per-task Celery success/failure logs via `docker logs saldora-ocr-worker`.
+- Modal app metrics from the Modal dashboard (cold starts, GPU minutes, errors).
+- Database backup success via the Celery beat task log.
 
 ---
 
@@ -4053,21 +4320,26 @@ jobs:
 - `transaction.completed`
 - `transaction.payment_failed`
 
-### 12.3 Email Service (SendGrid/Resend)
+### 12.3 Email Service (Resend)
+
+**Provider:** Resend is the sole transactional email provider in production. SendGrid is **not** used.
 
 **Transactional Emails:**
 - Welcome email
-- Email verification
 - Password reset
-- Invoice processing complete
-- Subscription notifications
+- New-registration admin notification (to `ADMIN_EMAIL`)
+- Approval notification (when an admin flips an org from `pending` to `active`/`trial`)
+- Monthly archive delivery (FR-4.7.5)
+- Subscription notifications via Paddle (forwarded as needed)
 
-### 12.4 Storage (Cloudflare R2 / AWS S3)
+### 12.4 Storage (Cloudflare R2)
+
+**Production:** Cloudflare R2 (S3-compatible). **Local dev:** MinIO running in the dev compose. AWS S3 is supported by the storage service abstraction but is not the production target.
 
 **Buckets:**
-- `fakturaai-documents` - Uploaded invoices
-- `fakturaai-exports` - Generated exports
-- `fakturaai-backups` - Database backups
+- `saldora-documents` — uploaded invoice documents
+- `saldora-exports` — generated exports and monthly archive ZIPs
+- `saldora-backups` — database backups (`backups/db/saldora_YYYY-MM-DD.zip`)
 
 **Object Key Convention:**
 Documents are namespaced by organization for multi-tenant isolation:
@@ -4075,10 +4347,12 @@ Documents are namespaced by organization for multi-tenant isolation:
 organizations/{organization_id}/invoices/{invoice_id}/original.{ext}
 ```
 
+**Storage function policy:** R2/S3 calls are made through `boto3` and are therefore **synchronous**. Async code paths must wrap them with `asyncio.to_thread()` (see CLAUDE.md).
+
 **Lifecycle Rules:**
-- Documents: 10 years retention (per Serbian Accounting Law, Sl. glasnik RS, br. 73/2019)
+- Documents: retained for the subscription period; **long-term retention responsibility is shifted to the customer** via the monthly archive ZIPs (FR-4.7.5). Customers must save those archives to comply with the 10-year retention under Zakon o računovodstvu.
 - Exports: 30 days auto-delete
-- Backups: 90 days retention
+- Backups: **30 days retention** (auto-deleted by the backup task)
 
 ### 12.5 MiniMax Integration
 
@@ -4151,496 +4425,15 @@ Field names and IDs validated against the MiniMax RS Swagger API spec:
 | 8% | 3 | P |
 | 0% | 1 | N |
 
-### 12.6 SEF Integration (eFaktura)
+### 12.6 SEF Integration (eFaktura) — deprioritized
 
-> **NOTE: SEF integration is DEPRIORITIZED and will not be implemented for launch. This section is retained for future reference only.**
+> **Status (April 2026):** SEF integration is **deprioritized** and is **not** part of any active milestone. Hospitality agencies report that the invoices they actually struggle with — paper deliveries from beverage distributors, small producers, fiscal receipts, and invoices from suppliers outside the VAT system — are precisely the ones SEF does not and probably will not soon cover. SEF as a secondary read-only data source remains as out-of-milestone ongoing work and may be revisited if a paying agency requests it.
 
-The Serbian E-Invoice System (Sistem Elektronskih Faktura - SEF) is mandatory for B2G and B2B transactions in Serbia. Saldora MUST integrate with SEF as a **first-class input source**, not just an export format.
+The previous detailed SEF specification (connection setup, inbound sync, outbound push, status polling, OCR-hybrid merge, inbox UI, and error handling) has been removed from this revision of the SRS. If SEF work resumes, the spec will be reintroduced from version control history (SRS v3.2 and earlier) rather than maintained as dead text here.
 
-#### 12.7.1 Overview
+#### 12.6.1 Removed sub-sections (for reference)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    SEF Integration Architecture                      │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐         ┌─────────────┐         ┌─────────────┐   │
-│  │    SEF      │◀───────▶│  Saldora  │◀───────▶│  User       │   │
-│  │   Portal    │   API   │   Backend   │   Web   │  Interface  │   │
-│  │  (eFaktura) │         │             │         │             │   │
-│  └─────────────┘         └──────┬──────┘         └─────────────┘   │
-│                                 │                                   │
-│                    ┌────────────┼────────────┐                      │
-│                    ▼            ▼            ▼                      │
-│             ┌───────────┐ ┌───────────┐ ┌───────────┐              │
-│             │  Inbound  │ │  Outbound │ │  Status   │              │
-│             │  Invoices │ │  Invoices │ │  Sync     │              │
-│             │  (Pull)   │ │  (Push)   │ │  (Polling)│              │
-│             └───────────┘ └───────────┘ └───────────┘              │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-#### 12.6.2 SEF Connection Setup
-
-**Authentication:**
-
-| Method | Description | Use Case |
-|--------|-------------|----------|
-| API Key | Organization-level SEF API key | Production |
-| Certificate | Qualified electronic certificate | High-security organizations |
-| OAuth 2.0 | User-delegated access | Multi-tenant scenarios |
-
-**Connection Configuration:**
-
-```json
-{
-  "sef_connection": {
-    "environment": "production",  // "production" | "test"
-    "api_base_url": "https://efaktura.mfin.gov.rs/api/v1",
-    "organization_pib": "123456789",
-    "api_key": "encrypted:xxx",
-    "certificate_path": "/secrets/sef-cert.p12",
-    "sync_enabled": true,
-    "sync_interval_minutes": 15
-  }
-}
-```
-
-**Database Schema:**
-
-```sql
-CREATE TABLE sef_connections (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-
-    -- Connection settings
-    environment VARCHAR(20) NOT NULL DEFAULT 'production',
-    api_key_encrypted TEXT,
-    certificate_path VARCHAR(500),
-    pib VARCHAR(9) NOT NULL,
-
-    -- Sync settings
-    sync_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    sync_interval_minutes INTEGER DEFAULT 15,
-    last_sync_at TIMESTAMP WITH TIME ZONE,
-    last_sync_status VARCHAR(20),
-    last_sync_error TEXT,
-
-    -- Statistics
-    total_invoices_synced INTEGER DEFAULT 0,
-    invoices_synced_today INTEGER DEFAULT 0,
-
-    -- Timestamps
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    CONSTRAINT unique_sef_per_org UNIQUE (organization_id),
-    CONSTRAINT valid_environment CHECK (environment IN ('production', 'test'))
-);
-```
-
-#### 12.6.3 Inbound Invoice Sync (SEF → Saldora)
-
-The system MUST pull invoices from SEF and process them through the Saldora pipeline.
-
-**Sync Flow:**
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Inbound Invoice Sync Flow                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  1. Poll SEF API (every 15 minutes)                                 │
-│     │                                                                │
-│     ▼                                                                │
-│  2. Fetch new/updated invoices since last sync                      │
-│     GET /api/v1/purchase-invoices?from={last_sync}&status=DELIVERED │
-│     │                                                                │
-│     ▼                                                                │
-│  3. For each invoice:                                               │
-│     ┌─────────────────────────────────────────────────────────────┐ │
-│     │ a. Check if already exists (by SEF ID)                      │ │
-│     │ b. Download XML + PDF attachment                            │ │
-│     │ c. Parse UBL/XML structured data                            │ │
-│     │ d. Store PDF in document storage                            │ │
-│     │ e. Create invoice record with SEF metadata                  │ │
-│     │ f. Run OCR on PDF (for additional data/validation)          │ │
-│     │ g. Generate AccountingIntent                                │ │
-│     │ h. Apply automation rules                                   │ │
-│     └─────────────────────────────────────────────────────────────┘ │
-│     │                                                                │
-│     ▼                                                                │
-│  4. Update last_sync_at timestamp                                   │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**SEF Invoice Statuses:**
-
-| SEF Status | Serbian | Saldora Action |
-|------------|---------|------------------|
-| `SENT` | Poslata | N/A (outbound only) |
-| `DELIVERED` | Isporučena | Import & process |
-| `SEEN` | Viđena | Update status |
-| `APPROVED` | Odobrena | Mark as accepted |
-| `REJECTED` | Odbijena | Flag for attention |
-| `CANCELLED` | Stornirana | Handle cancellation |
-| `PAID` | Plaćena | Update payment status |
-
-**SEF Invoice Data Structure (from UBL):**
-
-```json
-{
-  "sef_invoice": {
-    "sef_id": "12345678-1234-1234-1234-123456789012",
-    "sef_status": "DELIVERED",
-    "invoice_number": "2025-0001",
-    "invoice_date": "2025-01-15",
-    "due_date": "2025-02-15",
-
-    "seller": {
-      "pib": "123456789",
-      "name": "Dobavljač d.o.o.",
-      "address": "Ulica 1, Beograd",
-      "mb": "12345678",
-      "jbkjs": null  // For budget users
-    },
-
-    "buyer": {
-      "pib": "987654321",
-      "name": "Kupac d.o.o.",
-      "address": "Ulica 2, Novi Sad",
-      "mb": "87654321"
-    },
-
-    "line_items": [
-      {
-        "description": "Usluge konsaltinga",
-        "quantity": 10,
-        "unit": "HUR",  // UN/CEFACT unit code
-        "unit_price": 5000.00,
-        "discount": null,
-        "tax_base": null,
-        "total": 50000.00,
-        "vat_rate": 20.00,
-        "vat_amount": 10000.00
-      }
-    ],
-
-    "monetary_totals": {
-      "line_extension_amount": 50000.00,
-      "tax_exclusive_amount": 50000.00,
-      "tax_inclusive_amount": 60000.00,
-      "payable_amount": 60000.00
-    },
-
-    "vat_breakdown": [
-      {
-        "taxable_amount": 50000.00,
-        "tax_amount": 10000.00,
-        "tax_category": "S",  // Standard rate
-        "percent": 20.00
-      }
-    ],
-
-    "attachments": [
-      {
-        "filename": "faktura-2025-0001.pdf",
-        "mime_type": "application/pdf",
-        "embedded": true  // Base64 in XML or separate download
-      }
-    ],
-
-    "sef_metadata": {
-      "creation_date": "2025-01-15T10:30:00Z",
-      "delivery_date": "2025-01-15T10:30:05Z",
-      "cir_invoice_id": null,  // Central Invoice Registry ID
-      "is_government": false
-    }
-  }
-}
-```
-
-**Database Schema - SEF Invoice Mapping:**
-
-```sql
-CREATE TABLE sef_invoices (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-    invoice_id UUID REFERENCES invoices(id),  -- Saldora invoice
-
-    -- SEF identifiers
-    sef_id VARCHAR(100) NOT NULL,
-    sef_internal_id VARCHAR(100),
-    cir_invoice_id VARCHAR(100),
-
-    -- SEF status tracking
-    sef_status VARCHAR(30) NOT NULL,
-    sef_status_updated_at TIMESTAMP WITH TIME ZONE,
-
-    -- Direction
-    direction VARCHAR(10) NOT NULL,  -- 'INBOUND' | 'OUTBOUND'
-
-    -- Raw SEF data
-    ubl_xml TEXT,
-    sef_response_json JSONB,
-
-    -- PDF attachment
-    pdf_document_id UUID REFERENCES documents(id),
-
-    -- Sync metadata
-    synced_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    processed_at TIMESTAMP WITH TIME ZONE,
-    processing_error TEXT,
-
-    -- User actions
-    user_accepted BOOLEAN,
-    user_accepted_at TIMESTAMP WITH TIME ZONE,
-    user_accepted_by UUID REFERENCES users(id),
-    rejection_reason TEXT,
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    CONSTRAINT unique_sef_id UNIQUE (organization_id, sef_id),
-    CONSTRAINT valid_direction CHECK (direction IN ('INBOUND', 'OUTBOUND')),
-    CONSTRAINT valid_sef_status CHECK (sef_status IN (
-        'SENT', 'DELIVERED', 'SEEN', 'APPROVED', 'REJECTED',
-        'CANCELLED', 'PAID', 'STORNO', 'ERROR'
-    ))
-);
-
-CREATE INDEX idx_sef_invoices_org ON sef_invoices(organization_id);
-CREATE INDEX idx_sef_invoices_status ON sef_invoices(sef_status);
-CREATE INDEX idx_sef_invoices_invoice ON sef_invoices(invoice_id);
-CREATE INDEX idx_sef_invoices_synced ON sef_invoices(synced_at);
-```
-
-#### 12.6.4 Outbound Invoice Push (Saldora → SEF)
-
-The system SHOULD support sending invoices to SEF (for organizations that issue invoices).
-
-**Push Flow:**
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Outbound Invoice Push Flow                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  1. User creates/uploads outbound invoice in Saldora              │
-│     │                                                                │
-│     ▼                                                                │
-│  2. System validates:                                               │
-│     • All required UBL fields present                               │
-│     • Buyer PIB valid in APR                                        │
-│     • Mathematical accuracy                                         │
-│     • VAT calculation correct                                       │
-│     │                                                                │
-│     ▼                                                                │
-│  3. Generate UBL 2.1 XML                                            │
-│     │                                                                │
-│     ▼                                                                │
-│  4. User clicks "Pošalji na SEF"                                    │
-│     │                                                                │
-│     ▼                                                                │
-│  5. POST to SEF API                                                 │
-│     │                                                                │
-│     ├──▶ Success: Store SEF ID, update status                       │
-│     │                                                                │
-│     └──▶ Error: Log error, notify user, allow retry                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**UBL Generation Requirements:**
-
-| UBL Field | Source | Validation |
-|-----------|--------|------------|
-| `ID` | invoice.invoice_number | Required |
-| `IssueDate` | invoice.invoice_date | Required, format YYYY-MM-DD |
-| `DueDate` | invoice.due_date | Required |
-| `InvoiceTypeCode` | accounting_intent.document_type | 380 = Invoice, 381 = Credit Note |
-| `DocumentCurrencyCode` | invoice.currency | Must be RSD for domestic |
-| `AccountingSupplierParty` | seller.* | PIB, name, address required |
-| `AccountingCustomerParty` | buyer.* | PIB, name, address required |
-| `TaxTotal` | Calculated | VAT breakdown per rate |
-| `LegalMonetaryTotal` | invoice.* | All totals |
-| `InvoiceLine` | line_items[] | Description, quantity, price, VAT |
-
-#### 12.6.5 SEF Status Polling
-
-SEF does not support native webhooks. The system MUST poll the SEF API to detect invoice status changes.
-
-**Polling Strategy:**
-
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Default interval | 15 minutes | Balance between timeliness and API limits |
-| Business hours boost | 5 minutes (8:00-17:00) | Faster updates during work hours |
-| Off-hours interval | 30 minutes | Reduce unnecessary API calls |
-| Rate limit | Max 100 requests/hour per org | Respect SEF API limits |
-
-**Polling Implementation:**
-
-```python
-async def poll_sef_status_changes(org_id: UUID):
-    """
-    Poll SEF API for invoice status changes.
-    Runs on scheduled interval per organization.
-    """
-    connection = await get_sef_connection(org_id)
-    if not connection or not connection.sync_enabled:
-        return
-
-    # 1. Get last sync timestamp
-    last_sync = connection.last_sync_at or datetime.min
-
-    # 2. Query SEF for status changes since last sync
-    changed_invoices = await sef_client.get_status_changes(
-        pib=connection.organization_pib,
-        since=last_sync,
-        api_key=decrypt(connection.api_key_encrypted)
-    )
-
-    # 3. Process each status change
-    for change in changed_invoices:
-        sef_invoice = await get_sef_invoice(org_id, change.sef_id)
-        if not sef_invoice:
-            logger.warning(f"Unknown SEF invoice: {change.sef_id}")
-            continue
-
-        old_status = sef_invoice.sef_status
-        if old_status == change.new_status:
-            continue  # No actual change
-
-        sef_invoice.sef_status = change.new_status
-        sef_invoice.sef_status_updated_at = change.timestamp
-
-        # 4. Handle specific status transitions
-        match change.new_status:
-            case "APPROVED":
-                await mark_invoice_accepted(sef_invoice.invoice_id)
-                await notify_user(sef_invoice, "Faktura odobrena od strane kupca")
-            case "REJECTED":
-                await flag_invoice_for_review(
-                    sef_invoice.invoice_id,
-                    reason=f"Odbijena na SEF: {change.rejection_reason}"
-                )
-                await notify_user(sef_invoice, "Faktura odbijena!", priority="high")
-            case "CANCELLED":
-                if sef_invoice.invoice.status == "exported":
-                    await create_cancellation_record(sef_invoice.invoice_id)
-            case "PAID":
-                await update_payment_status(sef_invoice.invoice_id, paid=True)
-
-        await log_sef_status_change(sef_invoice, old_status, change)
-
-    # 5. Update last sync timestamp
-    connection.last_sync_at = datetime.now(timezone.utc)
-    await db.save(connection)
-```
-
-#### 12.6.6 SEF-OCR Hybrid Processing
-
-When receiving invoices from SEF, the system uses both structured UBL data AND OCR for maximum accuracy:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                   SEF-OCR Hybrid Processing                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    SEF UBL/XML Data                          │   │
-│  │  • Structured, machine-readable                              │   │
-│  │  • Seller/Buyer PIB guaranteed accurate                      │   │
-│  │  • Amounts from issuer's system                              │   │
-│  │  • Line items may be summarized                              │   │
-│  └──────────────────────────────┬───────────────────────────────┘   │
-│                                 │                                    │
-│                                 ▼                                    │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    Merge Strategy                            │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                 │                                    │
-│  ┌──────────────────────────────┴───────────────────────────────┐   │
-│  │                   PDF/OCR Data                               │   │
-│  │  • Visual representation                                     │   │
-│  │  • May have more detailed line items                         │   │
-│  │  • Additional notes/terms                                    │   │
-│  │  • Signatures, stamps (visual verification)                  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                                                                      │
-│  Merge Rules:                                                       │
-│  ─────────────────────────────────────────────────────────────────  │
-│  • PIB, MB: Always use SEF (authoritative)                         │
-│  • Amounts: Use SEF, flag if OCR differs by > 1%                   │
-│  • Invoice number: Use SEF                                         │
-│  • Line items: Merge - prefer SEF structure, OCR for detail        │
-│  • Payment terms: OCR may have more detail                         │
-│  • Attachments: Store PDF from SEF                                 │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Discrepancy Handling:**
-
-| Field | SEF Value | OCR Value | Action |
-|-------|-----------|-----------|--------|
-| total_amount | 60000.00 | 60000.00 | ✅ Match - proceed |
-| total_amount | 60000.00 | 59999.50 | ✅ Within tolerance (0.01%) |
-| total_amount | 60000.00 | 58000.00 | ⚠️ Flag for review (>1% diff) |
-| line_items | 3 items | 5 items | ⚠️ OCR found more detail - review |
-| seller_pib | 123456789 | 123456780 | ✅ Use SEF (authoritative) |
-
-#### 12.6.7 SEF Inbox UI
-
-The system MUST provide a dedicated "SEF Inbox" view for managing incoming eFaktura invoices:
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  📥 SEF Inbox                                            [↻ Sync]   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  Filter: [Sve ▼] [Ovaj mesec ▼]           Search: [____________]   │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐│
-│  │ ☐ │ Status    │ Dobavljač           │ Br. fakture │ Iznos    │ ││
-│  ├───┼───────────┼─────────────────────┼─────────────┼──────────┤ ││
-│  │ ☑ │ 🆕 Nova    │ Telekom Srbija     │ 2025-001234 │ 4.500 RSD│ ││
-│  │ ☐ │ 🆕 Nova    │ EPS Snabdevanje    │ 01-25-98765 │ 12.340 RSD││
-│  │ ☐ │ ⏳ Na čekanju│ Dobavljač XYZ    │ F-2025-042  │ 156.000 RSD││
-│  │ ☐ │ ✅ Obrađeno │ Partner ABC       │ 2025/0015   │ 45.000 RSD││
-│  │ ☐ │ ❌ Odbijeno │ Nepoznat d.o.o.   │ INV-999     │ 8.000 RSD ││
-│  └─────────────────────────────────────────────────────────────────┘│
-│                                                                      │
-│  Izabrano: 1                     [Obradi izabrane] [Odbij] [Arhiviraj]│
-│                                                                      │
-│  Poslednja sinhronizacija: pre 5 minuta                             │
-│  Neobrađenih faktura: 2                                             │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**SEF Invoice Actions:**
-
-| Action | Description | Result |
-|--------|-------------|--------|
-| Obradi | Process through Saldora pipeline | Creates invoice + accounting intent |
-| Prihvati na SEF | Send acceptance to SEF | Updates SEF status to APPROVED |
-| Odbij | Reject invoice | Sends rejection to SEF with reason |
-| Arhiviraj | Archive without processing | Stores but doesn't create invoice |
-
-#### 12.6.8 SEF Error Handling
-
-| Error | Cause | Recovery |
-|-------|-------|----------|
-| `SEF_CONNECTION_FAILED` | Network/API issues | Retry with exponential backoff |
-| `SEF_AUTH_EXPIRED` | API key/cert expired | Notify admin, disable sync |
-| `SEF_RATE_LIMITED` | Too many requests | Back off, reduce sync frequency |
-| `SEF_INVALID_RESPONSE` | Unexpected data format | Log, skip invoice, alert |
-| `SEF_DUPLICATE_INVOICE` | Already processed | Skip, update status only |
-| `UBL_PARSE_ERROR` | Malformed XML | Log, attempt PDF-only processing |
+The removed sub-sections (preserved in version control under SRS v3.2) included: SEF Connection Setup, Inbound Invoice Sync (SEF → Saldora), Outbound Invoice Push (Saldora → SEF), SEF Status Polling (SEF has no native webhooks), SEF-OCR Hybrid Processing (UBL/XML data merged with OCR for accuracy), SEF Inbox UI, and SEF Error Handling. The associated `sef_connections` and `sef_invoices` tables were never built and are not present in the schema.
 
 ### 12.7 NBS Integration (National Bank of Serbia)
 
@@ -4837,16 +4630,19 @@ async def fetch_nbs_exchange_rates():
 
 | Screen | Description |
 |--------|-------------|
-| Landing Page | Marketing page with features, pricing |
-| Login/Register | Authentication screens |
-| Dashboard | Overview, stats, quick actions |
-| Upload | Drag & drop upload interface |
-| Processing | Real-time processing status |
-| Invoice View | Side-by-side document and data |
-| Invoice List | Filterable, sortable table |
-| Export | Format selection, field mapping |
-| Clients | Client list, create/edit client (Agency plan only) |
-| Settings | Profile, team, API keys |
+| Landing Page | Marketing page (saldora.rs) with hospitality-positioned features and pricing |
+| Login / Register / Awaiting Approval | Auth screens; new orgs land in `/awaiting-approval` until admin approval (FR-4.1.5) |
+| **Pregled portfelja** (`/pregled`) | Default home for agency users — grid of clients with health indicators (FR-4.18.1) |
+| **Klijent radna tabla** (`/klijenti/{id}`) | Per-client workspace with Hronologija (default), Fakture, Izveštaji, Pravila tabs (FR-4.18.2) |
+| Klijenti (`/klijenti`) | Quick-jump list of all clients (CRUD remains here) |
+| Pravila (org-wide) | Editor for agency-wide automation rules + browser of per-client scoped rules |
+| Arhiviranje | Configure and trigger monthly archive ZIPs (FR-4.7.5) |
+| Katalog proizvoda | Canonical products + aliases + merge UI |
+| Dashboard | Global org stats (kept for the moment, may be folded into Pregled later) |
+| Upload | Drag & drop upload interface (within Fakture tab) |
+| Invoice Detail | Side-by-side document and data, EditableField with confidence badges, line items + tax groups editing |
+| Export | Format selection, field mapping (XLSX, CSV, JSON, MiniMax XML, MiniMax REST push) |
+| Settings | Profile, team, API keys, MiniMax credentials |
 | Billing | Plan selection, usage, invoices |
 
 ### 13.3 Responsive Breakpoints
@@ -5037,6 +4833,7 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 
 | 3.1 | April 2026 | Saldora Team | Added payment tracking (FR-4.7.4): payment_status, paid_amount, paid_date fields on invoices; single and batch payment endpoints; payment_status filter on invoice list; open items and aging reports under /reports/. Added automated archive export spec (FR-4.7.5): monthly ZIP delivery via email with data retention responsibility shifted to end user. |
 | 3.2 | April 2026 | Saldora Team | Removed payment tracking (FR-4.7.4) — Saldora is intelligence-only. Deprioritized webhooks (FR-4.8.2) and SEF integration (12.6). Replaced PDV books (KPR/KIR) with intelligence reports (FR-4.13). Consolidated archive export tables (audit_exports → scheduled_export_logs). Rebrand: Saldora → Saldora. |
+| 4.0 | 2026-04-29 | Saldora Team | **Hospitality pivot.** Repositioned the document as the source-of-truth for the post-pivot product (intelligence layer for Serbian accounting agencies handling hospitality clients). New top matter ("current thesis"). Updated personas (1.4, 2.3) — agency owners and bookkeepers as primary; paušalci dropped as a persona. Added FR-4.1.5 manual approval gate (subscription_status, /awaiting-approval, admin_orgs.py) and FR-4.1.6 invitations/join requests. Expanded Section 4.12 with FR-4.12.5 client_events log and FR-4.12.6 rule_client_associations; removed sidebar selector in favor of client-first UI. Added Section 4.17 (Out of Scope / Dropped) consolidating dropped features: paušal module, client portal, compliance watchdog, foreign reverse-charge module, payment tracking, webhooks, EasyOCR fallback, Stripe, image preprocessing for VLM. Added Section 4.18 (Client-First UI / M19) documenting `/pregled`, `/klijenti/{id}`, Hronologija/Fakture/Izveštaji/Pravila tabs, sidebar restructure. Added Section 4.19 (Hospitality Legal Forms / M20) marked deferred until accountant meeting; documented kalkulacije, šank lista, cenovnik, KEP, popis as the next layer with data foundation in place. Marked Section 4.14 (email ingestion) and 4.16 (in-app support) as planned/not yet wired. Updated tech stack (Section 6) to Modal-hosted dots.ocr (replacing vLLM container), Hetzner CX32 single-VPS docker-compose (replacing k8s), Cloudflare R2 (prod) + MinIO (dev), Resend (only). Replaced Section 11 deployment architecture with single-host Caddy/FastAPI/Next.js/PostgreSQL/Redis/Celery topology. Removed all SEF integration sub-sections (12.6.2–12.6.8) — kept a stub noting deprioritization and pointing to v3.2 for the prior spec. Added 7.2.7 (client_events) and 7.2.8 (rule_client_associations) DB schemas; documented subscription_status semantics on organizations (7.2.2). Updated UI key screens (13.2). Various stale-reference cleanup (fakturaai.rs → saldora.rs, fakturaai DB column names → saldora). |
 
 ---
 
