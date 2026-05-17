@@ -21,6 +21,15 @@ import os
 # Ensure rate limiting is disabled during tests — must be set BEFORE app import
 os.environ["TESTING"] = "1"
 
+# Force Celery to a memory-only broker so test runs never enqueue tasks on
+# the shared dev/prod Redis. Without this, tests that exercise the upload
+# endpoint (which calls send_task for real even when storage is mocked)
+# leak orphan process_invoice jobs into Redis db 1; whenever a worker is
+# running afterward it drains them and floods the logs with "NoSuchKey"
+# errors for fake/key.pdf. setdefault preserves CI/manual overrides.
+os.environ.setdefault("CELERY_BROKER_URL", "memory://")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+
 from collections.abc import AsyncGenerator
 from unittest.mock import patch
 

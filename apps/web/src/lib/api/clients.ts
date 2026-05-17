@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api-client';
 import type {
   ClientCreate,
   ClientListResponse,
+  ClientObligationsResponse,
   ClientResponse,
   ClientUpdate,
 } from '@/lib/types/client';
@@ -49,6 +50,18 @@ export async function fetchClients(
  */
 export async function fetchClient(id: string): Promise<ClientResponse> {
   return apiClient<ClientResponse>(`/api/v1/clients/${id}`);
+}
+
+/**
+ * Fetch the obligation matrix for one client. Drives the "Obavezni
+ * obrasci" card on the per-client Izveštaji tab.
+ */
+export async function fetchClientObligations(
+  id: string,
+): Promise<ClientObligationsResponse> {
+  return apiClient<ClientObligationsResponse>(
+    `/api/v1/clients/${id}/obligations`,
+  );
 }
 
 export interface ClientWorkspaceStats {

@@ -4,7 +4,9 @@ import { useState } from 'react';
 
 import CatalogContent from '@/components/reports/CatalogContent';
 import DpuContent from '@/components/reports/DpuContent';
+import { ObligationsCard } from '@/components/reports/ObligationsCard';
 import ReportContent from '@/components/reports/ReportContent';
+import type { ObligationFormKey } from '@/lib/types/client';
 
 type NavItem = {
   id: string;
@@ -83,8 +85,23 @@ export function ReportsSurface({ clientId }: Props) {
     if (firstInGroup) setSelected(firstInGroup.id);
   }
 
+  /** When the obligation card asks us to jump to a report, switch the
+   * report tab to the matching one. kalkulacija + DPU live under the
+   * hospitality group; everything else routes to its own tab id. */
+  function handleJumpToReport(key: ObligationFormKey) {
+    if (key === 'kalkulacija' || key === 'dpu') {
+      setActiveGroup('hospitality');
+      setSelected(key);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {/* Obligation matrix — only on the per-client tab (M20 demo surface). */}
+      {clientId && (
+        <ObligationsCard clientId={clientId} onJumpToReport={handleJumpToReport} />
+      )}
+
       {/* Group pills */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {GROUPS.map((g) => (

@@ -974,6 +974,23 @@
     "clientPlural": "klijenata",
     "addClient": "Dodaj klijenta",
     "addClientShort": "Dodaj",
+    "classificationTitle": "Klasifikacija (ugostiteljski klijent)",
+    "classificationHint": "Određuje obavezne obrasce",
+    "legalForm": "Pravna forma",
+    "bookkeepingSystem": "Sistem knjigovodstva",
+    "unsetOption": "— nije izabrano —",
+    "legalFormOption": {
+      "DOO": "DOO (privredno društvo)",
+      "preduzetnik": "Preduzetnik",
+      "paušalac": "Paušalac",
+      "drugo": "Drugo"
+    },
+    "bookkeepingOption": {
+      "dvojno": "Dvojno knjigovodstvo",
+      "prosto": "Prosto knjigovodstvo"
+    },
+    "dooImpliesDvojno": "DOO po zakonu vodi dvojno knjigovodstvo.",
+    "pausalacOutOfScope": "Paušalci su van obima Saldore.",
     "createClient": "Kreiraj klijenta",
     "editClient": "Izmeni klijenta",
     "searchPlaceholder": "Pretraži po nazivu ili PIB-u...",
@@ -1214,5 +1231,45 @@
     "checking": "Proveravam…",
     "stillPending": "Vaš nalog i dalje čeka odobrenje. Pokušajte ponovo za nekoliko minuta.",
     "logout": "Odjavi se"
+  },
+  "obligations": {
+    "title": "Obavezni obrasci",
+    "summaryLine": "{owed} obavezna · {ready} dostupna · {postMeeting} posle sastanka",
+    "subtitle": "Izvedeno iz pravne forme i sistema knjigovodstva. Obrasci koji nisu obavezni za ovog klijenta su sakriveni.",
+    "unclassifiedPrompt": "Klasifikujte klijenta (Pravna forma i Sistem knjigovodstva) da biste videli koji su obrasci obavezni.",
+    "open": "Otvori",
+    "status": {
+      "shipped": "Dostupno",
+      "pre_meeting": "Dostupno (pre-sastanak)",
+      "post_meeting": "Posle sastanka",
+      "not_applicable": "Nije obavezno",
+      "unclassified": "Nepoznato"
+    },
+    "form": {
+      "kalkulacija": {
+        "name": "Kalkulacija prodajne cene",
+        "description": "13 kolona — nabavna → marža → PDV → prodajna cena (Pravilnik 140/04)."
+      },
+      "kep": {
+        "name": "KEP — Knjiga evidencije prometa",
+        "description": "5 kolona — zaduženje + razduženje po prodajnom mestu (Pravilnik 99/2015)."
+      },
+      "cenovnik": {
+        "name": "Cenovnik",
+        "description": "Trenutni cenovnik / meni, mora biti javno istaknut."
+      },
+      "popis": {
+        "name": "Popis",
+        "description": "Godišnji minimum + po potrebi; razlika ulazi u KEP višak/manjak."
+      },
+      "dpu": {
+        "name": "DPU — Šank lista",
+        "description": "9 kolona — dnevna evidencija ugostiteljskog prometa. Samo za prosto knjigovodstvo (Mišljenje MF 011-00-761/2018-16)."
+      },
+      "pk1": {
+        "name": "PK-1 — Pomoćna knjiga",
+        "description": "Glavna knjiga za prosto knjigovodstvo; kalkulacija puni kolone 12/14/15/16."
+      }
+    }
   }
 }

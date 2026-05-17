@@ -18,7 +18,7 @@ The buyer is the **agency owner**; the daily users are **agency bookkeepers** wh
 
 The original positioning of this document — "generic AI-powered invoice processing for accountants, agencies, and enterprises" — is **superseded** by the hospitality thesis. Capabilities that were generic (multi-tenant org model, OCR + LLM extraction, exports, automation rules, client management) still work and are still in scope; they are simply no longer the primary marketing or product framing. Anything that was paušalci-specific, generic-B2B-portal-shaped, or SEF-load-bearing has been dropped or deferred (see Section 4.17, "Out of scope / dropped").
 
-For the strategic narrative, see [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md). For milestone status, see [`saldora-implementation-plan.md`](saldora-implementation-plan.md).
+For milestone status see [`IMPLEMENTATION_GUIDE.md`](./IMPLEMENTATION_GUIDE.md). For architectural decisions and the reasoning behind them, see [`../dev/architecture.md`](../dev/architecture.md).
 
 ---
 
@@ -143,7 +143,7 @@ Saldora operates as a standalone web application with the following integration 
 │                    External Services                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  APR API    │  │   Storage   │  │    Payment Processor    │  │
-│  │  (Serbia)   │  │   (S3/R2)   │  │    (Paddle)             │  │
+│  │  (Serbia)   │  │   (S3/R2)   │  │   (manual billing)      │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -172,7 +172,7 @@ Saldora operates as a standalone web application with the following integration 
 | Email Ingestion | Per-org inbound address `org-slug@invoices.saldora.ai` | **Planned, not yet wired** |
 | In-App Support Tickets | Ticket system with attachments | **Planned** (M15) |
 | API Access | REST API + per-org API keys | Shipped |
-| Paddle Billing | Merchant of Record subscription billing (no Stripe) | Shipped |
+| Billing | Manual: agencies pay invoice by bank transfer; admin extends subscription via `scripts/admin_orgs.py`. No third-party payment processor integrated. | Shipped |
 
 ### 2.3 User Classes and Characteristics
 
@@ -229,7 +229,7 @@ Saldora operates as a standalone web application with the following integration 
 - **Modal.com** for GPU OCR inference (dots.ocr on A10G, scale-to-zero)
 - **Anthropic** for Claude Haiku LLM field extraction
 - **Resend** for transactional email (welcome, password reset, monthly archive delivery, admin approval notifications)
-- **Paddle** as Merchant of Record for subscription billing (Stripe is not available in Serbia)
+- **Manual billing.** Agencies pay invoice by bank transfer; admin activates / extends via `scripts/admin_orgs.py`. No third-party payment processor integrated. (Stripe is not available in Serbia. Paddle was scoped early but not adopted — see `../dev/architecture.md` §3.3.)
 - **Cloudflare** for DNS, SSL, CDN, DDoS protection
 - **Hetzner CX32 VPS** as the application host
 - **NBS** (Narodna banka Srbije) public exchange-rate API for foreign-currency → RSD conversion
@@ -331,7 +331,7 @@ Saldora operates as a standalone web application with the following integration 
 │                                                                      │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
 │  │ Billing Service │    │  Queue Service  │    │ MiniMax Service │  │
-│  │  - Paddle (MoR) │    │ - Celery tasks  │    │  - XML export   │  │
+│  │  - Manual bill. │    │ - Celery tasks  │    │  - XML export   │  │
 │  │  - Usage record │    │ - Job status    │    │  - REST push    │  │
 │  │  - Approval gate│    │ - Retry logic   │    │  - Token cache  │  │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
@@ -400,7 +400,7 @@ Saldora operates as a standalone web application with the following integration 
 
 | Role | Permissions |
 |------|-------------|
-| Admin | Full access, billing, team management, Paddle settings |
+| Admin | Full access, billing visibility, team management, organisation settings |
 | Manager | Invoice processing, export, team view |
 | Operator | Invoice processing, export |
 | Viewer | Read-only access to processed invoices |
@@ -413,8 +413,8 @@ Saldora operates as a standalone web application with the following integration 
 | **Enforcement** | The shared `require_role(...)` dependency 403s with body `{"code": "subscription_pending_approval", "subscription_status": "pending"}` whenever a user belongs to an org whose `subscription_status` is `pending` |
 | **Frontend** | Pending users are routed to `/awaiting-approval`, which polls user info every ~10 seconds; once status flips to `active` or `trial`, the AuthContext refreshes and the user is forwarded into the app |
 | **Admin notification** | On registration, a Resend email is dispatched to the address in `ADMIN_EMAIL` containing org name, slug, contact, and the registrant's email |
-| **Approval mechanism** | An interactive script `scripts/admin_orgs.py` (run by Saldora staff over SSH) lists pending orgs and allows the operator to flip `subscription_status` to `active` or `trial` and choose the plan tier. There is no card-on-file step at this stage of the company; billing is handled out-of-band via Paddle once an org is active. |
-| **Rationale** | Pre-revenue, every signup is hand-vetted to avoid abuse and to keep our agency-buyer focus tight. This is intentionally manual until self-serve onboarding is wired with Paddle Checkout. |
+| **Approval mechanism** | An interactive script `scripts/admin_orgs.py` (run by Saldora staff over SSH) lists pending orgs and allows the operator to flip `subscription_status` to `active` or `trial`, choose the plan tier, and extend the subscription period. There is no card-on-file step today; billing is handled out-of-band via a Saldora-issued invoice paid by bank transfer, with the script-driven extension being the activation event. |
+| **Rationale** | Pre-revenue, every signup is hand-vetted to avoid abuse and to keep our agency-buyer focus tight. This is intentionally manual until self-serve onboarding is wired with an automated billing rail. See [`../dev/architecture.md`](../dev/architecture.md) §3.3 for the decision record. |
 
 **`subscription_status` allowed values:**
 
@@ -2358,13 +2358,14 @@ This section consolidates everything that has been explicitly removed, deferred,
 | **Compliance Watchdog** (M18) — scheduled rule evaluation producing alerts | **Dropped** | Paušal-era thinking. Rules continue to fire on events; a scheduled watchdog adds no value for hospitality agencies. |
 | **Foreign reverse-charge as a standalone module** (M15) | **Deferred indefinitely** | The existing NBS conversion + AccountingIntent already handle the small volume of foreign hospitality invoices adequately. Revisit only if hospitality agencies report it as real pain. |
 | **Payment tracking** (FR-4.7.4 in earlier versions) — `payment_status`, `paid_amount`, `paid_date`, open items, aging reports | **Removed** | Saldora is intelligence-only. Payment operations belong in MiniMax. |
-| **Webhook notifications** (FR-4.8.2 in earlier versions) | **Deprioritized** | Webhooks become useful only after the full workflow is API-driven from the customer's side; we are not there. Paddle webhooks for billing remain in scope. |
+| **Webhook notifications** (FR-4.8.2 in earlier versions) | **Deprioritized** | Webhooks become useful only after the full workflow is API-driven from the customer's side; we are not there. Billing-provider webhooks would re-enter scope if and when an automated billing rail is adopted. |
 | **SEF integration as a load-bearing input source** (M-SEF, formerly Section 12.5/12.6) | **Deprioritized** | The wedge is paper invoices SEF doesn't cover. SEF ingestion as a secondary data source remains as out-of-milestone ongoing work but is not on any active milestone and was removed from this SRS as a first-class section. |
 | **Bank reconciliation, general-ledger postings, payment matching** | **Permanently out of scope** | MiniMax handles these. Saldora hands off; it does not do the books. |
 | **Model retraining / fine-tuning on user data** | **Permanently out of scope** | Pre-trained models only (dots.ocr for OCR, Claude Haiku for extraction). Correction logs (Section 9.8) exist for monitoring quality, not for training. |
 | **Image preprocessing for VLM** (deskewing, binarization, contrast adjustments before sending to dots.ocr) | **Disabled** | dots.ocr works best on original color images. The preprocessing pipeline that existed for traditional OCR engines is bypassed for the VLM path. |
 | **EasyOCR fallback** when dots.ocr fails | **Removed** | Alternative OCR engines deliver insufficient accuracy on Serbian Cyrillic/Latin documents. If dots.ocr fails, the invoice is flagged for manual review by the user — no automatic fallback engine. |
-| **Stripe integration** | **Permanently out of scope** | Stripe is unavailable in Serbia. Paddle is the Merchant of Record. Any references to Stripe in older drafts are stale. |
+| **Stripe integration** | **Permanently out of scope** | Stripe is unavailable in Serbia. Any references to Stripe in older drafts are stale. |
+| **Automated payment processor** (Paddle, etc.) | **Deferred** | Billing is currently manual via `scripts/admin_orgs.py` (see §4.1.5 and `../dev/architecture.md` §3.3). Paddle was scoped early and not adopted; revisited only when self-serve volume justifies it. |
 | **Compliance Watchdog scheduled checks** | **Dropped** | See above. |
 
 ---
@@ -2374,7 +2375,7 @@ This section consolidates everything that has been explicitly removed, deferred,
 
 This section defines the client-first UI surface introduced in milestone M19. The previous feature-indexed UI (top-level `Fakture`, `Klijenti`, `Izveštaji`, `Pravila` sidebar entries with global lists filtered per client) is **superseded** by a client-axis UI in which the agency picks a client first and finds every per-client capability inside that client's workspace.
 
-The full UX rationale lives in [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md), Part Three. This section captures the requirement-level surface only.
+The architectural rationale (why client-first, what we rejected) lives in [`../dev/architecture.md`](../dev/architecture.md) §10. This section captures the requirement-level surface only.
 
 #### FR-4.18.1 Portfolio View (`/pregled`)
 
@@ -2444,19 +2445,49 @@ Saldora has not yet deployed to paying customers. The M19 redesign ships as a **
 ---
 
 <a id="419-hospitality-legal-forms-deferred-m20"></a>
-### 4.19 Hospitality Legal Forms (deferred, M20)
+### 4.19 Hospitality Legal Forms (M20, partial)
 
-> **Status:** Scope deliberately TBD until a working session with a real Serbian accountant who handles hospitality clients produces the requirements document. Building these from a reading of the law alone is known to produce wrong column structures and wrong workflows.
+> **Status:** Form *specs* deliberately TBD until a working session with a real Serbian accountant who handles hospitality clients produces the column-level requirements. Building forms from a reading of the law alone is known to produce wrong column structures and wrong workflows. **What ships pre-meeting:** the data foundation (already in place), the **obligation matrix** that decides which forms apply to which client, and a per-client UI surface that exposes that matrix so the accountant has something concrete to push back on at the meeting.
 
 The deliberate next layer of value, on top of the existing OCR + product catalog data foundation, is the generation of legally-required Serbian hospitality forms directly from extracted invoice data:
 
 | Form | Serbian | Purpose | Data source |
 |------|---------|---------|-------------|
-| **Kalkulacija** | Kalkulacija | Per-product cost-price → markup → VAT → sale-price calculation, regenerated when a new product is added or a supplier price changes | `invoice_line_items` + `product_catalog` (selling_price, default_margin_pct) |
-| **Šank lista** | Šank lista | Periodic bar inventory: received goods, sold goods, closing stock | Line items + sales data (sales-side data acquisition is part of the open scope) |
-| **Cenovnik** | Cenovnik | Current price list / menu, must match what is charged and must be publicly displayed | `product_catalog.selling_price` |
-| **KEP** | Knjiga evidencije prometa | Trade records book — a ledger of all goods received and all sales | Line items + sales data |
-| **Popis** | Popis | Periodic physical inventory count with valuation at period end | Inventory state derived from received minus sold (period-bounded) |
+| **Kalkulacija** | Kalkulacija prodajne cene | Per-product cost → markup → VAT → sale-price calculation; the 13-column document prescribed by Pravilnik o poslovnim knjigama (Sl. glasnik RS 140/04). Regenerated when a new product is added or a supplier price changes. Links to PK-1 columns 12 / 14 / 15 / 16 for prosto-knjigovodstvo clients. | `invoice_line_items` + `product_catalog` (selling_price, default_margin_pct, optional per-client markup overrides) |
+| **KEP** | Knjiga evidencije prometa | 5-column trade book governed by Pravilnik o evidenciji prometa (Sl. glasnik RS 99/2015, 44/2018). Kept per prodajno mesto. Zaduženje from kalkulacija at retail-with-PDV; razduženje from fiscal-cash-register daily totals + fakture + other prescribed documents. Daily entries (next-day cutoff). Numbered pages, donos carried, year-end saldo carries to next year. | `invoice_line_items` (purchase-side) + daily fiscal totals (sales-side; ingestion path TBD) |
+| **DPU (Šank lista)** | List dnevnog prometa ugostitelja | 9-column daily bar list governed by Pravilnik o poslovnim knjigama (140/04). Per-day rows: opening stock, received during day, total, closing stock by popis, consumed quantity, sale price per unit, realised promet, sale-value of received quantities. **Only required for clients on prosto knjigovodstvo** — DOOs on dvojno are exempt per Mišljenje Ministarstva finansija 011-00-761/2018-16 od 23.10.2018. | Line items + sales data + daily popis |
+| **Cenovnik** | Cenovnik (menu/price list) | Current price list, must match what is charged and must be publicly displayed. | `product_catalog.selling_price` (with optional per-client overrides) |
+| **Popis** | Popis | Periodic physical inventory count with valuation. Annual minimum; per-period as needed. | Inventory state derived from received minus sold + bookkeeper-entered actuals; system flags discrepancies → KEP višak/manjak entries |
+
+#### 4.19.1 — Obligation matrix (the M20 pre-meeting deliverable)
+
+The legal obligation set is **not flat across clients**. It is determined by `(legal_form, bookkeeping_system)`:
+
+| Client profile | KL | KEP | Cenovnik | Popis | DPU | PK-1 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **DOO** (dvojno knjigovodstvo — implied by Zakon o računovodstvu) | ✓ | ✓ | ✓ | ✓ | — | — |
+| **Preduzetnik, prosto knjigovodstvo** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Preduzetnik, dvojno knjigovodstvo** | ✓ | ✓ | ✓ | ✓ | — | — |
+| **Paušalac** | — | — | — | — | — | — |
+
+> **Legal basis for the DPU/PK-1 carve-out for dvojno-knjigovodstvo clients:** Mišljenje Ministarstva finansija br. 011-00-761/2018-16 od 23.10.2018 — DPU is mandated by the prosto-knjigovodstvo pravilnik (Sl. glasnik RS 140/04), so privredna društva and preduzetnici on dvojno knjigovodstvo are not subject to it even when they run a hospitality business.
+
+**Paušalci are out of scope** for Saldora regardless (see Section 4.17). The row is included only to document why the obligation card collapses to empty for that classification.
+
+#### 4.19.2 — Client classification fields (FR-4.19.2)
+
+To drive the obligation matrix, the `clients` table grows two attributes:
+
+| Field | Type | Allowed values | Default | Notes |
+|---|---|---|---|---|
+| `legal_form` | string | `DOO` / `preduzetnik` / `paušalac` / `drugo` | NULL | NULL = unclassified; obligation card shows a "set legal form" prompt |
+| `bookkeeping_system` | string | `dvojno` / `prosto` / NULL | NULL | NULL = unclassified. For `DOO` the obligation matrix treats NULL as `dvojno` (implied by law); for `preduzetnik` NULL stays ambiguous and the obligation card asks the agency to set it |
+
+Both fields are agency-editable from the client edit modal. No backfill — existing clients land as NULL and the agency sets them at first review.
+
+#### 4.19.3 — Obligation matrix as a single source of truth (FR-4.19.3)
+
+The matrix lives in one place server-side as `app.services.hospitality_forms.required_forms(legal_form, bookkeeping_system) → dict[FormKey, FormStatus]`. Frontend never re-derives. The endpoint `GET /api/v1/clients/{id}/obligations` returns the matrix for one client, with per-form status (`shipped` / `pre-meeting` / `not_applicable` / `unclassified`). This is the data behind the "Obavezni obrasci" card on the per-client `Izveštaji` tab.
 
 #### Data foundation status (already in place)
 
@@ -2464,21 +2495,24 @@ The deliberate next layer of value, on top of the existing OCR + product catalog
 - **Denormalized `invoice_line_items`** table populated post-OCR and on edits (FR-4.13.1).
 - **Product catalog** with canonical names, aliases, categories, selling prices, default margins, and pg_trgm fuzzy matching of line-item descriptions (Section 4.15).
 - **Per-line-item product_id FK** linking each extracted item to its canonical catalog entry.
+- **Existing reports** `/api/v1/reports/kalkulacija` and `/api/v1/reports/dpu` (Section 4.13, shipped in M16): functional today but column structures are simplified — accountant validation needed to determine whether they're close enough to iterate or need to be redone to match the legally-prescribed 13-column kalkulacija and 9-column DPU layouts.
 
-#### Open questions (for the accountant meeting)
+#### Open questions (for the accountant meeting — agenda doc at [`M20_accountant_meeting_agenda.md`](./M20_accountant_meeting_agenda.md))
 
-1. The exact set of forms an agency is legally required to produce for a hospitality client, and how often.
-2. For each form: exact columns / fields / formulas required by law, and any audit-trail requirements.
-3. The source data for each form — purchase-side only or sales-side too?
-4. The monthly close workflow as accountants actually perform it, step by step.
-5. Whether fiscal-receipt integration is needed for KEP, and how the agency receives daily sales data today.
+1. **Does the obligation matrix above match working practice?** Specifically: does a DOO restaurant ever produce DPU voluntarily, and does a preduzetnik on prosto ever skip PK-1?
+2. **Kalkulacija column structure.** The legal form has 13 columns (redni broj, naziv robe, jedinica mere, nabavljena količina, nabavna cena po j.m., nabavna vrednost, zavisni troškovi, marža, prodajna vrednost bez PDV, stopa PDV, iznos PDV, prodajna vrednost sa PDV, prodajna cena po j.m.). Does the current `/api/v1/reports/kalkulacija` match closely enough to iterate, or does it need redoing?
+3. **Zavisni troškovi (column 7).** How often is it actually filled per invoice? First-class field vs rare manual override matters for UI shape.
+4. **Gotova jela vs nabavljena roba.** COBA-Systems suggests no kalkulacija is needed for prepared dishes, only for purchased materials and beverages (DPU handles prepared-dish flow). Is that universal practice or one reading?
+5. **Fiskalizacija data flow.** Post-fiskalizacija (May 2022), the fiscal-cash-register daily report feeds KEP razduženje. Does the agency receive this via SUF / eFiskalizacija export, or does the bookkeeper re-enter from the Z-report? Determines whether Saldora needs a fiscal-data ingestion path or just an upload widget.
+6. **Popis frequency.** Annual minimum is law; what does the agency actually do for hospitality clients — monthly, quarterly, year-end only? Determines recurring workflow vs one-shot.
+7. **Monthly close.** Step-by-step, what does an agency bookkeeper actually do at month-end for one hospitality client?
 
 #### Implementation plan once meeting output exists
 
-- Data-model additions (e.g., per-client product markup overrides, period entity).
-- Form generators (one Celery-friendly module per legal form).
-- New tabs / sections within the per-client `Izveštaji` tab.
-- PDF + Excel export templates (Excel at minimum; PDF likely also).
+- Concrete column-level specs for kalkulacija (legally prescribed 13 columns + PK-1 linkage for prosto clients), KEP (5 columns + zaduženje/razduženje data sources), DPU (9 columns + popis integration), cenovnik, popis.
+- Data-model additions: per-client product markup overrides, period entity (M21), bookkeeping_system extension to encode "always-dvojno" for DOO without storing duplicated state.
+- Form generators (one Celery-friendly module per legal form), feeding both the per-client `Izveštaji` tab and Excel/PDF exports.
+- Fiscal-receipt ingestion path if the meeting confirms it's needed (otherwise a Z-report upload widget).
 
 #### M21 — Close Checklist & Period Semantics (further deferred)
 
@@ -2796,7 +2830,7 @@ CREATE TABLE organizations (
     slug VARCHAR(100) UNIQUE NOT NULL,
     billing_email VARCHAR(255),
     plan_id UUID REFERENCES plans(id),
-    payment_provider_customer_id VARCHAR(255),  -- Paddle customer ID
+    payment_provider_customer_id VARCHAR(255),  -- Reserved for future automated billing; unused today (billing is manual)
     subscription_status VARCHAR(50),            -- pending|trial|active|canceled|expired|NULL
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -3890,7 +3924,7 @@ The system MUST track LLM cost savings from template usage:
 |------------|--------------|
 | ZZPL (primary) | Full compliance with Zakon o zaštiti podataka o ličnosti (Sl. glasnik RS, br. 87/2018). Data processing agreements, data protection officer, privacy policy. ZZPL is the primary regulatory framework for data protection in the Republic of Serbia. |
 | GDPR (reference) | Alignment with GDPR principles as a reference standard for best practices |
-| PCI DSS | Not storing payment data (Paddle handles as Merchant of Record) |
+| PCI DSS | Not storing any payment data — Saldora doesn't process cards directly. Billing is by bank transfer, recorded out-of-band, and reflected in the DB only as plan / subscription_status flips. |
 
 ### 10.6 Legal & Compliance Flows
 
@@ -4272,7 +4306,7 @@ Compose file: `infra/docker/docker-compose.prod.yml` (env from `infra/docker/.en
                                                     alembic upgrade head
 ```
 
-Production deploys are issued by SSH'ing into the Hetzner VPS, pulling `main`, and rebuilding the affected service via the production compose file (see `docs/DEPLOYMENT.md`). There is no Kubernetes manifest set; staging is a separate VPS or a feature branch run locally.
+Production deploys are issued by SSH'ing into the Hetzner VPS, pulling `main`, and rebuilding the affected service via the production compose file (see `docs/dev/DEPLOYMENT.md`). There is no Kubernetes manifest set; staging is a separate VPS or a feature branch run locally.
 
 ### 11.6 Monitoring & Logging
 
@@ -4301,19 +4335,18 @@ Logging is currently container-stdout based (read via `docker logs`). Error trac
 - Cache responses for 24 hours
 - Background refresh for frequently accessed PIBs
 
-### 12.2 Payment Integration (Paddle)
+### 12.2 Billing Integration (manual today)
 
-**Why Paddle:** Paddle operates as a Merchant of Record (MoR), meaning Paddle manages all payment transactions, VAT obligations, and tax compliance globally on behalf of Saldora. This is critical for the Serbian market because:
-- Paddle assumes responsibility for calculating and collecting VAT in all jurisdictions
-- No need for Saldora to register for VAT in individual countries
-- Simplified financial reporting - one payout from Paddle instead of thousands of individual transactions
+**Current model.** Saldora bills manually. The agency receives an invoice from us (email PDF), pays by bank transfer, and `scripts/admin_orgs.py` flips their `Organization.subscription_status` to `active` (or `trial` on first month) and extends the subscription period by however much they paid for. There is no third-party payment processor integrated. The full architectural reasoning lives in [`../dev/architecture.md`](../dev/architecture.md) §3.3.
 
-**Features Used:**
-- Paddle Checkout for subscriptions
-- Paddle Billing for subscription and billing management
-- Webhooks for subscription events
+**What this means for the spec:**
+- No card-on-file flow, no checkout overlay, no payment webhook handler.
+- No PSP-side VAT-handling concerns. Saldora's own PDV obligations on customer payments are accounted for out-of-band.
+- The `payment_provider_*` columns on `organizations` exist for future use but are unused today.
+- The `apps/api/app/routers/billing.py` router serves read-only "your plan / your usage" views; the actual activation / extension is operator-driven via `scripts/admin_orgs.py`.
 
-**Webhook Events:**
+**Future automated billing rail.** If and when a Serbia-compatible billing provider is adopted, the integration boundary is `Organization.subscription_status`, `Organization.plan`, and `Organization.subscription_canceled_at`. Webhook events the integration would need to handle (deferred):
+
 - `subscription.created`
 - `subscription.updated`
 - `subscription.canceled`
@@ -4330,7 +4363,7 @@ Logging is currently container-stdout based (read via `docker logs`). Error trac
 - New-registration admin notification (to `ADMIN_EMAIL`)
 - Approval notification (when an admin flips an org from `pending` to `active`/`trial`)
 - Monthly archive delivery (FR-4.7.5)
-- Subscription notifications via Paddle (forwarded as needed)
+- (Future) subscription notifications from an automated billing rail, when adopted
 
 ### 12.4 Storage (Cloudflare R2)
 
@@ -4717,7 +4750,6 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 
 **Integration Tests:**
 - APR API integration
-- Paddle webhook handling
 - Email delivery
 - File storage operations
 
@@ -4807,7 +4839,6 @@ Serbian language uses two scripts — Cyrillic and Latin. The system MUST fully 
 9. Anthropic Claude API Documentation — https://docs.anthropic.com
 10. FastAPI Documentation
 11. Next.js Documentation
-12. Paddle Documentation (Payment Processing)
 
 ---
 

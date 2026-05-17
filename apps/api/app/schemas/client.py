@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+# Allowed values for the hospitality-classification fields. Mirrors the
+# obligation-matrix consumer in app.services.hospitality_forms. Keep in
+# sync with the SRS §4.19.2 table.
+LegalForm = Literal["DOO", "preduzetnik", "paušalac", "drugo"]
+BookkeepingSystem = Literal["dvojno", "prosto"]
 
 
 class ClientCreate(BaseModel):
@@ -20,6 +27,8 @@ class ClientCreate(BaseModel):
         postal_code: Postal code.
         contact_email: Primary contact email.
         contact_phone: Primary contact phone.
+        legal_form: Client's legal form (drives obligation matrix; SRS §4.19.2).
+        bookkeeping_system: Client's bookkeeping system (drives obligation matrix).
         notes: Free-text notes about the client.
     """
 
@@ -31,6 +40,8 @@ class ClientCreate(BaseModel):
     postal_code: str | None = Field(default=None, max_length=20)
     contact_email: str | None = Field(default=None, max_length=255)
     contact_phone: str | None = Field(default=None, max_length=50)
+    legal_form: LegalForm | None = None
+    bookkeeping_system: BookkeepingSystem | None = None
     notes: str | None = None
 
 
@@ -46,6 +57,8 @@ class ClientUpdate(BaseModel):
         postal_code: Postal code.
         contact_email: Primary contact email.
         contact_phone: Primary contact phone.
+        legal_form: Client's legal form (drives obligation matrix; SRS §4.19.2).
+        bookkeeping_system: Client's bookkeeping system (drives obligation matrix).
         is_active: Active status.
         notes: Free-text notes.
     """
@@ -58,6 +71,8 @@ class ClientUpdate(BaseModel):
     postal_code: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
+    legal_form: LegalForm | None = None
+    bookkeeping_system: BookkeepingSystem | None = None
     is_active: bool | None = None
     notes: str | None = None
 
@@ -110,6 +125,8 @@ class ClientResponse(BaseModel):
     postal_code: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
+    legal_form: str | None = None
+    bookkeeping_system: str | None = None
     is_active: bool
     notes: str | None = None
     invoice_count: int = Field(default=0)
@@ -137,3 +154,23 @@ class ClientListResponse(BaseModel):
             "total_pages": 0,
         }
     )
+
+
+class ClientObligationsResponse(BaseModel):
+    """Obligation matrix for one hospitality client.
+
+    Drives the "Obavezni obrasci" card in the per-client Izveštaji tab.
+    Backed by `app.services.hospitality_forms.required_forms`. See
+    SRS §4.19 for the legal basis.
+
+    Args:
+        legal_form: The client's classification at the time of the call
+            (echoed so the frontend can label the card).
+        bookkeeping_system: Same.
+        forms: Form key → status. Status values are documented in
+            `hospitality_forms.FormStatus`.
+    """
+
+    legal_form: str | None
+    bookkeeping_system: str | None
+    forms: dict[str, str]

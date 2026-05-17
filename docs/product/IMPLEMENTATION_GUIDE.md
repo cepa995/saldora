@@ -6,10 +6,10 @@
 
 ---
 
-> **⚠️ This document captures the original M1-M16 milestone breakdown.** It is preserved for traceability against the SRS.
+> **⚠️ This document captures the original M1-M16 milestone breakdown and extends it with the post-pivot milestones (M17 onward).** It is the canonical forward-planning surface.
 >
-> - For the **current active roadmap (M19 onward)** and post-pivot decisions see [`saldora-implementation-plan.md`](./saldora-implementation-plan.md).
-> - For the **strategic shift toward hospitality agencies** (the thesis driving M19+) see [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md).
+> - For the **strategic thesis** (why hospitality, why paper) see [`SRS.md`](./SRS.md) §1.
+> - For the **architectural rationale** behind the M19 client-first UI and M20 hospitality forms layer see [`../dev/architecture.md`](../dev/architecture.md).
 > - **M14 (Paušal Module), M16 (Client Portal in the GH tracker), and M18 (Compliance Watchdog) are dropped.** See the "Post-pivot milestones" section near the end for status of every milestone numbered above 13.
 
 ---
@@ -18,7 +18,7 @@
 
 This guide breaks the original Saldora SRS into **13 milestones** with concrete issues for each. Milestones are ordered by dependency — each builds on the previous. Issues within a milestone can often be parallelized.
 
-After M13 the project pivoted toward Serbian hospitality accounting agencies; M14+ live in [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) and are summarised at the bottom of this file.
+After M13 the project pivoted toward Serbian hospitality accounting agencies; M14+ are documented in the "Post-pivot milestones" section at the bottom of this file.
 
 > **Note:** Line items and tax groups are stored as JSON within the invoice record (not separate relational tables) for schema flexibility during the OCR extraction phase. Seller/buyer data is also stored as inline JSON rather than FK references to a companies table. This is an intentional design decision — invoices from different formats have varying structures, and JSON columns accommodate this without schema migrations.
 
@@ -37,7 +37,7 @@ M1: Foundation & Authentication                                 [DONE]
  │           │     │
  │           │     └──► M6: Data Export                         [DONE]
  │           │
- │           └──► M7: External Integrations (NBS, Paddle, …)    [DONE]
+ │           └──► M7: External Integrations (NBS, Resend, …)   [DONE — Paddle deferred]
  │
  ├──► M8: Frontend Application                                  [DONE]
  │
@@ -55,7 +55,7 @@ M1: Foundation & Authentication                                 [DONE]
                   (extends M13 with product catalog + procurement reports)
 ```
 
-After M16 the project pivoted toward Serbian hospitality accounting agencies. See "Post-pivot milestones" below and [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) for the active M19+ work.
+After M16 the project pivoted toward Serbian hospitality accounting agencies. See "Post-pivot milestones" below for the active M19+ work.
 
 ### Requirement Coverage
 
@@ -764,7 +764,7 @@ This milestone is complete. It established the database module, core models (Use
 
 ## Milestone 7: External Integrations
 
-**Goal:** Integrate with SEF (eFaktura) for electronic invoice sync, NBS for exchange rates, Paddle for billing, and an email service for transactional emails.
+**Goal:** Integrate with NBS for exchange rates, an email service for transactional emails, and lay groundwork for future billing/SEF integrations. (SEF and automated billing are deferred — see post-pivot milestones.)
 
 ### Issues
 
@@ -841,9 +841,11 @@ This milestone is complete. It established the database module, core models (Use
 
 ---
 
-#### 7.4 — Implement Paddle billing integration
+#### 7.4 — Implement Paddle billing integration (deferred)
 
-**Description:** Integrate Paddle as Merchant of Record for subscription management and payment processing.
+> **Status:** Scoped here for historical traceability. Not built. The current billing model is manual: agencies pay by bank transfer and Saldora admin activates / extends them via `scripts/admin_orgs.py`. See [`../dev/architecture.md`](../dev/architecture.md) §3.3 for the reasoning. The data model columns referenced below (`payment_provider_*`) exist but are unused.
+
+**Original description:** Integrate Paddle as Merchant of Record for subscription management and payment processing.
 
 **Requirements covered:** Section 10.2
 
@@ -885,7 +887,7 @@ This milestone is complete. It established the database module, core models (Use
 
 #### 7.6 — Write tests for external integrations
 
-**Description:** Tests for SEF, NBS, Paddle, and email integrations with mocked external APIs.
+**Description:** Tests for NBS and email integrations with mocked external APIs. (SEF and Paddle are deferred and not currently tested.)
 
 **Tasks:**
 - Test SEF inbound sync with mocked SEF API responses
@@ -1092,12 +1094,12 @@ This milestone is complete. It established the database module, core models (Use
 - Create billing page at `/billing`:
   - Current plan display with feature list
   - Plan comparison and upgrade/downgrade (Starter, Professional, Enterprise)
-  - Paddle Checkout integration for plan changes
+  - (Deferred) Paddle Checkout integration for plan changes — replaced today by a "contact us" CTA + manual extension via `scripts/admin_orgs.py`
   - Usage dashboard: invoices processed, API calls, storage used
-  - Billing history (Paddle transaction history)
+  - (Deferred) Billing history — currently the agency keeps its own bank-transfer records out-of-band
 - Usage alerts shown as banners at 80%, 90%, 100% of limits
 
-**Acceptance:** User sees current plan and usage. Upgrade redirects to Paddle Checkout. Transaction history loads.
+**Acceptance:** User sees current plan and usage. Upgrade triggers a contact-us CTA (Paddle Checkout deferred). Transaction history view deferred along with it.
 
 ---
 
@@ -1731,9 +1733,9 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
   - Client CRUD tests: create, read, update, soft-delete, PIB uniqueness enforcement
   - Auto-assignment tests: buyer PIB match, no match, multiple match scenarios
   - Organization isolation tests: clients from org A not visible to org B
-- Update `docs/SRS.md` with Section 4.10 (Client Management for Agencies)
-- Update `docs/IMPLEMENTATION_GUIDE.md` (this document) with Milestone 12
-- Update `docs/APPLICATION_WORKFLOW.md` with client context flow
+- Update `docs/product/SRS.md` with Section 4.10 (Client Management for Agencies)
+- Update `docs/product/IMPLEMENTATION_GUIDE.md` (this document) with Milestone 12
+- Update `docs/user-experience/workflows.md` with client context flow
 
 **Acceptance:** All tests pass. Feature gate, CRUD, auto-assignment, and isolation are fully covered. Documentation reflects the new client management capability.
 
@@ -1933,7 +1935,7 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 | **M4: Invoice Management & Verification** | DONE | 4.1–4.7 | Full CRUD, APR PIB verification, math checks, correction logging, audit trail |
 | **M5: Accounting Intelligence & Rules** | DONE | 5.1–5.4 | AccountingIntent, VAT treatment, konta, PDV books, automation rules engine |
 | **M6: Data Export** | DONE | 6.1–6.5 | XLSX/CSV/JSON export, custom templates, audit export |
-| **M7: External Integrations** | DONE | 7.1–7.8 | NBS exchange rates, Paddle billing skeleton, Resend email, webhooks, usage tracking |
+| **M7: External Integrations** | DONE | 7.1–7.8 | NBS exchange rates, Resend email, webhook scaffold, usage tracking. **Paddle billing deferred** — billing is manual via `scripts/admin_orgs.py`. |
 | **M8: Frontend Application** | DONE | 8.1–8.11 | Dashboard, upload, invoice list, review, settings, billing, i18n, responsive, landing page |
 | **M9: CI/CD & Production** | MOSTLY DONE | 9.1–9.10 | CI pipeline, security, monitoring, ZZPL compliance, API keys, data retention. K8s deferred — running on Hetzner via Caddy + Cloudflare |
 | **M10: Multi-Country Tax ID** | PARTIAL | 10.1–10.4 | Serbian PIB validation in production; multi-country (OIB/JIB/EU VAT) deferred until cross-border becomes a real customer ask |
@@ -1944,13 +1946,13 @@ Most accounting agencies work with 50-100 recurring suppliers. After an initial 
 
 **Total documented above: 80 issues across 14 milestones.**
 
-> **Note:** SEF (eFaktura) and the standalone PDV-book module that featured prominently in earlier drafts are no longer load-bearing. SEF is deprioritised because it lacks webhooks (polling-only) and because the wedge moved to paper invoices the agency receives outside SEF. The PDV-book generators were superseded by the more flexible report library introduced in M13. See [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md) for the rationale.
+> **Note:** SEF (eFaktura) and the standalone PDV-book module that featured prominently in earlier drafts are no longer load-bearing. SEF is deprioritised because it lacks webhooks (polling-only) and because the wedge moved to paper invoices the agency receives outside SEF. The PDV-book generators were superseded by the more flexible report library introduced in M13. See [`SRS.md`](./SRS.md) §1 and §4.17 for the rationale.
 
 ---
 
 ## Post-pivot milestones (M14 onward)
 
-Numbering is the GitHub-tracker numbering, which doesn't always line up with the SRS numbering. These are not specced in detail here — see [`saldora-implementation-plan.md`](./saldora-implementation-plan.md) for the active roadmap.
+Numbering is the GitHub-tracker numbering, which doesn't always line up with the SRS numbering. These are summarised below; for the M20 pre-meeting strawman see [`M20_accountant_meeting_agenda.md`](./M20_accountant_meeting_agenda.md).
 
 | Milestone | Status | Summary |
 |-----------|--------|---------|
@@ -1962,7 +1964,7 @@ Numbering is the GitHub-tracker numbering, which doesn't always line up with the
 | **M16 (tracker): Client Portal** | DROPPED | End clients are not the buyer; agency remains the sole user class. |
 | **M18: Compliance Watchdog** | DROPPED | Scheduled rule evaluation producing alerts. Paušal-era thinking; doesn't serve hospitality. The rules engine still fires on events. |
 | **M19: Client-First UI** | ACTIVE | Reorganise the app around the client axis: portfolio view, per-client workspace at `/klijenti/{id}` with Hronologija/Fakture/Izveštaji/Pravila tabs, `client_events` event log, sidebar restructure. M19.1–M19.9 shipped in PR #210; M19.10 (E2E + cleanup), M19.11 (tests), and #211 (responsive sweep) in flight. |
-| **M19 follow-on: Manual approval gate** | DONE | New registrations land in `subscription_status="pending"`; `require_role` 403s with `subscription_pending_approval` until an admin flips the status. `scripts/admin_orgs.py` interactive CLI for staging/production. Required because Saldora doesn't accept cards (Paddle infra exists but customers pay manually for now). |
+| **M19 follow-on: Manual approval gate** | DONE | New registrations land in `subscription_status="pending"`; `require_role` 403s with `subscription_pending_approval` until an admin flips the status. `scripts/admin_orgs.py` interactive CLI for staging/production. This is the canonical billing/activation path today — agencies pay by bank transfer; we extend their subscription period via the script. See [`../dev/architecture.md`](../dev/architecture.md) §3.3. |
 | **M20: Hospitality Legal Forms** | DEFERRED | Kalkulacije, šank lista, cenovnik, KEP, popis. Specs to be drafted from a real accountant meeting, not from reading the law. |
 | **M21: Close Checklist & Period Semantics** | DEFERRED | Period entity with close/lock semantics, monthly checklist. Depends on M20 output. |
 
@@ -1977,7 +1979,7 @@ Numbering is the GitHub-tracker numbering, which doesn't always line up with the
 
 ## Sequencing principles (post-pivot)
 
-From [`saldora-implementation-plan.md`](./saldora-implementation-plan.md):
+Carried forward from the post-pivot direction:
 
 1. **Client-first UI first.** The structural reorganisation is additive under any version of the forms story and unblocks every future client-scoped feature.
 2. **No forms work before the accountant meeting.** The cost of building the wrong columns/formulas is higher than the cost of waiting.
@@ -1988,7 +1990,7 @@ From [`saldora-implementation-plan.md`](./saldora-implementation-plan.md):
 
 - **M2 and M8** can partially overlap — frontend upload UI (8.2) can start once upload endpoints exist
 - **M5 and M6** are independent of each other after M4 completes
-- **M7** sub-issues are largely independent: SEF, NBS, Paddle, email, and webhooks can be built in parallel
+- **M7** sub-issues are largely independent: SEF (deferred), NBS, Paddle (deferred), email, and webhooks can be built in parallel
 - **M8** frontend issues can proceed incrementally as backend milestones deliver APIs
 - **M9.1** (CI pipeline) should start early (after M1) and evolve with each milestone
 - **M8.8** (i18n) can start any time and be applied incrementally to new pages

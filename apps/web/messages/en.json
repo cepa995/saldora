@@ -942,6 +942,23 @@
     "clientPlural": "clients",
     "addClient": "Add client",
     "addClientShort": "Add",
+    "classificationTitle": "Classification (hospitality client)",
+    "classificationHint": "Drives the required-forms matrix",
+    "legalForm": "Legal form",
+    "bookkeepingSystem": "Bookkeeping system",
+    "unsetOption": "— not set —",
+    "legalFormOption": {
+      "DOO": "DOO (LLC)",
+      "preduzetnik": "Sole proprietor",
+      "paušalac": "Flat-rate entrepreneur",
+      "drugo": "Other"
+    },
+    "bookkeepingOption": {
+      "dvojno": "Double-entry",
+      "prosto": "Simple"
+    },
+    "dooImpliesDvojno": "DOOs are required by law to use double-entry.",
+    "pausalacOutOfScope": "Flat-rate entrepreneurs are out of Saldora's scope.",
     "createClient": "Create client",
     "editClient": "Edit client",
     "searchPlaceholder": "Search by name or PIB...",
@@ -1182,5 +1199,45 @@
     "checking": "Checking…",
     "stillPending": "Your account is still awaiting approval. Try again in a few minutes.",
     "logout": "Log out"
+  },
+  "obligations": {
+    "title": "Required forms",
+    "summaryLine": "{owed} required · {ready} available · {postMeeting} post-meeting",
+    "subtitle": "Derived from the client's legal form and bookkeeping system. Forms that don't apply to this client are hidden.",
+    "unclassifiedPrompt": "Classify this client (Legal form + Bookkeeping system) to see which forms are legally required.",
+    "open": "Open",
+    "status": {
+      "shipped": "Available",
+      "pre_meeting": "Available (pre-meeting)",
+      "post_meeting": "Post-meeting",
+      "not_applicable": "Not required",
+      "unclassified": "Unknown"
+    },
+    "form": {
+      "kalkulacija": {
+        "name": "Kalkulacija — sale price calculation",
+        "description": "13 columns: cost → markup → VAT → sale price (Pravilnik 140/04)."
+      },
+      "kep": {
+        "name": "KEP — trade evidence book",
+        "description": "5 columns: zaduženje + razduženje per retail location (Pravilnik 99/2015)."
+      },
+      "cenovnik": {
+        "name": "Cenovnik (price list)",
+        "description": "Current public-facing price list / menu."
+      },
+      "popis": {
+        "name": "Popis (inventory count)",
+        "description": "Annual minimum + ad-hoc; discrepancies flow into KEP as višak/manjak."
+      },
+      "dpu": {
+        "name": "DPU — daily hospitality turnover (šank lista)",
+        "description": "9 columns: daily inventory + sales. Required only for prosto knjigovodstvo (Mišljenje MF 011-00-761/2018-16)."
+      },
+      "pk1": {
+        "name": "PK-1 — main ledger",
+        "description": "Master ledger for prosto knjigovodstvo; kalkulacija feeds columns 12/14/15/16."
+      }
+    }
   }
 }

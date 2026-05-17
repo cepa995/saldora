@@ -4,7 +4,7 @@ A practical, hands-on guide to working with the Saldora codebase as it actually 
 
 Saldora (formerly faktura-ai) is an **intelligence layer for Serbian accounting agencies whose clients are hospitality businesses** — restaurants, cafes, bars, fast food. The wedge is OCR on paper invoices with many line items plus generation of legally-required Serbian hospitality forms (kalkulacije, šank lista, KEP, popis). Saldora is the pipeline; MiniMax stays the general ledger.
 
-This guide is for developers contributing to the codebase. For product strategy read [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md). For production operations read [`DEPLOYMENT.md`](./DEPLOYMENT.md). For the formal requirements read [`SRS.md`](./SRS.md). For conventions specifically aimed at Claude / AI assistants read [`/CLAUDE.md`](../CLAUDE.md).
+This guide is for developers contributing to the codebase. For architectural decisions and trade-offs read [`architecture.md`](./architecture.md). For production operations read [`DEPLOYMENT.md`](./DEPLOYMENT.md). For the formal requirements (and the hospitality thesis in §1) read [`../product/SRS.md`](../product/SRS.md). For the milestone roadmap read [`../product/IMPLEMENTATION_GUIDE.md`](../product/IMPLEMENTATION_GUIDE.md). For conventions specifically aimed at Claude / AI assistants read [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
 
@@ -110,15 +110,20 @@ Note: PostgreSQL is exposed on **5433**, not 5432, to avoid conflicts with a loc
 
 | Doc                                    | What it covers                                               |
 | -------------------------------------- | ------------------------------------------------------------ |
-| `docs/SRS.md`                          | Formal Software Requirements Specification (English, ~3.9k lines) |
-| `docs/SRS_sr.md`                       | SRS in Serbian                                               |
-| `docs/saldora-strategy-and-ux-redesign.md` | Current product thesis (hospitality wedge, client-first UI) |
-| `docs/saldora-implementation-plan.md`  | Active milestones, dropped milestones                        |
-| `docs/DEVELOPER_GUIDE.md`              | This file                                                    |
-| `docs/DEPLOYMENT.md`                   | Production architecture and ops runbook                      |
+| `docs/product/SRS.md`                  | Formal Software Requirements Specification (English, ~4.8k lines). §1 carries the hospitality thesis; §4.17 lists dropped features. |
+| `docs/product/SRS_sr.md`               | SRS in Serbian Latin                                         |
+| `docs/product/SRS_sr_simple.md`        | Business-friendly Serbian version                            |
+| `docs/product/IMPLEMENTATION_GUIDE.md` | Milestone breakdown (M1 → M21), post-pivot table             |
+| `docs/product/M20_accountant_meeting_agenda.md` | Pre-meeting strawman for the hospitality forms work |
+| `docs/dev/DEVELOPER_GUIDE.md`          | This file                                                    |
+| `docs/dev/DEPLOYMENT.md`               | Production architecture and ops runbook                      |
+| `docs/dev/architecture.md`             | Architectural decisions and trade-offs                       |
+| `docs/dev/AUTOMATION_RULES.md`         | Rules engine reference                                       |
+| `docs/dev/ML_PROJECT_ARCHITECTURE_GUIDE.md` | ML pipeline architecture                                |
+| `docs/user-experience/workflows.md`    | Click-by-click reference of every supported workflow         |
 | `CLAUDE.md`                            | Conventions specifically for Claude / AI assistants          |
 
-If you only have time to read three: this guide, the strategy doc, and CLAUDE.md.
+If you only have time to read three: this guide, `architecture.md`, and CLAUDE.md.
 
 ---
 
@@ -351,17 +356,15 @@ Email templates and senders live in `apps/api/app/services/email.py`. Currently 
 | `ANTHROPIC_MODEL`      | `claude-haiku-4-5-20251001`     | Used for structured field extraction              |
 | `LLM_EXTRACTION_ENABLED` | `true` (worker)               | Set to `false` to disable LLM and rely on regex   |
 
-### Paddle (payments — Stripe is unavailable in Serbia)
+### Billing
 
-| Variable                                | Default      | Description                            |
-| --------------------------------------- | ------------ | -------------------------------------- |
-| `PADDLE_API_KEY`                        | `""`         |                                        |
-| `PADDLE_CLIENT_SIDE_TOKEN`              | `""`         | Used by the Paddle.js checkout overlay |
-| `PADDLE_WEBHOOK_SECRET`                 | `""`         | Verifies inbound webhooks              |
-| `PADDLE_ENVIRONMENT`                    | `sandbox`    | `sandbox` or `production`              |
-| `PADDLE_PRICE_ID_STARTER_MONTHLY` etc.  | `""`         | One per (tier, billing-period) pair    |
+Saldora currently bills **manually**: agencies receive an invoice from us out-of-band (email PDF), pay by bank transfer, and `scripts/admin_orgs.py` flips their `Organization.subscription_status` to `active` (or `trial` on first month) and extends the subscription period. There is no third-party payment processor integration today.
 
-> **Do not add Stripe.** Stripe is not available to Serbian businesses. Paddle is the Merchant of Record and handles the VAT remittance.
+- No env vars needed for billing — there's nothing to authenticate.
+- The `apps/api/app/routers/billing.py` router serves read-only "your plan / your usage" views to the agency.
+- A future automated billing rail (whatever it turns out to be — see `architecture.md` §3.3) will write to `Organization.subscription_status`, `plan`, and `subscription_canceled_at`. Stripe remains unavailable for Serbian merchants; Paddle was scoped earlier but not adopted.
+
+> **Do not add Stripe.** Stripe is not available to Serbian businesses. Any automated-billing work has to start from a Serbia-friendly rail.
 
 ### NBS exchange rates
 
@@ -486,13 +489,13 @@ Sentry is initialized only when `SENTRY_DSN` is set. Swagger / ReDoc are served 
 | `/api/v1/api-keys`              | `api_keys.py`         | `sk_live_*` API keys for programmatic access               |
 | `/api/v1/invoices`              | `invoices.py`         | Upload, batch upload, CRUD, status, verify                 |
 | `/api/v1/export`                | `export.py`           | XLSX, CSV, JSON, MiniMax XML, audit ZIP                    |
-| `/api/v1/webhooks`              | `webhooks.py`         | Paddle billing webhooks                                    |
+| `/api/v1/webhooks`              | `webhooks.py`         | Reserved for future billing webhooks (not wired up today)  |
 | `/api/v1/audit-logs`            | `audit_logs.py`       | Audit log queries                                          |
 | `/api/v1/analytics`             | `analytics.py`        | Dashboard analytics                                        |
 | `/api/v1/rules`                 | `rules.py`            | AutomationRule CRUD + per-client associations              |
 | `/api/v1/clients`               | `clients.py`          | Client CRUD + `/clients/{id}/events` (timeline)            |
 | `/api/v1/portfolio`             | `portfolio.py`        | Portfolio view (agency-wide health grid)                   |
-| `/api/v1/billing`               | `billing.py`          | Paddle subscription management                             |
+| `/api/v1/billing`               | `billing.py`          | Read-only "your plan / usage" views (billing itself is manual — see Env Vars → Billing) |
 | `/api/v1/organizations`         | `organizations.py`    | Org settings                                               |
 | `/api/v1/users`                 | `users.py`            | Current user profile                                       |
 | `/api/v1/team`                  | `team.py`             | Team members within an org                                 |
@@ -697,7 +700,7 @@ Event types currently emitted:
 
 Future event types arrive as new capabilities ship: `form_generated`, `period_closed`, etc. The schema is stable; new types are just new rows.
 
-For more on the philosophy of the redesign, see [`saldora-strategy-and-ux-redesign.md`](./saldora-strategy-and-ux-redesign.md).
+For more on the philosophy of the redesign, see [`../product/SRS.md`](../product/SRS.md) §1 (current thesis) and §4.18 (the client-first UI requirement).
 
 ---
 
@@ -709,7 +712,7 @@ For more on the philosophy of the redesign, see [`saldora-strategy-and-ux-redesi
 
 | Model                      | File                          | Notes                                                                 |
 | -------------------------- | ----------------------------- | --------------------------------------------------------------------- |
-| `Organization`             | `organization.py`             | Tenant. Holds `plan`, `subscription_status`, `paddle_customer_id`.   |
+| `Organization`             | `organization.py`             | Tenant. Holds `plan`, `subscription_status`, `subscription_canceled_at`. (`payment_provider_*` columns exist but are unused — billing is manual today; see `architecture.md` §3.3.) |
 | `User`                     | `user.py`                     | Belongs to one org. Role: admin/manager/operator/viewer.              |
 | `Invitation`               | `invitation.py`               | Pending org invitations.                                              |
 | `JoinRequest`              | `join_request.py`             | Self-service request to join an existing org.                         |
@@ -1139,7 +1142,7 @@ cd workers/ocr_worker && pytest
 
 - `pytest_asyncio` with `asyncio_mode = "auto"`. **Do not** add `@pytest.mark.asyncio`.
 - Use the `client` fixture (httpx `AsyncClient` against the in-process app).
-- Mock external services (S3, Celery, Anthropic, Resend, Paddle, Modal). Tests never hit real infra.
+- Mock external services (S3, Celery, Anthropic, Resend, Modal). Tests never hit real infra.
 - Use `monkeypatch` or `unittest.mock.patch` for env vars. Don't mutate `os.environ` directly.
 - Per CLAUDE.md: **run the relevant tests every time you modify a feature**, especially billing, auth, export, or verification. Pre-commit runs ruff + tests.
 
@@ -1190,7 +1193,7 @@ pytest tests/ -x -k verification
 - **Storage functions are sync** (boto3); call them from async code with `asyncio.to_thread()`.
 - **Celery tasks dispatched via `send_task()`** — keeps heavy ML deps out of the API image.
 - **ZZPL** is the primary data protection law (Serbia), not GDPR. GDPR is a reference framework only.
-- **Paddle** for payments. Stripe is unavailable in Serbia.
+- **Manual billing.** Agencies pay by bank transfer; admin activates / extends via `scripts/admin_orgs.py`. No third-party payment processor integrated (Stripe is unavailable in Serbia). See `architecture.md` §3.3.
 - **No model training/retraining** — pre-trained dots.ocr only.
 - **APR API** requires a commercial contract or licensed intermediary. We don't currently call it; PIB validation is local-only.
 
@@ -1527,8 +1530,9 @@ Saldora has been through one significant repositioning. Knowing what's *not* in 
 | Edit the AuthContext / role routing          | `apps/web/src/contexts/AuthContext.tsx`                           |
 | Edit Docker services for dev                 | `infra/docker/docker-compose.yml`                                 |
 | Edit Docker services for prod                | `infra/docker/docker-compose.prod.yml`                            |
-| Run prod ops                                 | `docs/DEPLOYMENT.md`                                              |
-| Read product strategy                         | `docs/saldora-strategy-and-ux-redesign.md`                        |
-| Read milestone state                         | `docs/saldora-implementation-plan.md`                             |
-| Read formal requirements                     | `docs/SRS.md` / `docs/SRS_sr.md`                                  |
+| Run prod ops                                 | `docs/dev/DEPLOYMENT.md`                                          |
+| Read product strategy                         | `docs/product/SRS.md` §1 (current thesis)                         |
+| Read milestone state                         | `docs/product/IMPLEMENTATION_GUIDE.md`                            |
+| Read formal requirements                     | `docs/product/SRS.md` / `docs/product/SRS_sr.md`                  |
+| Read architectural decisions                  | `docs/dev/architecture.md`                                        |
 | Read AI-assistant conventions                 | `CLAUDE.md`                                                       |

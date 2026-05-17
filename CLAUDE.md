@@ -52,11 +52,21 @@ We work issue-by-issue from GitHub milestones. For each issue:
 - **Storage functions are sync** (boto3) — use `asyncio.to_thread()` from async context
 - **Celery tasks dispatched via `send_task()`** — avoids importing heavy ML worker deps into the API
 - **ZZPL** is the primary data protection law (Serbia), not GDPR
-- **Paddle** for payments (not Stripe — Stripe unavailable in Serbia)
+- **Manual billing** — customers receive an invoice from Saldora and pay by bank transfer; admin activates / extends the org via `scripts/admin_orgs.py`. No third-party payment processor is integrated today (Stripe is unavailable in Serbia; Paddle was scoped earlier but not adopted). See `docs/dev/architecture.md` §3.3.
 
 ## Reference Documents
 
-- `docs/SRS.md` — Software Requirements Specification (English)
-- `docs/SRS_sr.md` — SRS (Serbian)
-- `docs/IMPLEMENTATION_GUIDE.md` — Milestone-based implementation plan with issue breakdown
-- `docs/DEVELOPER_GUIDE.md` — Setup, architecture, and conventions
+All docs live under `docs/` in three subdirectories:
+
+- `docs/product/` — what we're building and why
+  - `SRS.md` / `SRS_sr.md` / `SRS_sr_simple.md` — Software Requirements Specification (EN / Serbian Latin / business-friendly Serbian)
+  - `IMPLEMENTATION_GUIDE.md` — Milestone breakdown with issue references
+  - `M20_accountant_meeting_agenda.md` — Pre-meeting strawman for hospitality forms (delete after meeting)
+- `docs/dev/` — for developers
+  - `DEVELOPER_GUIDE.md` — Setup, codebase tour, conventions
+  - `DEPLOYMENT.md` — Production ops on Hetzner + Caddy + Cloudflare + Modal
+  - `architecture.md` — Architectural decisions and trade-offs (why-we-built-it-this-way)
+  - `AUTOMATION_RULES.md` — Rules engine reference
+  - `ML_PROJECT_ARCHITECTURE_GUIDE.md` — ML pipeline architecture
+- `docs/user-experience/` — for the agency staff using the app
+  - `workflows.md` — Click-by-click reference of every supported workflow

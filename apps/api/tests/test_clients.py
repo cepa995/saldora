@@ -640,3 +640,233 @@ async def test_reactivate_soft_deleted_client(client: AsyncClient, test_engine):
     )
     assert reactivate_resp.status_code == 200
     assert reactivate_resp.json()["is_active"] is True
+
+
+# ---------------------------------------------------------------------------
+# Retroactive client assignment (created client → already-uploaded invoices)
+# ---------------------------------------------------------------------------
+
+
+async def _insert_invoice_with_parties(
+    test_engine,
+    org_id: str,
+    *,
+    seller_pib: str | None,
+    buyer_pib: str | None,
+) -> str:
+    """Insert a minimal invoice with optional seller/buyer JSON payloads.
+
+    Returns the new invoice's id. Used by the retroactive-assignment
+    tests to set up rows that the worker normally would have produced.
+    """
+    import json
+
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    inv_id = str(uuid4())
+    seller_json = json.dumps({"pib": seller_pib, "name": "Seller Co"}) if seller_pib else None
+    buyer_json = json.dumps({"pib": buyer_pib, "name": "Buyer Co"}) if buyer_pib else None
+    async with session_factory() as session:
+        from sqlalchemy import text
+
+        await session.execute(
+            text(
+                "INSERT INTO invoices"
+                " (id, organization_id, status, currency, seller, buyer,"
+                "  created_at, updated_at)"
+                " VALUES (:id, :org_id, 'review', 'RSD',"
+                "  CAST(:seller AS JSON), CAST(:buyer AS JSON), NOW(), NOW())"
+            ),
+            {
+                "id": inv_id,
+                "org_id": org_id,
+                "seller": seller_json,
+                "buyer": buyer_json,
+            },
+        )
+        await session.commit()
+    return inv_id
+
+
+async def _get_invoice_client_id(test_engine, inv_id: str) -> str | None:
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        from sqlalchemy import text
+
+        row = await session.execute(
+            text("SELECT client_id FROM invoices WHERE id = :id"),
+            {"id": inv_id},
+        )
+        value = row.scalar_one_or_none()
+        return str(value) if value is not None else None
+
+
+async def test_retroactive_assigns_on_buyer_pib_match(client: AsyncClient, test_engine):
+    """Hospitality flow: pre-existing invoice with buyer.pib == new client's PIB
+    gets auto-assigned when the agency creates that client.
+
+    This is the central M19/M20 case — Saldora's client is the BUYER on
+    incoming supplier invoices.
+    """
+    headers = await _setup_agency(client, test_engine, "retro-buyer@example.com")
+    org_id = _get_org_id(headers)
+
+    restaurant_pib = "123456788"  # the agency's client = buyer on the invoice
+    supplier_pib = "999999991"
+
+    inv_id = await _insert_invoice_with_parties(
+        test_engine,
+        org_id,
+        seller_pib=supplier_pib,
+        buyer_pib=restaurant_pib,
+    )
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Stari Grad Restaurant", "pib": restaurant_pib},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    new_client_id = create_resp.json()["id"]
+
+    assigned = await _get_invoice_client_id(test_engine, inv_id)
+    assert assigned == new_client_id, (
+        "Retroactive assignment must match on buyer.pib for the hospitality flow"
+    )
+
+
+async def test_retroactive_assigns_on_seller_pib_match(client: AsyncClient, test_engine):
+    """Outgoing-invoice fallback: pre-existing invoice with seller.pib ==
+    new client's PIB still gets auto-assigned (the agency's client issued
+    the invoice themselves)."""
+    headers = await _setup_agency(client, test_engine, "retro-seller@example.com")
+    org_id = _get_org_id(headers)
+
+    issuer_pib = "987654321"  # the agency's client = seller in this case
+    buyer_pib = "111111119"
+
+    inv_id = await _insert_invoice_with_parties(
+        test_engine,
+        org_id,
+        seller_pib=issuer_pib,
+        buyer_pib=buyer_pib,
+    )
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Issuer DOO", "pib": issuer_pib},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    new_client_id = create_resp.json()["id"]
+
+    assigned = await _get_invoice_client_id(test_engine, inv_id)
+    assert assigned == new_client_id
+
+
+async def test_retroactive_does_not_assign_when_neither_side_matches(
+    client: AsyncClient, test_engine
+):
+    """Sanity: invoice whose buyer and seller PIBs are both different from
+    the new client's PIB stays unassigned."""
+    headers = await _setup_agency(client, test_engine, "retro-nomatch@example.com")
+    org_id = _get_org_id(headers)
+
+    inv_id = await _insert_invoice_with_parties(
+        test_engine,
+        org_id,
+        seller_pib="111111119",
+        buyer_pib="222222229",
+    )
+
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Different Client", "pib": "888888888"},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+
+    assert await _get_invoice_client_id(test_engine, inv_id) is None
+
+
+async def test_retroactive_buyer_side_also_syncs_line_items(client: AsyncClient, test_engine):
+    """When a buyer-side match assigns the invoice, the denormalized
+    invoice_line_items rows must pick up the new client_id too.
+
+    The pre-fix code keyed the line_items sync off seller_pib, which
+    silently skipped every buyer-side hit and left reports filtering by
+    client_id empty.
+    """
+    headers = await _setup_agency(client, test_engine, "retro-li-buyer@example.com")
+    org_id = _get_org_id(headers)
+
+    restaurant_pib = "555555556"
+    supplier_pib = "444444447"
+
+    inv_id = await _insert_invoice_with_parties(
+        test_engine,
+        org_id,
+        seller_pib=supplier_pib,
+        buyer_pib=restaurant_pib,
+    )
+
+    # Seed a line_item row for the invoice — mirrors what line_items_sync
+    # would have produced post-OCR (seller_pib = the supplier).
+    session_factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as session:
+        from sqlalchemy import text
+
+        await session.execute(
+            text(
+                "INSERT INTO invoice_line_items"
+                " (id, invoice_id, organization_id, client_id,"
+                "  description, quantity, unit_price, total, currency,"
+                "  seller_name, seller_pib, created_at)"
+                " VALUES (:id, :inv_id, :org_id, NULL,"
+                "  'Coca-Cola 0.5L', 10, 95, 950, 'RSD',"
+                "  'Frikom DOO', :seller_pib, NOW())"
+            ),
+            {
+                "id": str(uuid4()),
+                "inv_id": inv_id,
+                "org_id": org_id,
+                "seller_pib": supplier_pib,
+            },
+        )
+        await session.commit()
+
+    # Create the agency's client — buyer-side match should fire.
+    create_resp = await client.post(
+        "/api/v1/clients/",
+        json={"name": "Stari Grad", "pib": restaurant_pib},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    new_client_id = create_resp.json()["id"]
+
+    # Verify both the invoice AND every line_item belonging to it now
+    # carry the new client_id.
+    async with session_factory() as session:
+        from sqlalchemy import text
+
+        inv_client = (
+            await session.execute(
+                text("SELECT client_id FROM invoices WHERE id = :id"),
+                {"id": inv_id},
+            )
+        ).scalar_one()
+        li_clients = (
+            (
+                await session.execute(
+                    text("SELECT client_id FROM invoice_line_items WHERE invoice_id = :inv_id"),
+                    {"inv_id": inv_id},
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert str(inv_client) == new_client_id
+    assert li_clients, "test seed must have produced at least one line_item"
+    assert all(str(c) == new_client_id for c in li_clients), (
+        "Line-items sync must mirror the buyer-side assignment too"
+    )

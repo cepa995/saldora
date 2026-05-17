@@ -18,7 +18,7 @@ Kupac je **vlasnik agencije**; svakodnevni korisnici su **agencijski knjigovođe
 
 Originalna pozicija ovog dokumenta — generička obrada faktura — je zamenjena ugostiteljskom tezom. Sposobnosti koje su bile generičke (multi-tenant model, OCR + LLM ekstrakcija, izvoz, automatizovana pravila, upravljanje klijentima) i dalje rade i u opsegu su; jednostavno više nisu primarno marketinški ili produktni okvir. Sve što je bilo specifično za paušalce, oblikovano kao generički B2B portal ili nosivo na SEF-u je otpisano ili odloženo (vidi Odeljak 4.17, "Van obima / Otpisano").
 
-Za strateški narativ vidi [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md). Za status milestoneova vidi [`saldora-implementation-plan.md`](saldora-implementation-plan.md).
+Za status milestoneova vidi [`IMPLEMENTATION_GUIDE.md`](./IMPLEMENTATION_GUIDE.md). Za arhitektonske odluke i obrazloženje vidi [`../dev/architecture.md`](../dev/architecture.md).
 
 ---
 
@@ -143,7 +143,7 @@ Saldora funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integra
 │                    Spoljni servisi                                │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
 │  │  APR API    │  │   Storage   │  │    Platni procesor       │  │
-│  │  (Srbija)   │  │   (S3/R2)   │  │    (Paddle)              │  │
+│  │  (Srbija)   │  │   (S3/R2)   │  │   (ručna naplata)        │  │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -210,7 +210,7 @@ Saldora funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integra
 **Zavisnosti:**
 - APR za PIB verifikaciju (komercijalnim ugovorom ili putem posrednika)
 - Provajder cloud skladišta (AWS S3 ili Cloudflare R2)
-- Platni procesor (Paddle) za upravljanje pretplatama
+- Ručna naplata: agencije plaćaju Saldora-fakturu uplatom na račun; admin aktivira/produžava preko `scripts/admin_orgs.py`. Nijedan platni procesor nije integrisan (Stripe nije dostupan u Srbiji; Paddle je razmatran ali nije usvojen — vidi `../dev/architecture.md` §3.3).
 
 ---
 
@@ -302,7 +302,7 @@ Saldora funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integra
 │                                                                      │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
 │  │ Servis naplate  │    │ Servis redova   │    │ Webhook servis  │  │
-│  │  - Paddle int.  │    │ - Celery zadat. │    │  - Obaveštenja  │  │
+│  │  - Ručna napl.  │    │ - Celery zadat. │    │  - Obaveštenja  │  │
 │  │  - Praćenje kor.│    │ - Status posla  │    │  - Callback     │  │
 │  │  - Fakturisanje │    │ - Retry logika  │    │  - Događaji     │  │
 │  └─────────────────┘    └─────────────────┘    └─────────────────┘  │
@@ -376,8 +376,8 @@ Saldora funkcioniše kao samostalna veb aplikacija sa sledećim tačkama integra
 | **Sprovođenje** | Deljena `require_role(...)` zavisnost vraća 403 sa telom `{"code": "subscription_pending_approval", "subscription_status": "pending"}` kad god korisnik pripada organizaciji čiji je `subscription_status` jednak `pending` |
 | **Frontend** | Korisnici sa pending statusom se rutiraju na `/awaiting-approval`, koji povlači user info svakih ~10 sekundi; čim se status promeni u `active` ili `trial`, AuthContext se osvežava i korisnik prelazi u aplikaciju |
 | **Admin obaveštenje** | Pri registraciji, Resend e-mail se šalje na adresu iz `ADMIN_EMAIL` sa nazivom organizacije, slug-om, kontaktom i e-mailom registranta |
-| **Mehanizam odobrenja** | Interaktivni skript `scripts/admin_orgs.py` (pokreće Saldora osoblje preko SSH-a) lista organizacije na čekanju i dozvoljava operateru da promeni `subscription_status` u `active` ili `trial` i izabere tier plana. U ovoj fazi kompanije nema koraka sa karticom na fajlu; naplata se obrađuje vanlinijski preko Paddle-a kada organizacija postane aktivna. |
-| **Razlog** | Pre faze prihoda, svaka registracija se ručno proverava da bi se izbegle zloupotrebe i zadržao fokus na agencijskim kupcima. Ovo je namerno ručno dok se self-serve onboarding ne poveže sa Paddle Checkout-om. |
+| **Mehanizam odobrenja** | Interaktivni skript `scripts/admin_orgs.py` (pokreće Saldora osoblje preko SSH-a) lista organizacije na čekanju i dozvoljava operateru da promeni `subscription_status` u `active` ili `trial`, izabere tier plana i produži period pretplate. U ovoj fazi nema koraka sa karticom na fajlu; naplata se obrađuje vanlinijski preko Saldora-izdate fakture koju agencija plati uplatom na račun, a aktivacija je produženje pretplate kroz skript. |
+| **Razlog** | Pre faze prihoda, svaka registracija se ručno proverava da bi se izbegle zloupotrebe i zadržao fokus na agencijskim kupcima. Ovo je namerno ručno dok se self-serve onboarding ne poveže sa automatizovanim platnim kanalom. Vidi [`../dev/architecture.md`](../dev/architecture.md) §3.3 za zapisnik odluke. |
 
 **Dozvoljene vrednosti `subscription_status`:**
 
@@ -1829,13 +1829,14 @@ Ovaj odeljak konsoliduje sve što je eksplicitno uklonjeno, odloženo ili je tra
 | **Compliance Watchdog** (M18) — zakazana evaluacija pravila koja proizvodi alarme | **Otpisano** | Razmišljanje iz paušal ere. Pravila i dalje pucaju na događaje; zakazani watchdog ne dodaje vrednost ugostiteljskim agencijama. |
 | **Strani reverse-charge kao samostalan modul** (M15) | **Trajno odloženo** | Postojeća NBS konverzija + AccountingIntent već adekvatno opslužuju mali obim stranih ugostiteljskih faktura. Vratiti se samo ako agencije prijave kao stvarnu bol. |
 | **Praćenje plaćanja** (FR-4.7.4 u ranijim verzijama) — `payment_status`, `paid_amount`, `paid_date`, otvorene stavke, izveštaji starenja | **Uklonjeno** | Saldora je samo sloj inteligencije. Plaćanje pripada MiniMax-u. |
-| **Webhook obaveštenja** (FR-4.8.2 u ranijim verzijama) | **Deprioritetizovano** | Webhookovi postaju korisni tek kada je ceo radni tok API-driven sa kupčeve strane; nismo tu. Paddle webhookovi za naplatu ostaju u opsegu. |
+| **Webhook obaveštenja** (FR-4.8.2 u ranijim verzijama) | **Deprioritetizovano** | Webhookovi postaju korisni tek kada je ceo radni tok API-driven sa kupčeve strane; nismo tu. Webhookovi za naplatu bi se vratili u opseg ako i kada se usvoji automatizovani platni kanal. |
 | **SEF integracija kao nosivi izvor podataka** (M-SEF, ranije Odeljak 12.5/12.6) | **Deprioritetizovano** | Klin su papirne fakture koje SEF ne pokriva. SEF ingestion kao sekundarni izvor podataka ostaje van-milestone aktivnost ali nije ni na jednom aktivnom milestone-u i uklonjen je iz ovog SRS-a kao prvoklasni odeljak. |
 | **Bankarsko usaglašavanje, knjiženja u glavnu knjigu, povezivanje plaćanja** | **Trajno van obima** | MiniMax to obrađuje. Saldora predaje podatke; ne vodi knjige. |
 | **Retreniranje modela / fine-tuning na korisničkim podacima** | **Trajno van obima** | Samo pre-trenirani modeli (dots.ocr za OCR, Claude Haiku za ekstrakciju). Logovi korekcija (Odeljak 9.8) postoje za monitoring kvaliteta, ne za treniranje. |
 | **Predprocesiranje slike za VLM** (deskewing, binarizacija, podešavanje kontrasta pre slanja u dots.ocr) | **Onemogućeno** | dots.ocr najbolje radi na originalnim slikama u boji. Pipeline za predprocesiranje koji je postojao za tradicionalne OCR engine je preskočen za VLM put. |
 | **EasyOCR fallback** kada dots.ocr ne uspe | **Uklonjen** | Alternativni OCR engine ne pružaju dovoljnu tačnost na srpskim ćiriličnim/latiničnim dokumentima. Ako dots.ocr ne uspe, faktura se markira za ručni pregled — bez automatskog fallback engine-a. |
-| **Stripe integracija** | **Trajno van obima** | Stripe nije dostupan u Srbiji. Paddle je Merchant of Record. Bilo koje reference na Stripe u starijim verzijama nisu aktuelne (ne Stripe). |
+| **Stripe integracija** | **Trajno van obima** | Stripe nije dostupan u Srbiji. Reference na Stripe u starijim verzijama nisu aktuelne. |
+| **Automatizovani platni procesor** (Paddle, itd.) | **Odloženo** | Naplata je trenutno ručna preko `scripts/admin_orgs.py` (vidi §4.1.5 i `../dev/architecture.md` §3.3). Paddle je razmatran ali nije usvojen; vraća se u razmatranje kada self-serve volumen to opravda. |
 | **SEF kao nosivi tok** | **Deprioritetizovano** | Vidi gore. SEF nema webhook podršku — samo polling. Zbog ugostiteljske teze ovaj modul više nije nosivi. |
 
 ---
@@ -1844,7 +1845,7 @@ Ovaj odeljak konsoliduje sve što je eksplicitno uklonjeno, odloženo ili je tra
 
 Ovaj odeljak definiše klijent-prvi UI površinu uvedenu u milestone M19. Prethodni feature-indeksiran UI (top-level `Fakture`, `Klijenti`, `Izveštaji`, `Pravila` u bočnom meniju sa globalnim listama filtriranim po klijentu) je **zamenjen** klijent-osa UI-om u kojem agencija prvo bira klijenta i pronalazi sve sposobnosti po klijentu unutar tog klijentskog workspace-a.
 
-Pun UX obrazloženje živi u [`saldora-strategy-and-ux-redesign.md`](saldora-strategy-and-ux-redesign.md), Deo Treći. Ovaj odeljak hvata samo površinu na nivou zahteva.
+Arhitektonsko obrazloženje (zašto klijent-prvi, šta smo odbacili) živi u [`../dev/architecture.md`](../dev/architecture.md) §10. Ovaj odeljak hvata samo površinu na nivou zahteva.
 
 #### FR-4.18.1 Pregled portfelja (`/pregled`)
 
@@ -2213,7 +2214,7 @@ CREATE TABLE organizations (
     slug VARCHAR(100) UNIQUE NOT NULL,
     billing_email VARCHAR(255),
     plan_id UUID REFERENCES plans(id),
-    payment_provider_customer_id VARCHAR(255),  -- Paddle customer ID
+    payment_provider_customer_id VARCHAR(255),  -- Rezervisano za buduću automatizovanu naplatu; trenutno se ne koristi (naplata je ručna)
     subscription_status VARCHAR(20),  -- 'pending' | 'trial' | 'active' | 'canceled' | 'expired' | NULL
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -2950,7 +2951,7 @@ Ove metrike služe za identifikaciju sistemskih problema i informisanje tima o p
 |-----------|---------|
 | ZZPL (primarni) | Potpuna usklađenost sa Zakonom o zaštiti podataka o ličnosti (Sl. glasnik RS, br. 87/2018). Ugovor o obradi podataka, lice za zaštitu podataka, politika privatnosti. ZZPL je primarni regulatorni okvir za zaštitu podataka u Republici Srbiji. |
 | GDPR (referentni standard) | Usklađenost sa GDPR principima kao referentnim standardom. Srbija nije članica EU - GDPR se primenjuje kao smernica za najbolje prakse i pripremu za buduće članstvo. |
-| PCI DSS | Ne čuvamo podatke o plaćanju. Paddle kao Merchant of Record obrađuje sve platne transakcije i preuzima odgovornost za usklađenost sa PCI DSS standardima. |
+| PCI DSS | Ne čuvamo nikakve podatke o plaćanju — Saldora ne obrađuje kartice direktno. Naplata se vrši uplatom na račun, evidentira se vanlinijski, i odražava se u bazi samo kao `plan` / `subscription_status` promene. |
 
 ### 10.6 Pravni i regulatorni tokovi
 
@@ -3404,65 +3405,23 @@ Sistem MORA biti dizajniran sa apstrakcijskim slojem koji omogućava zamenu APR 
 - Keširanje odgovora na 24 sata
 - Osvežavanje u pozadini za često pristupane PIB-ove
 
-### 12.2 Integracija plaćanja (Paddle)
+### 12.2 Integracija naplate (trenutno ručna)
 
-**Zašto Paddle (ne Stripe):** Paddle funkcioniše kao Merchant of Record (MoR), što znači da Paddle upravlja svim platnim transakcijama, PDV obavezama i poreskom usklađenošću globalno, u ime Saldore. Ovo je kritično za srpsko tržište jer:
-- Paddle preuzima odgovornost za obračun i naplatu PDV-a u svim jurisdikcijama
-- Nije potreban lokalni merchant nalog u Srbiji
-- Pojednostavljeno finansijsko izveštavanje - jedna uplata od Paddle-a umesto hiljada pojedinačnih transakcija
-- Automatska usklađenost sa poreskim propisima za digitalne usluge u EU i globalno
+**Trenutni model.** Saldora trenutno naplaćuje ručno. Agencija dobija fakturu od nas (PDF e-poštom), plaća uplatom na račun, a `scripts/admin_orgs.py` postavlja `Organization.subscription_status` na `active` (ili `trial` za prvi mesec) i produžava period pretplate za onoliko koliko su platili. Nijedan platni procesor trećeg lica nije integrisan. Puno arhitektonsko obrazloženje živi u [`../dev/architecture.md`](../dev/architecture.md) §3.3.
 
-**Korišćene funkcionalnosti:**
-- Paddle Checkout za pretplate
-- Paddle Billing za upravljanje pretplatama i naplatom
-- Webhooks za događaje pretplata
-- Automatsko generisanje faktura za krajnje korisnike
-- Upravljanje PDV-om za SaaS u EU i Srbiji
+**Šta to znači za spec:**
+- Bez kartice na fajlu, bez checkout overlay-a, bez handler-a za webhook plaćanja.
+- Nema PSP-strane PDV obaveza (nema PSP-a). Saldora-ine sopstvene PDV obaveze na platne transakcije se obrađuju vanlinijski.
+- `payment_provider_*` kolone na `organizations` postoje za buduću upotrebu ali se trenutno ne koriste.
+- `apps/api/app/routers/billing.py` ruter servira read-only "tvoj plan / tvoja potrošnja" preglede; stvarna aktivacija / produženje vodi operater preko `scripts/admin_orgs.py`.
 
-**Webhook događaji:**
-- `subscription.created` - Nova pretplata kreirana
-- `subscription.updated` - Pretplata ažurirana (promena plana, itd.)
-- `subscription.canceled` - Pretplata otkazana
-- `transaction.completed` - Transakcija uspešno završena
-- `transaction.payment_failed` - Neuspelo plaćanje
+**Budući automatizovani platni kanal.** Ako i kada se usvoji platni provajder kompatibilan sa Srbijom, integraciona granica je `Organization.subscription_status`, `Organization.plan` i `Organization.subscription_canceled_at`. Webhook događaji koje bi integracija trebalo da obradi (odloženo):
 
-**Obrada webhook-ova:**
-
-```python
-async def handle_paddle_webhook(payload: dict, signature: str):
-    """
-    Obrada Paddle webhook događaja.
-    """
-    # 1. Verifikuj potpis webhook-a
-    if not verify_paddle_signature(payload, signature):
-        raise HTTPException(401, "Nevažeći potpis")
-
-    event_type = payload.get("event_type")
-
-    match event_type:
-        case "subscription.created":
-            # Nova pretplata - aktiviraj plan
-            await activate_subscription(
-                paddle_subscription_id=payload["data"]["id"],
-                customer_id=payload["data"]["customer_id"],
-                plan=payload["data"]["items"][0]["price"]["product_id"]
-            )
-
-        case "subscription.canceled":
-            # Otkazana pretplata - zakaži deaktivaciju
-            await schedule_deactivation(
-                paddle_subscription_id=payload["data"]["id"],
-                effective_date=payload["data"]["scheduled_change"]["effective_at"]
-            )
-
-        case "transaction.payment_failed":
-            # Neuspelo plaćanje - obavesti korisnika
-            await notify_payment_failure(
-                customer_id=payload["data"]["customer_id"]
-            )
-
-    return {"status": "processed"}
-```
+- `subscription.created`
+- `subscription.updated`
+- `subscription.canceled`
+- `transaction.completed`
+- `transaction.payment_failed`
 
 ### 12.3 Servis e-pošte (Resend)
 
@@ -3474,7 +3433,7 @@ async def handle_paddle_webhook(payload: dict, signature: str):
 - Verifikacija e-pošte
 - Resetovanje lozinke
 - Obrada fakture završena
-- Obaveštenja o pretplati (Paddle webhook hook-ovi)
+- (Budućnost) obaveštenja o pretplati od automatizovanog platnog kanala, kada se usvoji
 
 ### 12.4 Skladištenje (Cloudflare R2 prod, MinIO dev)
 
@@ -3855,7 +3814,6 @@ Srpski jezik koristi dva pisma - ćirilicu i latinicu. Sistem MORA podržavati o
 
 **Integracioni testovi:**
 - APR API integracija
-- Paddle webhook obrada
 - Isporuka e-pošte
 - Operacije skladištenja fajlova
 
