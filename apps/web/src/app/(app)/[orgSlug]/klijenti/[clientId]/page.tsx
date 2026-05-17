@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
+import { ObligationsPopover } from '@/components/clients/ObligationsPopover';
 import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
 import { ClientRules } from '@/components/client-workspace/ClientRules';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
@@ -162,6 +163,7 @@ export default function ClientWorkspacePage({ params }: PageProps) {
                     value={tClients(`bookkeepingOption.${client.bookkeeping_system}`)}
                   />
                 )}
+                <ObligationsPopover clientId={clientId} orgSlug={orgSlug} />
               </div>
             )}
           </div>

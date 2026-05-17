@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import CatalogContent from '@/components/reports/CatalogContent';
 import DpuContent from '@/components/reports/DpuContent';
-import { ObligationsCard } from '@/components/reports/ObligationsCard';
 import ReportContent from '@/components/reports/ReportContent';
-import type { ObligationFormKey } from '@/lib/types/client';
 
 type NavItem = {
   id: string;
@@ -74,8 +73,26 @@ interface Props {
  * future agency-wide placement (no clientId → lifetime aggregates).
  */
 export function ReportsSurface({ clientId }: Props) {
+  const searchParams = useSearchParams();
+  const reportParam = searchParams.get('report');
+
   const [activeGroup, setActiveGroup] = useState<NavItem['group']>('general');
   const [selected, setSelected] = useState<string>('receivedGoods');
+
+  // Honor ?report=<id> deep-links from the ObligationsPopover. We derive
+  // state from the param during render (the React-recommended pattern
+  // for syncing with external inputs without a cascading effect).
+  const [lastReportParam, setLastReportParam] = useState<string | null>(null);
+  if (reportParam !== lastReportParam) {
+    setLastReportParam(reportParam);
+    if (reportParam) {
+      const item = NAV_ITEMS.find((i) => i.id === reportParam);
+      if (item) {
+        setActiveGroup(item.group);
+        setSelected(item.id);
+      }
+    }
+  }
 
   const groupItems = NAV_ITEMS.filter((i) => i.group === activeGroup);
 
@@ -85,23 +102,8 @@ export function ReportsSurface({ clientId }: Props) {
     if (firstInGroup) setSelected(firstInGroup.id);
   }
 
-  /** When the obligation card asks us to jump to a report, switch the
-   * report tab to the matching one. kalkulacija + DPU live under the
-   * hospitality group; everything else routes to its own tab id. */
-  function handleJumpToReport(key: ObligationFormKey) {
-    if (key === 'kalkulacija' || key === 'dpu') {
-      setActiveGroup('hospitality');
-      setSelected(key);
-    }
-  }
-
   return (
     <div className="space-y-4">
-      {/* Obligation matrix — only on the per-client tab (M20 demo surface). */}
-      {clientId && (
-        <ObligationsCard clientId={clientId} onJumpToReport={handleJumpToReport} />
-      )}
-
       {/* Group pills */}
       <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
         {GROUPS.map((g) => (
