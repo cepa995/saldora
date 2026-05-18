@@ -215,7 +215,7 @@ async def test_auto_pib_assignment_emits_event_per_matching_invoice(
     assert len(rows) == 2
     for evt in rows:
         assert evt.payload.get("auto_assigned") is True
-        assert evt.payload.get("match_reason") == "pib"
+        assert evt.payload.get("match_reason") == "pib_seller"
 
 
 # ---------------------------------------------------------------------------
