@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 
 import { ClientAvatar } from '@/components/clients/ClientAvatar';
 import { ClientModal } from '@/components/clients/ClientModal';
+import { ObligationsPopover } from '@/components/clients/ObligationsPopover';
 import { ClientInvoices } from '@/components/client-workspace/ClientInvoices';
 import { ClientRules } from '@/components/client-workspace/ClientRules';
 import { ClientTimeline } from '@/components/client-workspace/ClientTimeline';
@@ -150,6 +151,19 @@ export default function ClientWorkspacePage({ params }: PageProps) {
                 {client.mb && <MetaChip label="MB" value={client.mb} />}
                 {client.city && <MetaChip value={client.city} />}
                 {client.contact_email && <MetaChip value={client.contact_email} />}
+                {client.legal_form && (
+                  <MetaChip
+                    tone="hospitality"
+                    value={tClients(`legalFormOption.${client.legal_form}`)}
+                  />
+                )}
+                {client.bookkeeping_system && (
+                  <MetaChip
+                    tone="hospitality"
+                    value={tClients(`bookkeepingOption.${client.bookkeeping_system}`)}
+                  />
+                )}
+                <ObligationsPopover clientId={clientId} orgSlug={orgSlug} />
               </div>
             )}
           </div>
@@ -222,11 +236,27 @@ export default function ClientWorkspacePage({ params }: PageProps) {
   );
 }
 
-function MetaChip({ label, value }: { label?: string; value: string }) {
+function MetaChip({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label?: string;
+  value: string;
+  /** "hospitality" tone marks the legal-form / bookkeeping chips so the
+   * accountant can spot the client's classification at a glance. */
+  tone?: 'neutral' | 'hospitality';
+}) {
+  const wrapper =
+    tone === 'hospitality'
+      ? 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-violet-50 text-[11px] font-medium text-violet-700 ring-1 ring-violet-200/70 tabular-nums'
+      : 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-100 text-[11px] font-medium text-stone-600 tabular-nums';
+  const labelCls = tone === 'hospitality' ? 'text-violet-500' : 'text-stone-400';
+  const valueCls = tone === 'hospitality' ? 'text-violet-800' : 'text-stone-700';
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-100 text-[11px] font-medium text-stone-600 tabular-nums">
-      {label && <span className="text-stone-400">{label}</span>}
-      <span className="text-stone-700">{value}</span>
+    <span className={wrapper}>
+      {label && <span className={labelCls}>{label}</span>}
+      <span className={valueCls}>{value}</span>
     </span>
   );
 }

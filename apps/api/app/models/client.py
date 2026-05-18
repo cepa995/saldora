@@ -53,6 +53,14 @@ class Client(Base, UUIDMixin, TimestampMixin):
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Hospitality classification (drives the obligation matrix in
+    # app.services.hospitality_forms.required_forms). Both nullable —
+    # legacy clients land as unclassified, agency sets at first review.
+    # legal_form values: "DOO" | "preduzetnik" | "paušalac" | "drugo"
+    # bookkeeping_system values: "dvojno" | "prosto"
+    legal_form: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    bookkeeping_system: Mapped[str | None] = mapped_column(String(10), nullable=True)
+
     # Notes
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

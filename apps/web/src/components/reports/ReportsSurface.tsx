@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import CatalogContent from '@/components/reports/CatalogContent';
 import DpuContent from '@/components/reports/DpuContent';
@@ -72,8 +73,26 @@ interface Props {
  * future agency-wide placement (no clientId → lifetime aggregates).
  */
 export function ReportsSurface({ clientId }: Props) {
+  const searchParams = useSearchParams();
+  const reportParam = searchParams.get('report');
+
   const [activeGroup, setActiveGroup] = useState<NavItem['group']>('general');
   const [selected, setSelected] = useState<string>('receivedGoods');
+
+  // Honor ?report=<id> deep-links from the ObligationsPopover. We derive
+  // state from the param during render (the React-recommended pattern
+  // for syncing with external inputs without a cascading effect).
+  const [lastReportParam, setLastReportParam] = useState<string | null>(null);
+  if (reportParam !== lastReportParam) {
+    setLastReportParam(reportParam);
+    if (reportParam) {
+      const item = NAV_ITEMS.find((i) => i.id === reportParam);
+      if (item) {
+        setActiveGroup(item.group);
+        setSelected(item.id);
+      }
+    }
+  }
 
   const groupItems = NAV_ITEMS.filter((i) => i.group === activeGroup);
 

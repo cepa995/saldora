@@ -468,11 +468,11 @@ Saldora se integriše sa SEF-om (eFaktura) za automatsko preuzimanje elektronski
 - Koristi se za: prikaz RSD ekvivalenta na fakturama u stranoj valuti
 - Za neradne dane koristi se poslednja dostupna kursna lista
 
-### 9.4 Plaćanja - Paddle
+### 9.4 Naplata — ručna
 
-- Paddle upravlja svim platnim transakcijama kao Merchant of Record
-- Paddle preuzima odgovornost za obračun PDV-a u svim jurisdikcijama
-- Korisnici plaćaju pretplatu putem kartice ili PayPal-a
+- Saldora izdaje fakturu agenciji (PDF e-poštom). Agencija plaća uplatom na račun.
+- Nakon prijema uplate, Saldora administrator preko skripta `scripts/admin_orgs.py` aktivira organizaciju i produžava period pretplate.
+- Nijedan platni procesor trećeg lica (Stripe, Paddle, itd.) trenutno nije integrisan. Stripe nije dostupan u Srbiji; automatizovana naplata se vraća u razmatranje kada self-serve volumen to opravda.
 
 ### 9.5 MiniMax integracija
 

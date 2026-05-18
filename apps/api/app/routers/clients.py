@@ -24,10 +24,12 @@ from app.schemas.automation_rule import AutomationRuleResponse
 from app.schemas.client import (
     ClientCreate,
     ClientListResponse,
+    ClientObligationsResponse,
     ClientResponse,
     ClientUpdate,
 )
 from app.schemas.client_event import ClientEventListResponse, ClientEventResponse
+from app.services.hospitality_forms import required_forms
 
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_feature(Feature.CLIENT_MANAGEMENT))])
@@ -55,6 +57,8 @@ def _build_client_response(client: Client, invoice_count: int, total_amount: flo
         "postal_code": client.postal_code,
         "contact_email": client.contact_email,
         "contact_phone": client.contact_phone,
+        "legal_form": client.legal_form,
+        "bookkeeping_system": client.bookkeeping_system,
         "is_active": client.is_active,
         "notes": client.notes,
         "invoice_count": invoice_count,
@@ -91,6 +95,8 @@ async def create_client(
         postal_code=body.postal_code,
         contact_email=body.contact_email,
         contact_phone=body.contact_phone,
+        legal_form=body.legal_form,
+        bookkeeping_system=body.bookkeeping_system,
         notes=body.notes,
     )
     db.add(client)
@@ -229,6 +235,49 @@ async def get_client(
         client,
         invoice_count=row[0],
         total_amount=float(row[1]) if row[1] is not None else None,
+    )
+
+
+@router.get("/{client_id}/obligations", response_model=ClientObligationsResponse)
+async def get_client_obligations(
+    client_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role("operator")),
+) -> ClientObligationsResponse:
+    """Return the hospitality obligation matrix for one client.
+
+    Drives the "Obavezni obrasci" card on the per-client Izveštaji tab.
+    Resolved entirely from `(legal_form, bookkeeping_system)` via
+    `required_forms`; the frontend never re-derives.
+
+    Args:
+        client_id: Client UUID.
+
+    Returns:
+        The obligation matrix plus the classification the matrix was
+        computed from.
+
+    Raises:
+        HTTPException: 404 if client not found or not in user's org.
+    """
+    result = await db.execute(
+        select(Client.legal_form, Client.bookkeeping_system).where(
+            and_(
+                Client.id == client_id,
+                Client.organization_id == user.organization_id,
+            )
+        )
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Klijent nije pronađen")
+    legal_form, bookkeeping_system = row
+
+    matrix = required_forms(legal_form=legal_form, bookkeeping_system=bookkeeping_system)
+    return ClientObligationsResponse(
+        legal_form=legal_form,
+        bookkeeping_system=bookkeeping_system,
+        forms=dict(matrix),  # FormKey/FormStatus Literals serialize as plain strings
     )
 
 
@@ -465,11 +514,22 @@ async def _retroactive_client_assignment(
 ) -> int:
     """Assign unassigned invoices to the newly created client by PIB match.
 
-    Scans all invoices in the same organization where:
-    - client_id is NULL
-    - seller.pib matches the client's PIB
+    Scans all invoices in the same organization where ``client_id`` is
+    NULL and either side of the invoice matches the client's PIB. **Buyer
+    side wins** — in the hospitality agency workflow the agency's client
+    is the BUYER of supplier invoices; the seller-side check is a
+    fallback that covers outgoing-invoice flows (the agency's client
+    issued the invoice themselves).
 
-    Also updates corresponding invoice_line_items rows.
+    Mirrors the at-upload assignment in
+    ``workers/ocr_worker/tasks.py::_auto_assign_client`` so both code
+    paths reach the same answer.
+
+    Also updates ``invoice_line_items.client_id`` for every line of
+    every newly assigned invoice. The bulk update is keyed by
+    ``invoice_id`` rather than by PIB because the denormalized table
+    only carries ``seller_pib`` — a buyer-side match would silently miss
+    all the rows otherwise.
 
     Args:
         db: Active database session.
@@ -481,8 +541,8 @@ async def _retroactive_client_assignment(
     from sqlalchemy import update
 
     from app.models.line_item import InvoiceLineItem
+    from app.services import events
 
-    # Find unassigned invoices where seller PIB matches
     result = await db.execute(
         select(Invoice).where(
             Invoice.organization_id == client.organization_id,
@@ -491,46 +551,51 @@ async def _retroactive_client_assignment(
     )
     invoices = result.scalars().all()
 
-    from app.services import events
-
-    assigned = 0
+    assigned_ids: list = []
     for inv in invoices:
+        buyer = inv.buyer if isinstance(inv.buyer, dict) else {}
         seller = inv.seller if isinstance(inv.seller, dict) else {}
-        if seller.get("pib") == client.pib:
-            inv.client_id = client.id
-            assigned += 1
-            # One timeline event per auto-assigned invoice. The actor is
-            # None: auto-assignment happens as a side effect of creating a
-            # client, not as a direct user action on the invoice.
-            await events.emit(
-                db=db,
-                event_type=events.CLIENT_ASSIGNED,
-                organization_id=client.organization_id,
-                client_id=client.id,
-                entity_type="invoice",
-                entity_id=inv.id,
-                actor_user_id=None,
-                payload={
-                    "invoice_number": inv.invoice_number,
-                    "auto_assigned": True,
-                    "match_reason": "pib",
-                },
-            )
+        if buyer.get("pib") == client.pib:
+            match_side = "buyer"
+        elif seller.get("pib") == client.pib:
+            match_side = "seller"
+        else:
+            continue
 
-    if assigned:
-        # Also update denormalized line items
+        inv.client_id = client.id
+        assigned_ids.append(inv.id)
+        # One timeline event per auto-assigned invoice. The actor is
+        # None: auto-assignment happens as a side effect of creating a
+        # client, not as a direct user action on the invoice.
+        await events.emit(
+            db=db,
+            event_type=events.CLIENT_ASSIGNED,
+            organization_id=client.organization_id,
+            client_id=client.id,
+            entity_type="invoice",
+            entity_id=inv.id,
+            actor_user_id=None,
+            payload={
+                "invoice_number": inv.invoice_number,
+                "auto_assigned": True,
+                "match_reason": f"pib_{match_side}",
+            },
+        )
+
+    if assigned_ids:
+        # Sync the denormalized line_items by invoice_id, not by PIB —
+        # buyer-side matches would be missed if we filtered on seller_pib.
         await db.execute(
             update(InvoiceLineItem)
             .where(
-                InvoiceLineItem.organization_id == client.organization_id,
-                InvoiceLineItem.seller_pib == client.pib,
+                InvoiceLineItem.invoice_id.in_(assigned_ids),
                 InvoiceLineItem.client_id.is_(None),
             )
             .values(client_id=client.id)
         )
         await db.commit()
 
-    return assigned
+    return len(assigned_ids)
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 
-import type { ClientCreate, ClientResponse, ClientUpdate } from '@/lib/types/client';
+import type {
+  BookkeepingSystem,
+  ClientCreate,
+  ClientResponse,
+  ClientUpdate,
+  LegalForm,
+} from '@/lib/types/client';
 
 interface Props {
   client: ClientResponse | null;
@@ -11,6 +17,9 @@ interface Props {
   onSave: (data: ClientCreate | ClientUpdate) => void;
   onClose: () => void;
 }
+
+const LEGAL_FORM_OPTIONS: LegalForm[] = ['DOO', 'preduzetnik', 'paušalac', 'drugo'];
+const BOOKKEEPING_OPTIONS: BookkeepingSystem[] = ['dvojno', 'prosto'];
 
 export function ClientModal({ client, saving, onSave, onClose }: Props) {
   const t = useTranslations('clients');
@@ -24,7 +33,16 @@ export function ClientModal({ client, saving, onSave, onClose }: Props) {
   const [postalCode, setPostalCode] = useState(client?.postal_code || '');
   const [email, setEmail] = useState(client?.contact_email || '');
   const [phone, setPhone] = useState(client?.contact_phone || '');
+  const [legalForm, setLegalForm] = useState<LegalForm | ''>(client?.legal_form ?? '');
+  const [bookkeeping, setBookkeeping] = useState<BookkeepingSystem | ''>(
+    client?.bookkeeping_system ?? '',
+  );
   const [notes, setNotes] = useState(client?.notes || '');
+
+  // DOO implies dvojno by Zakon o računovodstvu — we don't make the agency
+  // pick bookkeeping_system for DOOs (mirrors the server-side matrix in
+  // app.services.hospitality_forms.required_forms).
+  const bookkeepingDisabled = legalForm === 'DOO' || legalForm === 'paušalac';
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +55,8 @@ export function ClientModal({ client, saving, onSave, onClose }: Props) {
       postal_code: postalCode || undefined,
       contact_email: email || undefined,
       contact_phone: phone || undefined,
+      legal_form: legalForm || undefined,
+      bookkeeping_system: bookkeepingDisabled ? undefined : bookkeeping || undefined,
       notes: notes || undefined,
     };
     onSave(data);
@@ -131,6 +151,59 @@ export function ClientModal({ client, saving, onSave, onClose }: Props) {
               />
             </div>
           </div>
+
+          {/* Hospitality classification — drives the obligation matrix on
+              the Izveštaji tab (kalkulacija, KEP, šank lista, cenovnik,
+              popis). Both fields are nullable; agency sets them at first
+              review. */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800">{t('classificationTitle')}</h3>
+              <span className="text-[11px] text-gray-500">{t('classificationHint')}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('legalForm')}</label>
+                <select
+                  value={legalForm}
+                  onChange={(e) => setLegalForm(e.target.value as LegalForm | '')}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 bg-white"
+                >
+                  <option value="">{t('unsetOption')}</option>
+                  {LEGAL_FORM_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {t(`legalFormOption.${opt}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('bookkeepingSystem')}
+                </label>
+                <select
+                  value={bookkeepingDisabled ? '' : bookkeeping}
+                  disabled={bookkeepingDisabled}
+                  onChange={(e) => setBookkeeping(e.target.value as BookkeepingSystem | '')}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="">{t('unsetOption')}</option>
+                  {BOOKKEEPING_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {t(`bookkeepingOption.${opt}`)}
+                    </option>
+                  ))}
+                </select>
+                {legalForm === 'DOO' && (
+                  <p className="text-[11px] text-gray-500 mt-1">{t('dooImpliesDvojno')}</p>
+                )}
+                {legalForm === 'paušalac' && (
+                  <p className="text-[11px] text-gray-500 mt-1">{t('pausalacOutOfScope')}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('notes')}</label>
             <textarea
