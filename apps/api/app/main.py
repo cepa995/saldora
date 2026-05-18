@@ -22,6 +22,7 @@ from app.routers import (
     exchange_rates,
     export,
     invitations,
+    invoice_templates,
     invoices,
     join_requests,
     organizations,
@@ -150,6 +151,9 @@ app.include_router(join_requests.router, prefix="/api/v1/join-requests", tags=["
 app.include_router(exchange_rates.router, prefix="/api/v1/exchange-rates", tags=["Exchange Rates"])
 app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["ZZPL Compliance"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(
+    invoice_templates.router, prefix="/api/v1/invoice-templates", tags=["Invoice Templates"]
+)
 app.include_router(archive.router, prefix="/api/v1/archive", tags=["Archive"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Product Catalog"])
 
