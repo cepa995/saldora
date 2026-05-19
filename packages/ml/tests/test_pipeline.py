@@ -144,6 +144,82 @@ class TestPipelineSkipPreprocessing:
         mock_engine.recognize.assert_called_once()
 
 
+class TestPipelineLLMFallback:
+    """Tests for the LLM-extractor failure path.
+
+    When the LLM call raises (e.g. Anthropic 529 Overloaded), the pipeline
+    silently fell back to regex without telling the user. These tests pin
+    the new behavior: a warning is emitted and raw_llm_output is populated
+    with the failure marker so the debug surface stays useful.
+    """
+
+    def _build_pipeline_with_failing_llm(self, exc: Exception) -> InvoicePipeline:
+        """Construct a pipeline whose LLM extractor always raises ``exc``."""
+        pipeline = InvoicePipeline(primary_engine="dots", fallback_engine="none")
+
+        ocr_result = OCRResult(
+            text="Some invoice text", confidence=0.95, structured={"raw_text": "Some invoice text"}
+        )
+        mock_engine = MagicMock()
+        mock_engine.skip_preprocessing = True
+        mock_engine.recognize = AsyncMock(return_value=ocr_result)
+        pipeline._primary_engine = mock_engine
+
+        failing = MagicMock()
+        failing.extract = MagicMock(side_effect=exc)
+        pipeline._llm_extractor = failing
+        return pipeline
+
+    def test_llm_failure_attaches_warning(self):
+        """A failed LLM extraction surfaces a LLM_EXTRACTION_FAILED warning."""
+        from fakturaai_ml.types import WarningType
+
+        pipeline = self._build_pipeline_with_failing_llm(
+            RuntimeError("Error code: 529 - Overloaded")
+        )
+
+        result = _run(pipeline.extract(_make_image_bytes()))
+
+        warning_types = [w.warning_type for w in result.warnings]
+        assert WarningType.LLM_EXTRACTION_FAILED in warning_types
+
+    def test_llm_failure_populates_raw_llm_output(self):
+        """raw_llm_output carries the failure marker for the debug panel."""
+        pipeline = self._build_pipeline_with_failing_llm(
+            RuntimeError("Error code: 529 - Overloaded")
+        )
+
+        result = _run(pipeline.extract(_make_image_bytes()))
+
+        assert result.invoice.raw_llm_output is not None
+        assert "LLM extraction failed" in result.invoice.raw_llm_output
+        assert "RuntimeError" in result.invoice.raw_llm_output
+
+    def test_llm_success_does_not_attach_warning(self):
+        """Happy path: no LLM_EXTRACTION_FAILED warning."""
+        from fakturaai_ml.types import ExtractedInvoice, WarningType
+
+        pipeline = InvoicePipeline(primary_engine="dots", fallback_engine="none")
+        ocr_result = OCRResult(
+            text="Some invoice", confidence=0.95, structured={"raw_text": "Some invoice"}
+        )
+        mock_engine = MagicMock()
+        mock_engine.skip_preprocessing = True
+        mock_engine.recognize = AsyncMock(return_value=ocr_result)
+        pipeline._primary_engine = mock_engine
+
+        succeeding = MagicMock()
+        succeeding_invoice = ExtractedInvoice()
+        succeeding_invoice.raw_llm_output = '{"invoice_number": "INV-1"}'
+        succeeding.extract = MagicMock(return_value=succeeding_invoice)
+        pipeline._llm_extractor = succeeding
+
+        result = _run(pipeline.extract(_make_image_bytes()))
+
+        warning_types = [w.warning_type for w in result.warnings]
+        assert WarningType.LLM_EXTRACTION_FAILED not in warning_types
+
+
 class TestPipelineEngineInitialization:
     """Tests for engine lazy loading and configuration."""
 

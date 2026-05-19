@@ -165,7 +165,11 @@ class LLMFieldExtractor:
         resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not resolved_key:
             raise ValueError("Anthropic API key required. Pass api_key or set ANTHROPIC_API_KEY.")
-        self._client = anthropic.Anthropic(api_key=resolved_key)
+        # max_retries=5 (SDK default is 2). Anthropic's 529 "Overloaded"
+        # outages typically last 1-3 minutes; we'd rather wait inside the
+        # extractor than fall through to the regex fallback. The SDK uses
+        # exponential backoff between retries.
+        self._client = anthropic.Anthropic(api_key=resolved_key, max_retries=5)
         self._model = model
 
     def extract(

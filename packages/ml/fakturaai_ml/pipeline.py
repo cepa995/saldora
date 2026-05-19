@@ -20,6 +20,8 @@ from fakturaai_ml.types import (
     ExtractionResult,
     ExtractionStatus,
     TaxGroupData,
+    ValidationWarning,
+    WarningType,
 )
 from fakturaai_ml.validation.math_check import MathValidator
 from fakturaai_ml.validation.pib import PIBValidator
@@ -217,6 +219,7 @@ class InvoicePipeline:
 
             # Extract structured fields (LLM primary, regex fallback)
             extractor_used = "regex"
+            llm_failure: Exception | None = None
             if self._llm_extractor is not None:
                 try:
                     invoice = self._llm_extractor.extract(combined_text, all_structured)
@@ -224,7 +227,15 @@ class InvoicePipeline:
                     logger.info("Field extraction via LLM succeeded")
                 except Exception as e:
                     logger.warning("LLM extraction failed, falling back to regex: %s", e)
+                    llm_failure = e
                     invoice = self.field_extractor.extract(combined_text, all_structured)
+                    # Preserve a debug trail so the UI still has something to
+                    # show in the "LLM izlaz" panel. The exact text here is
+                    # surfaced verbatim in the invoice detail page.
+                    invoice.raw_llm_output = (
+                        f"[LLM extraction failed: {type(e).__name__}: {e}]\n"
+                        "Fields below were produced by the regex fallback."
+                    )
             else:
                 invoice = self.field_extractor.extract(combined_text, all_structured)
 
@@ -262,6 +273,21 @@ class InvoicePipeline:
 
             # Add validation warnings
             self._add_validation_warnings(result, invoice)
+
+            # Surface LLM fallback as a warning so the verifier sees a badge
+            # rather than silently trusting the regex output.
+            if llm_failure is not None:
+                result.add_warning(
+                    ValidationWarning(
+                        warning_type=WarningType.LLM_EXTRACTION_FAILED,
+                        message=(
+                            f"LLM ekstraktor nije uspeo "
+                            f"({type(llm_failure).__name__}); "
+                            "polja su izvučena regex fallback-om i traže pažljivu proveru."
+                        ),
+                        severity="warning",
+                    )
+                )
 
             return result
 

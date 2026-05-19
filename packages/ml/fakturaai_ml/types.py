@@ -27,6 +27,7 @@ class WarningType(Enum):
     CURRENCY_UNCLEAR = "currency_unclear"
     DATE_INVALID = "date_invalid"
     LOW_CONFIDENCE = "low_confidence"
+    LLM_EXTRACTION_FAILED = "llm_extraction_failed"
 
 
 @dataclass
